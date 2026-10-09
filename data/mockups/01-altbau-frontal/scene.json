@@ -1,0 +1,81 @@
+{
+ "version": 1,
+ "id": "01-altbau-frontal",
+ "name": "Altbau frontal angelehnt",
+ "order": 1,
+ "source": "1 - Altbau frontal angelehnt (Vorschaubild).psd",
+ "width": 4096,
+ "height": 4096,
+ "layers": [
+  {
+   "id": "l00",
+   "kind": "image",
+   "name": "Background",
+   "src": "l00.jpg",
+   "x": 0.0,
+   "y": 0.0,
+   "width": 4096,
+   "height": 4096,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "l01",
+   "kind": "image",
+   "name": "Shadow",
+   "src": "l01.png",
+   "x": 991.0,
+   "y": 466.0,
+   "width": 2142,
+   "height": 2966,
+   "blend": "linear-burn",
+   "opacity": 0.05882,
+   "visible": true
+  },
+  {
+   "id": "l02",
+   "kind": "image",
+   "name": "Softlight",
+   "src": "l02.png",
+   "x": 991.0,
+   "y": 466.0,
+   "width": 2142,
+   "height": 2966,
+   "blend": "soft-light",
+   "opacity": 0.23922,
+   "visible": false
+  },
+  {
+   "id": "poster",
+   "kind": "poster",
+   "name": "Your Design Here",
+   "quad": [
+    [
+     1037.235,
+     464.97
+    ],
+    [
+     3079.735,
+     464.97
+    ],
+    [
+     3130.475,
+     3431.05
+    ],
+    [
+     995.32,
+     3430.385
+    ]
+   ],
+   "overscan": 0,
+   "fit": "stretch",
+   "tone": false,
+   "blend": "multiply",
+   "opacity": 1.0,
+   "visible": true,
+   "children": []
+  }
+ ]
+}

@@ -1,0 +1,124 @@
+{
+ "version": 1,
+ "id": "04-diele",
+ "name": "Diele Sideboard",
+ "order": 4,
+ "source": "4 - Diele Sideboard weisse Tuer.psd",
+ "width": 3700,
+ "height": 3700,
+ "layers": [
+  {
+   "id": "l00",
+   "kind": "image",
+   "name": "Background",
+   "src": "l00.jpg",
+   "x": 0.0,
+   "y": 0.0,
+   "width": 3700,
+   "height": 3700,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "l01",
+   "kind": "image",
+   "name": "Brighter Inside Frames (On/Off/Adjust)",
+   "src": "l01.png",
+   "x": 1725.0,
+   "y": 709.0,
+   "width": 1033,
+   "height": 1512,
+   "blend": "soft-light",
+   "opacity": 1.0,
+   "visible": true
+  },
+  {
+   "id": "poster",
+   "kind": "poster",
+   "name": "Add Design Here",
+   "quad": [
+    [
+     1726.58,
+     711.38
+    ],
+    [
+     2698.78,
+     760.86
+    ],
+    [
+     2757.19,
+     2181.14
+    ],
+    [
+     1760.56,
+     2217.66
+    ]
+   ],
+   "overscan": 0,
+   "fit": "stretch",
+   "tone": true,
+   "blend": "multiply",
+   "opacity": 1.0,
+   "visible": true,
+   "children": []
+  },
+  {
+   "id": "front",
+   "kind": "image",
+   "name": "In front of poster",
+   "src": "front.png",
+   "x": 2483.0,
+   "y": 2045.0,
+   "width": 281,
+   "height": 153,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "front"
+  },
+  {
+   "id": "l03",
+   "kind": "image",
+   "name": "Glare (On/Off/Adjust)",
+   "src": "l03.png",
+   "x": 1725.0,
+   "y": 714.0,
+   "width": 1034,
+   "height": 1507,
+   "blend": "overlay",
+   "opacity": 0.5,
+   "visible": true,
+   "role": "overlay"
+  },
+  {
+   "id": "l04",
+   "kind": "image",
+   "name": "Light (On/Off/Adjust)",
+   "src": "l04.png",
+   "x": 0.0,
+   "y": 0.0,
+   "width": 3700,
+   "height": 3700,
+   "blend": "multiply",
+   "opacity": 1.0,
+   "visible": true,
+   "role": "overlay"
+  },
+  {
+   "id": "l05",
+   "kind": "image",
+   "name": "Grain(On/Off/Adjust)",
+   "src": "l05.png",
+   "x": 0.0,
+   "y": 0.0,
+   "width": 3700,
+   "height": 3700,
+   "blend": "overlay",
+   "opacity": 0.00997,
+   "visible": true,
+   "role": "overlay"
+  }
+ ]
+}

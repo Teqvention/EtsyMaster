@@ -1,0 +1,96 @@
+{
+ "version": 1,
+ "id": "02-bett",
+ "name": "Bett weiße Wäsche",
+ "order": 2,
+ "source": "2 - Bett weisse Waesche.psd",
+ "width": 4096,
+ "height": 4096,
+ "layers": [
+  {
+   "id": "l00",
+   "kind": "image",
+   "name": "Background",
+   "src": "l00.jpg",
+   "x": 0.0,
+   "y": 0.0,
+   "width": 4096,
+   "height": 4096,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "l01",
+   "kind": "image",
+   "name": "Layer 1 (clip base)",
+   "src": "l01.png",
+   "x": 340.0,
+   "y": 563.0,
+   "width": 1364,
+   "height": 1994,
+   "blend": "normal",
+   "opacity": 1.0,
+   "visible": false
+  },
+  {
+   "id": "lift",
+   "kind": "image",
+   "name": "Paper lift +12 %",
+   "src": "lift.png",
+   "x": 338.0,
+   "y": 564.0,
+   "width": 1367,
+   "height": 1998,
+   "blend": "add",
+   "opacity": 1,
+   "visible": true,
+   "role": "lift"
+  },
+  {
+   "id": "poster",
+   "kind": "poster",
+   "name": "Your design here",
+   "quad": [
+    [
+     369.41,
+     568.56
+    ],
+    [
+     1700.36,
+     568.21
+    ],
+    [
+     1686.04,
+     2557.74
+    ],
+    [
+     343.09,
+     2550.4
+    ]
+   ],
+   "overscan": 0,
+   "fit": "stretch",
+   "tone": false,
+   "blend": "multiply",
+   "opacity": 1.0,
+   "visible": true,
+   "children": []
+  },
+  {
+   "id": "front",
+   "kind": "image",
+   "name": "In front of poster",
+   "src": "front.png",
+   "x": 338.0,
+   "y": 564.0,
+   "width": 1367,
+   "height": 1998,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "front"
+  }
+ ]
+}

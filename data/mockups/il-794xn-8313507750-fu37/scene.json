@@ -1,0 +1,85 @@
+{
+ "version": 1,
+ "id": "il-794xn-8313507750-fu37",
+ "name": "il_794xN.8313507750_fu37",
+ "order": 9,
+ "width": 2048,
+ "height": 2048,
+ "layers": [
+  {
+   "id": "background",
+   "kind": "image",
+   "name": "Room",
+   "src": "background.jpg",
+   "x": 0,
+   "y": 0,
+   "width": 2048,
+   "height": 2048,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "poster",
+   "kind": "poster",
+   "name": "Poster",
+   "quad": [
+    [
+     448,
+     187
+    ],
+    [
+     1566,
+     189
+    ],
+    [
+     1580,
+     1821
+    ],
+    [
+     427,
+     1821
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.3998265394622724,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-mv0vrdq0.png",
+     "width": 1153,
+     "height": 1614,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-mv0vrdq0.png",
+     "width": 1153,
+     "height": 1614,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  }
+ ]
+}

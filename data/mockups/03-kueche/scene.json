@@ -1,0 +1,86 @@
+{
+ "version": 1,
+ "id": "03-kueche",
+ "name": "Küche Marmorplatte",
+ "order": 3,
+ "source": "3 - Kueche Marmorplatte.png",
+ "width": 2048,
+ "height": 2048,
+ "layers": [
+  {
+   "id": "background",
+   "kind": "image",
+   "name": "Room",
+   "src": "background.jpg",
+   "x": 0,
+   "y": 0,
+   "width": 2048,
+   "height": 2048,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "poster",
+   "kind": "poster",
+   "name": "Poster",
+   "quad": [
+    [
+     1208.86,
+     461.96
+    ],
+    [
+     1739.37,
+     464.45
+    ],
+    [
+     1742.81,
+     1226.38
+    ],
+    [
+     1206.99,
+     1225.42
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.3992537313432836,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light",
+     "kind": "image",
+     "name": "Light",
+     "src": "light.png",
+     "width": 536,
+     "height": 750,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine.png",
+     "width": 536,
+     "height": 750,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,278 @@
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import path from "node:path"
+
+import sharp from "sharp"
+
+import { isTemplate } from "./motion"
+import type { Scene, SceneSummary, Template } from "./types"
+
+// Scenes live on disk next to the app: data/mockups/<id>/scene.json plus one
+// image per layer. This is a local tool, so the file system is the database.
+const ROOT = path.join(process.cwd(), "data", "mockups")
+
+const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+const FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.(png|jpg|jpeg|webp|mp4)$/i
+
+export class NotFoundError extends Error {}
+
+function folder(id: string) {
+  if (!ID.test(id)) throw new NotFoundError("Unknown scene")
+  return path.join(ROOT, id)
+}
+
+export function filePath(id: string, file: string) {
+  if (!FILE.test(file)) throw new NotFoundError("Unknown file")
+  return path.join(folder(id), file)
+}
+
+export async function listScenes(): Promise<SceneSummary[]> {
+  await mkdir(ROOT, { recursive: true })
+  const ids = (await readdir(ROOT)).filter((id) => ID.test(id))
+  const scenes = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const scene = await getScene(id)
+        const thumb = await stat(filePath(id, "thumb.jpg"))
+          .catch(() => roomThumb(scene).then(() => stat(filePath(id, "thumb.jpg"))))
+          .then((s) => `thumb.jpg?v=${s.mtimeMs | 0}`)
+          .catch(() => null)
+        return {
+          id,
+          name: scene.name,
+          order: scene.order,
+          width: scene.width,
+          height: scene.height,
+          thumb,
+          clips: (scene.clips ?? []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            duration: c.duration,
+            listing: c.listing,
+            preview: c.preview ?? null,
+          })),
+        }
+      } catch {
+        return null
+      }
+    })
+  )
+  return scenes
+    .filter((s) => s !== null)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+}
+
+// The editor writes thumb.jpg (with the poster) on save; until then the
+// grid shows the bare room.
+async function roomThumb(scene: Scene) {
+  const room = scene.layers.find((l) => l.kind === "image" && l.role === "background")
+  if (room?.kind !== "image") throw new NotFoundError("No room image")
+  await sharp(filePath(scene.id, room.src))
+    .resize(720, 720, { fit: "inside" })
+    .jpeg({ quality: 86 })
+    .toFile(filePath(scene.id, "thumb.jpg"))
+}
+
+export async function getScene(id: string): Promise<Scene> {
+  try {
+    return JSON.parse(await readFile(path.join(folder(id), "scene.json"), "utf8"))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new NotFoundError("Unknown scene")
+    }
+    throw error
+  }
+}
+
+export async function saveScene(scene: Scene) {
+  await getScene(scene.id)
+  await writeFile(
+    path.join(folder(scene.id), "scene.json"),
+    JSON.stringify(scene, null, 1)
+  )
+  // Images no layer points at any more (replaced by edits) go too, and
+  // previews of clips that changed or went.
+  const used = new Set(["thumb.jpg"])
+  for (const layer of scene.layers) {
+    if (layer.kind === "image") used.add(layer.src)
+    else for (const child of layer.children) used.add(child.src)
+  }
+  for (const clip of scene.clips ?? []) if (clip.preview) used.add(clip.preview)
+  const files = await readdir(folder(scene.id))
+  await Promise.all(
+    files
+      .filter((f) => FILE.test(f) && !used.has(f))
+      .map((f) => rm(path.join(folder(scene.id), f)))
+  )
+}
+
+export async function saveFile(id: string, file: string, data: Buffer) {
+  await getScene(id)
+  await writeFile(filePath(id, file), data)
+}
+
+export async function deleteScene(id: string) {
+  await getScene(id)
+  await rm(folder(id), { recursive: true })
+}
+
+function slug(name: string) {
+  const base =
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/ß/g, "ss")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "mockup"
+  return base
+}
+
+/** Smallest edge a room is worked at; AI renders come in at 1024 px. */
+const MIN_WORK_EDGE = 2048
+const MAX_WORK_EDGE = 4096
+
+// A new scene from a room photo with an empty sheet in the frame: the photo
+// becomes the background, the poster starts as a centred 5:7 rectangle.
+export async function createScene(name: string, image: Buffer): Promise<Scene> {
+  await mkdir(ROOT, { recursive: true })
+  const existing = new Set(await readdir(ROOT))
+  // Taken by the export, reference and templates routes.
+  existing.add("export").add("reference").add("templates")
+  let id = slug(name)
+  for (let n = 2; existing.has(id); n++) id = `${slug(name)}-${n}`
+
+  const meta = await sharp(image).metadata()
+  if (!meta.width || !meta.height) throw new Error("Not an image")
+  const short = Math.min(meta.width, meta.height)
+  const long = Math.max(meta.width, meta.height)
+  const scale =
+    short < MIN_WORK_EDGE
+      ? Math.min(MIN_WORK_EDGE / short, MAX_WORK_EDGE / long)
+      : Math.min(1, MAX_WORK_EDGE / long)
+  const width = Math.round(meta.width * scale)
+  const height = Math.round(meta.height * scale)
+
+  await mkdir(path.join(ROOT, id))
+  await sharp(image)
+    .rotate()
+    .resize(width, height, { kernel: "lanczos3" })
+    .removeAlpha()
+    .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
+    .toFile(path.join(ROOT, id, "background.jpg"))
+
+  const ph = height * 0.5
+  const pw = ph / 1.4
+  const x0 = (width - pw) / 2
+  const y0 = (height - ph) / 2
+  const order = (await listScenes()).reduce((m, s) => Math.max(m, s.order), 0) + 1
+  const scene: Scene = {
+    version: 1,
+    id,
+    name,
+    order,
+    width,
+    height,
+    layers: [
+      {
+        id: "background",
+        kind: "image",
+        name: "Room",
+        src: "background.jpg",
+        x: 0,
+        y: 0,
+        width,
+        height,
+        blend: "normal",
+        opacity: 1,
+        visible: true,
+        role: "background",
+      },
+      {
+        id: "poster",
+        kind: "poster",
+        name: "Poster",
+        quad: [
+          [x0, y0],
+          [x0 + pw, y0],
+          [x0 + pw, y0 + ph],
+          [x0, y0 + ph],
+        ],
+        overscan: 0.008,
+        fit: "cover",
+        aspect: 1.4,
+        tone: true,
+        blend: "normal",
+        opacity: 1,
+        visible: true,
+        sheet: { source: "background", shine: 0.45, flat: 0.7 },
+        children: [],
+      },
+    ],
+  }
+  await writeFile(path.join(ROOT, id, "scene.json"), JSON.stringify(scene, null, 1))
+  return scene
+}
+
+/** Raw RGBA, shortest edge to `edge` px (Lanczos, never upscaled), JPEG quality 92. */
+export async function toListingJpeg(
+  rgba: Buffer,
+  { width, height }: { width: number; height: number },
+  edge: number
+) {
+  const img = sharp(rgba, { raw: { width, height, channels: 4 } })
+  const f = Math.min(1, edge / Math.min(width, height))
+  return img
+    .resize(Math.round(width * f), Math.round(height * f), { kernel: "lanczos3" })
+    .removeAlpha()
+    .jpeg({ quality: 92 })
+    .toBuffer()
+}
+
+// Animation templates the user saved; the built-in ones live in code.
+const TEMPLATES = path.join(ROOT, "templates.json")
+
+export async function listTemplates(): Promise<Template[]> {
+  try {
+    const list = JSON.parse(await readFile(TEMPLATES, "utf8"))
+    return Array.isArray(list) ? list.filter(isTemplate) : []
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    throw error
+  }
+}
+
+async function writeTemplates(list: Template[]) {
+  await mkdir(ROOT, { recursive: true })
+  await writeFile(TEMPLATES, JSON.stringify(list, null, 1))
+}
+
+export async function addTemplate(template: Template) {
+  const list = await listTemplates()
+  const saved: Template = {
+    id: `t-${Date.now().toString(36)}`,
+    name: template.name.trim().slice(0, 80) || "Untitled",
+    duration: template.duration,
+    shake: template.shake ?? 0,
+    keys: template.keys,
+  }
+  await writeTemplates([...list, saved])
+  return saved
+}
+
+export async function updateTemplate(id: string, patch: Partial<Template>) {
+  const list = await listTemplates()
+  const i = list.findIndex((t) => t.id === id)
+  if (i < 0) throw new NotFoundError("Unknown template")
+  const next = { ...list[i], ...patch, id, builtIn: undefined }
+  if (!isTemplate(next)) throw new Error("Invalid template")
+  list[i] = next
+  await writeTemplates(list)
+  return next
+}
+
+export async function deleteTemplate(id: string) {
+  const list = await listTemplates()
+  if (!list.some((t) => t.id === id)) throw new NotFoundError("Unknown template")
+  await writeTemplates(list.filter((t) => t.id !== id))
+}

@@ -1,0 +1,390 @@
+{
+ "version": 1,
+ "id": "scr-20261009-mawo",
+ "name": "SCR-20261009-mawo",
+ "order": 10,
+ "width": 2048,
+ "height": 2542,
+ "layers": [
+  {
+   "id": "background",
+   "kind": "image",
+   "name": "Room",
+   "src": "background.jpg",
+   "x": 0,
+   "y": 0,
+   "width": 2048,
+   "height": 2542,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "role": "background"
+  },
+  {
+   "id": "poster-1",
+   "kind": "poster",
+   "name": "Poster 1",
+   "quad": [
+    [
+     305,
+     146.1
+    ],
+    [
+     768.9,
+     168.9
+    ],
+    [
+     769.2,
+     882.2
+    ],
+    [
+     305,
+     872.1
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.4008620689655173,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-1",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-1-mv0w1bx3.png",
+     "width": 464,
+     "height": 650,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-1",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-1-mv0w1bx3.png",
+     "width": 464,
+     "height": 650,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  },
+  {
+   "id": "poster-2",
+   "kind": "poster",
+   "name": "Poster 2",
+   "quad": [
+    [
+     829,
+     171.5
+    ],
+    [
+     1283.3,
+     193.8
+    ],
+    [
+     1282.8,
+     893
+    ],
+    [
+     829,
+     883.5
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.4008810572687225,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-2",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-2-mv0w1cj4.png",
+     "width": 454,
+     "height": 636,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-2",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-2-mv0w1cj4.png",
+     "width": 454,
+     "height": 636,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  },
+  {
+   "id": "poster-3",
+   "kind": "poster",
+   "name": "Poster 3",
+   "quad": [
+    [
+     1339.1,
+     196.1
+    ],
+    [
+     1766,
+     216.1
+    ],
+    [
+     1766,
+     902.6
+    ],
+    [
+     1340.4,
+     894.9
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.4004683840749415,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-3",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-3-mv0w1d22.png",
+     "width": 427,
+     "height": 598,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-3",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-3-mv0w1d22.png",
+     "width": 427,
+     "height": 598,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  },
+  {
+   "id": "poster-4",
+   "kind": "poster",
+   "name": "Poster 4",
+   "quad": [
+    [
+     305,
+     927.5
+    ],
+    [
+     769.7,
+     936.5
+    ],
+    [
+     770.2,
+     1612.2
+    ],
+    [
+     305,
+     1619.5
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.4,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-4",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-4-mv0w1dnv.png",
+     "width": 465,
+     "height": 651,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-4",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-4-mv0w1dnv.png",
+     "width": 465,
+     "height": 651,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  },
+  {
+   "id": "poster-5",
+   "kind": "poster",
+   "name": "Poster 5",
+   "quad": [
+    [
+     830,
+     936.9
+    ],
+    [
+     1283,
+     945
+    ],
+    [
+     1283,
+     1604.2
+    ],
+    [
+     830,
+     1611.8
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.3995584988962473,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-5",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-5-mv0w1e8t.png",
+     "width": 453,
+     "height": 634,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-5",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-5-mv0w1e8t.png",
+     "width": 453,
+     "height": 634,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  },
+  {
+   "id": "poster-6",
+   "kind": "poster",
+   "name": "Poster 6",
+   "quad": [
+    [
+     1340,
+     945.6
+    ],
+    [
+     1765.8,
+     952.3
+    ],
+    [
+     1765.9,
+     1597.8
+    ],
+    [
+     1340,
+     1603.8
+    ]
+   ],
+   "overscan": 0.008,
+   "fit": "cover",
+   "aspect": 1.3990610328638498,
+   "tone": true,
+   "blend": "normal",
+   "opacity": 1,
+   "visible": true,
+   "sheet": {
+    "source": "background",
+    "shine": 0.45,
+    "flat": 0.7
+   },
+   "children": [
+    {
+     "id": "light-6",
+     "kind": "image",
+     "name": "Light",
+     "src": "light-6-mv0w1er6.png",
+     "width": 426,
+     "height": 596,
+     "blend": "multiply",
+     "opacity": 1,
+     "visible": true,
+     "role": "light"
+    },
+    {
+     "id": "shine-6",
+     "kind": "image",
+     "name": "Glass reflection",
+     "src": "shine-6-mv0w1er6.png",
+     "width": 426,
+     "height": 596,
+     "blend": "add",
+     "opacity": 0.45,
+     "visible": true,
+     "role": "shine"
+    }
+   ]
+  }
+ ]
+}
