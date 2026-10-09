@@ -1,0 +1,152 @@
+{
+ "id": "mv10usx8-2xiyy",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591585922,
+  "title": "Pink Window Sill Still Life Print | Botanical Houseplant Wall Art | Sunny Interior Decor | Peach and Orange Aesthetic Poster",
+  "image": "https://i.etsystatic.com/24426965/r/il/4629ab/8647140228/il_fullxfull.8647140228_86m8.jpg",
+  "url": "https://www.etsy.com/listing/4591585922/pink-window-sill-still-life-print",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.868Z",
+ "updatedAt": "2026-10-09T14:48:17.368Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10uuep.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11kytj.jpg",
+   "width": 750,
+   "height": 1061,
+   "index": 0,
+   "analysis": {
+    "summary": "A sun-drenched, painterly still life of terracotta-potted houseplants and a gleaming gold watering can resting on a vibrant pink windowsill.",
+    "subject": "Potted houseplants and a metallic watering can",
+    "setting": "A sunlit windowsill with peach-toned curtains and a warm, glowing interior light.",
+    "action": "Resting in the warmth of the afternoon sun.",
+    "style": "Acrylic painting with thick, visible impasto brushstrokes, impressionistic light play, and a slightly naive, flattened perspective.",
+    "palette": [
+     "#f8a1a4",
+     "#f39233",
+     "#d4af37",
+     "#2e5a27",
+     "#e91e63",
+     "#fdf5e6"
+    ],
+    "composition": "A tight, eye-level crop focusing on the windowsill ledge, using vertical lines of curtains and window frames to create rhythm and depth.",
+    "typography": null,
+    "mood": "Warm, optimistic, cozy, and vibrant.",
+    "audience": "Millennial plant lovers and 'dopamine decor' enthusiasts looking to brighten a kitchen, home office, or sunroom.",
+    "hook": "The 'Golden Hour' aesthetic combined with the popular 'Plant Parent' lifestyle, rendered in high-saturation colors that feel like a permanent summer afternoon.",
+    "swaps": {
+     "subjects": [
+      "A sleeping calico cat",
+      "A stack of mismatched ceramic coffee mugs",
+      "A bowl of bright lemons and limes",
+      "A vintage transistor radio",
+      "A pair of tortoise-shell reading glasses on an open novel",
+      "A crystal suncatcher casting rainbows"
+     ],
+     "settings": [
+      "A cluttered kitchen island",
+      "A rustic wooden bedside table",
+      "A wrought-iron balcony railing",
+      "A tiled bathroom vanity",
+      "A greenhouse potting bench",
+      "A marble-topped cafe bistro table"
+     ],
+     "props": [
+      "A half-eaten buttery croissant",
+      "A steaming cup of green matcha",
+      "A retro Polaroid camera",
+      "A glass vase filled with floppy tulips",
+      "A patterned silk scarf draped over a chair",
+      "A small plate of colorful macarons"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "low-mv11liu4.jpg",
+   "width": 1610,
+   "height": 2400,
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z"
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv12vl96.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "title": "Sunny Morning Tea Nook",
+   "brief": "Paint a cozy kitchen breakfast scene in a thick, textured acrylic style with visible impasto strokes. A turquoise ceramic teapot sits next to a bowl of bright lemons and a leafy spider plant in a blue-and-white patterned pot. The setting is a rustic light-wood table near a window with sheer white curtains. Use a palette of sky blue, lemon yellow, amber orange, and deep forest green. Emphasize heavy paint application on the fruit highlights and plant leaves, capturing a bright morning light that casts soft, long shadows across the tabletop. There is no lettering.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv12yhsf.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "title": "Pastel Botanical Shelfie",
+   "brief": "Illustrate a vibrant indoor plant sanctuary in a clean, graphic gouache style with flat color blocks. A white minimalist shelving unit holds a large Monstera Deliciosa, a trailing String of Pearls, a small ceramic cat statue, and a stack of pastel-colored art books. Use a palette of sage green, dusty lavender, warm terracotta, and soft peach against a pale mint background. The rendering should feature matte textures with delicate ink-style outlines for plant veins. Lighting is even and diffused, creating a cheerful, organized 'dopamine decor' vibe for a home office. No lettering is included.",
+   "width": 1610,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1061
+ }
+}

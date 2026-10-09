@@ -1,0 +1,154 @@
+{
+ "id": "mv10usxa-on2ze",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591582106,
+  "title": "Fig and Orange Still Life Print | Vibrant Fruit Kitchen Wall Art | Pink and Orange Poster",
+  "image": "https://i.etsystatic.com/24426965/r/il/732a31/8647112378/il_fullxfull.8647112378_fsac.jpg",
+  "url": "https://www.etsy.com/listing/4591582106/fig-and-orange-still-life-print-vibrant",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.870Z",
+ "updatedAt": "2026-10-09T15:17:12.208Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10uw0h.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11k7pq.jpg",
+   "width": 750,
+   "height": 1061,
+   "index": 0,
+   "analysis": {
+    "summary": "A vibrant, painterly still life featuring halved figs and bright oranges arranged on a gold-rimmed pink plate with delicate sprigs of flowers.",
+    "subject": "Halved figs, whole oranges, and small purple flowers",
+    "setting": "A decorative pink plate with a gold-beaded rim against a warm pink background",
+    "action": "Resting in a lush, crowded arrangement",
+    "style": "Gouache or acrylic painting, thick visible brushstrokes, impasto texture, vibrant color saturation, slightly naive and expressive proportions",
+    "palette": [
+     "#E8A2A5",
+     "#F27D16",
+     "#D63C4A",
+     "#C49A4C",
+     "#7A8C2D",
+     "#F9C7C8"
+    ],
+    "composition": "Overhead flat-lay view, tight cropping, circular plate border framing the fruit, minimal negative space at the bottom corners",
+    "typography": null,
+    "mood": "Joyful, fresh, sophisticated, and summery",
+    "audience": "Home decor enthusiasts and foodies looking for 'dopamine decor' for kitchens or dining rooms",
+    "hook": "The high-contrast pairing of juicy magenta figs and electric orange creates a 'delicious' visual energy that feels both modern and classically Mediterranean.",
+    "swaps": {
+     "subjects": [
+      "Sliced dragonfruit and vibrant kiwis",
+      "Bursting pomegranates and persimmons",
+      "Open oysters with bright lemon wedges",
+      "Papaya halves with lime slices",
+      "Velvety peaches and clusters of blueberries",
+      "Artichoke hearts and halved radishes"
+     ],
+     "settings": [
+      "A blue and white checkered bistro tablecloth",
+      "A sun-drenched marble kitchen island",
+      "A rustic weathered wooden garden table",
+      "A teal tiled poolside ledge",
+      "A wrought-iron balcony overlooking the sea",
+      "A dark emerald velvet surface"
+     ],
+     "props": [
+      "A glass of sparkling rosé with bubbles",
+      "A vintage silver dessert spoon",
+      "A crumpled linen napkin in sage green",
+      "A scattering of flaky sea salt",
+      "A sprig of fresh mint leaves",
+      "A half-eaten buttery croissant"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv13iwug.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "title": "Pomegranate and Lemon Scallop",
+   "brief": "A vibrant flat-lay painting of halved pomegranates and whole lemons arranged on a scalloped-edge pink ceramic plate. The pomegranates are split to show clusters of ruby-red seeds, while the lemons provide a bright yellow contrast with visible zest texture. Small sprigs of white jasmine flowers are tucked between the fruits. The style features thick, visible gouache brushstrokes and an impasto effect on the highlights. The palette includes ruby, canary yellow, pastel pink, and emerald green, framed tightly with a thin gold border around the plate.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv12qjbe.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "title": "Sunlit Brunch with Blood Oranges",
+   "brief": "A three-quarter perspective view of a breakfast scene on a blue-and-white checkered tablecloth. A central turquoise plate holds sliced blood oranges and a wedge of honeycomb, with a silver spoon resting nearby. Soft morning light creates long, warm shadows across the table. The rendering is painterly and expressive, using broad strokes to define the juicy fruit segments and the reflective surface of the spoon. The palette shifts to cobalt blue, deep crimson, honey gold, and cream, providing a fresh, high-contrast mood for a kitchen wall.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv12s0le.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "title": "Aperitivo Hour at the Coast",
+   "brief": "A contemporary, graphic-style painting of two tall spritz glasses and a small bowl of green olives on a terracotta-colored table. The composition uses a dynamic, asymmetric layout with stylized, flattened shapes and a sandy, grainy texture overlay. One glass features a floating orange slice while the other has a green olive garnish. The palette is modern and sophisticated, featuring teal, terracotta, peach, and olive green. The lighting is flat and bright, evoking a mid-century Mediterranean summer vibe that appeals to 'dopamine decor' enthusiasts.",
+   "width": 1610,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1061
+ }
+}

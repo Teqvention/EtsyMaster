@@ -1,5 +1,6 @@
 import { ModeToggle } from "@/components/mode-toggle"
 import { PageTitle } from "@/components/page-title"
+import { BackgroundAnalyses } from "@/components/shops/background-analyses"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -16,6 +17,7 @@ export function SiteHeader() {
         />
         <PageTitle />
         <div className="ml-auto flex items-center gap-2">
+          <BackgroundAnalyses />
           <Button
             variant="ghost"
             size="sm"

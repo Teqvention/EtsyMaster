@@ -51,6 +51,19 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+@theme {
+  /* A light band sweeping across work in progress. */
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
 :root {
   /* Etsy orange (#F1641E) */
   --brand: oklch(0.6728 0.1892 42.4);

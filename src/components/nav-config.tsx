@@ -1,6 +1,7 @@
 import {
   CircleHelpIcon,
-  FrameIcon,
+  PaletteIcon,
+  PackageCheckIcon,
   Settings2Icon,
   TelescopeIcon,
 } from "lucide-react"
@@ -37,9 +38,19 @@ export const nav = {
         { title: "Products", url: "/search" },
         { title: "Shops", url: "/shops" },
         { title: "Saved", url: "/liked" },
+        { title: "Keywords", url: "/keywords" },
       ],
     },
-    { title: "Mockups", url: "/mockups", icon: <FrameIcon /> },
+    {
+      title: "Studio",
+      icon: <PaletteIcon />,
+      items: [
+        { title: "Generation", url: "/generation" },
+        { title: "Styles", url: "/styles" },
+        { title: "Mockups", url: "/mockups" },
+      ],
+    },
+    { title: "Uploads", url: "/uploads", icon: <PackageCheckIcon /> },
   ] satisfies NavEntry[],
   secondary: [
     { title: "Settings", url: "/settings", icon: <Settings2Icon /> },

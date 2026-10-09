@@ -83,6 +83,8 @@ export type Scene = {
   name: string
   /** Place in the Etsy listing; 1 is the thumbnail. */
   order: number
+  /** Set of mockups it belongs to; matched case-insensitively. */
+  category?: string
   source?: string
   width: number
   height: number
@@ -162,8 +164,10 @@ export type ClipSummary = Pick<Clip, "id" | "name" | "duration" | "listing"> & {
 
 export type SceneSummary = Pick<
   Scene,
-  "id" | "name" | "order" | "width" | "height"
+  "id" | "name" | "order" | "width" | "height" | "category"
 > & { thumb: string | null; clips: ClipSummary[] }
+
+export type CategorySummary = { name: string; count: number }
 
 /** pixel × 0.921 × (R 1.024 · G 1.000 · B 0.970) — 8 % toward the paper white. */
 export const PAPER_TONE: [number, number, number] = [

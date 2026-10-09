@@ -1,0 +1,154 @@
+{
+ "id": "mv10usx8-l2f5b",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591585776,
+  "title": "Inspirational Quote Poster | Trust The Seeds You Are Planting | Botanical Typography Wall Art | Retro Gardening Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/dca480/8694967871/il_fullxfull.8694967871_to99.jpg",
+  "url": "https://www.etsy.com/listing/4591585776/inspirational-quote-poster-trust-the",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.868Z",
+ "updatedAt": "2026-10-09T15:17:12.202Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10uuq5.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11lb34.jpg",
+   "width": 750,
+   "height": 1061,
+   "index": 0,
+   "analysis": {
+    "summary": "A charming vintage-style botanical illustration of seedlings in terracotta pots next to a floral watering can and seed packets, paired with a motivational quote.",
+    "subject": "Seedlings in terracotta pots and a decorative watering can",
+    "setting": "A sunny indoor windowsill or potting bench",
+    "action": "Seedlings growing toward the light",
+    "style": "Retro screen-print illustration, flat color blocks with grainy texture, naive proportions, and bold graphic outlines",
+    "palette": [
+     "#2E5A33",
+     "#D8A7B1",
+     "#B56B45",
+     "#F4EBD0",
+     "#C83E2D",
+     "#E9C46A"
+    ],
+    "composition": "Still life arrangement in the lower two-thirds, text placed in the upper-left negative space, eye-level perspective, framed by a thin white border",
+    "typography": "\"Trust the seeds you are planting.\" in a dark green, hand-painted cursive script with a slight tilt.",
+    "mood": "Patient, nurturing, and optimistic",
+    "audience": "Millennial plant parents, hobby gardeners, and people seeking daily inspiration for their home office or sunroom",
+    "hook": "The relatable metaphor of gardening as a slow, rewarding process of personal growth, packaged in a nostalgic mid-century aesthetic.",
+    "swaps": {
+     "subjects": [
+      "A bubbling sourdough starter",
+      "A half-knit wool sweater",
+      "A bird building a nest with twigs",
+      "A stack of well-worn library books",
+      "A ceramic teapot steeping loose leaf tea",
+      "A painter's palette with fresh dollops of oil"
+     ],
+     "settings": [
+      "A cozy kitchen nook",
+      "A messy artist's studio",
+      "A quiet library corner",
+      "A morning balcony",
+      "A rustic potting shed",
+      "A cluttered bedside table"
+     ],
+     "props": [
+      "A ball of colorful yarn",
+      "A wooden mixing spoon",
+      "A pair of reading glasses",
+      "A vintage typewriter",
+      "A steaming ceramic mug",
+      "A magnifying glass"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv13p7ok.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "title": "Potting Bench Progress",
+   "brief": "A still-life scene of a weathered potting bench featuring a pair of canvas gardening gloves, a small hand trowel, and a single ceramic pot holding a leafy monstera sapling. The composition occupies the lower two-thirds of the frame, leaving the upper-right corner open for text. Use the original palette of forest green, dusty rose, terracotta, and cream with a heavy grain texture to mimic mid-century screen printing. Hand-painted cursive text in dark green reads, 'Give yourself time to bloom.'",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv13og3f.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "title": "The Morning Greenhouse View",
+   "brief": "A top-down bird’s-eye view of a garden work table covered in scattered seed packets, a half-peeled orange, and several small sprouting herbs in mismatched ceramic mugs. The palette shifts to include sage green, lavender, ochre, and slate blue with thick linocut-style outlines and overlapping color layers. Frame the scene tightly, focusing on the tactile textures of the wooden table and glossy ceramic glazes. Lettering is centered at the bottom in a bold, blocky serif typeface: 'Patience is the secret ingredient.'",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv13rxgq.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "title": "Roots of Resilience",
+   "brief": "A minimalist folk-art illustration showing a large, stylized oak tree with an intricate, visible root system stretching deep into a cross-section of the earth. Inside the roots and trunk, paint small geometric patterns in metallic gold to represent hidden progress. The palette features emerald green, navy blue, and coral against a flat off-white background. The rendering is clean and graphic with sharp edges and no grain, focusing on a symmetrical, vertically-centered composition without any text.",
+   "width": 1610,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1061
+ }
+}

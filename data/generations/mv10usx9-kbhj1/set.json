@@ -1,0 +1,153 @@
+{
+ "id": "mv10usx9-kbhj1",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591584274,
+  "title": "Coffee O'Clock Wall Art | Retro Kitchen Poster | Blue and Red Linocut Illustration | Cafe Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/f0b360/8647128276/il_fullxfull.8647128276_az2i.jpg",
+  "url": "https://www.etsy.com/listing/4591584274/coffee-oclock-wall-art-retro-kitchen",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.869Z",
+ "updatedAt": "2026-10-09T15:17:12.203Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10uvdh.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11ke32.jpg",
+   "width": 750,
+   "height": 1050,
+   "index": 0,
+   "analysis": {
+    "summary": "A charming linocut-style illustration of a morning coffee and pastry resting on a table by a sunlit window.",
+    "subject": "A blue-patterned ceramic coffee cup and saucer.",
+    "setting": "A sun-drenched kitchen table beside a window.",
+    "action": "Resting on a tablecloth alongside a flaky pastry.",
+    "style": "Linocut print illustration, distressed ink texture, bold outlines, flat color blocks, slight registration shifts, cream paper background.",
+    "palette": [
+     "#F2EAD3",
+     "#3B869B",
+     "#D84D31",
+     "#B9D9D8",
+     "#1E3B4B"
+    ],
+    "composition": "Vertical frame with a thin red border; high-angle perspective; balanced asymmetry with a circular text emblem top-left and a window top-right.",
+    "typography": "\"ITS COFFEE O'CLOCK\" in hand-carved, all-caps, sans-serif red lettering within a concentric circular frame.",
+    "mood": "Nostalgic, cozy, and leisurely.",
+    "audience": "Homeowners and renters looking for kitchen or dining room decor with a vintage, artisanal feel.",
+    "hook": "The relatable \"Coffee O'Clock\" mantra paired with a tactile, handmade aesthetic that evokes a slow, peaceful morning.",
+    "swaps": {
+     "subjects": [
+      "Stemmed wine glass",
+      "Vintage teapot",
+      "Martini glass",
+      "Stack of hardcover books",
+      "Old-fashioned record player",
+      "Woven picnic basket"
+     ],
+     "settings": [
+      "Moonlit balcony",
+      "Rainy library nook",
+      "Mid-century modern sideboard",
+      "Garden potting bench",
+      "Bedside nightstand",
+      "Cozy fireplace hearth"
+     ],
+     "props": [
+      "A single red rose",
+      "A half-eaten chocolate bar",
+      "A pair of reading glasses",
+      "A slice of lemon",
+      "A fountain pen",
+      "A small succulent"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv13my17.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Tea Time Treat Poster",
+   "brief": "A steaming teacup with a floral pattern and a slice of lemon-drizzle cake on a checkered tablecloth. The scene is set by a window showing the silhouette of a potted plant. A red circular emblem in the top-left corner contains the hand-carved text 'TEA TIME TREAT' in all-caps red lettering. Use the original palette of cream, teal, burnt red, and dark navy for outlines. The rendering must feature a distressed linocut texture with grainy ink coverage and slight registration shifts between the color blocks.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv12uwai.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Stovetop Moka Morning",
+   "brief": "A vintage moka pot sits on a gas stove burner with thick, stylized steam rising in curls toward a rectangular text box at the top. The background features a simple grid pattern suggesting kitchen tiles. The composition is a centered, medium-shot view with a new palette of sage green, terracotta, and mustard yellow on a cream background. The style remains a rough woodblock print with heavy, uneven outlines and flat color application. The text inside the top frame reads 'RISE AND GRIND' in a chunky, hand-cut serif font.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv13t5e1.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Savor the Slow Breakfast",
+   "brief": "A vibrant top-down flat-lay illustration of a breakfast spread including a French press, a bowl of halved strawberries, and a linen napkin. The rendering style moves to a grainy risograph aesthetic with overlapping translucent inks and fine halftone dots. The palette uses electric cobalt blue, bright coral, and lemon yellow on a pale peach background. There is no border or text emblem, focusing instead on the graphic interplay of geometric shapes and textures. Lighting is bright and even, creating a modern and energetic morning atmosphere.",
+   "width": 1792,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1050
+ }
+}

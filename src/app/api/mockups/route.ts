@@ -6,7 +6,8 @@ export async function GET() {
   return respond(listScenes)
 }
 
-// New scene from an uploaded room photo (form fields `name`, `image`).
+// New scene from an uploaded room photo (form fields `name`, `image`,
+// optionally `category`).
 export async function POST(request: Request) {
   const form = await request.formData()
   const image = form.get("image")
@@ -14,7 +15,8 @@ export async function POST(request: Request) {
   if (!(image instanceof File) || !name) {
     return Response.json({ error: "Name and image are required" }, { status: 400 })
   }
+  const category = String(form.get("category") ?? "").trim() || undefined
   return respond(async () =>
-    createScene(name, Buffer.from(await image.arrayBuffer()))
+    createScene(name, Buffer.from(await image.arrayBuffer()), { category })
   )
 }

@@ -58,8 +58,8 @@ export function extractSheet(
   return { width: bw, height: bh, light: out, shine }
 }
 
-/** Sheet → upright rectangle, bicubic, one Float32Array per channel. */
-function unwarp(room: Pixels, quad: Quad, w: number, h: number) {
+/** Quad → upright rectangle, bicubic, one Float32Array per channel. */
+export function unwarp(room: Pixels, quad: Quad, w: number, h: number) {
   const H = homography(rectQuad(w, h), quad)
   const out = [0, 1, 2].map(() => new Float32Array(w * h))
   const { data, width: W, height: Hh } = room

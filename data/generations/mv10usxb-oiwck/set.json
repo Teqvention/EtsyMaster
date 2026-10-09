@@ -1,0 +1,153 @@
+{
+ "id": "mv10usxb-oiwck",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591577688,
+  "title": "Mediterranean Street Café Print | Santorini Alleyway Poster | Coastal Travel Art | Italian Riviera Wall Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/8d7cbe/8647078484/il_fullxfull.8647078484_cpbs.jpg",
+  "url": "https://www.etsy.com/listing/4591577688/mediterranean-street-cafe-print-o",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.871Z",
+ "updatedAt": "2026-10-09T15:17:12.207Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10ux11.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11jooa.jpg",
+   "width": 750,
+   "height": 1050,
+   "index": 0,
+   "analysis": {
+    "summary": "A sun-drenched Mediterranean alleyway featuring a charming cafe with red-striped awnings and blue-and-white painted stairs.",
+    "subject": "A quaint street-side cafe and a rising staircase",
+    "setting": "A narrow, sunlit alleyway in a coastal Mediterranean town",
+    "action": "",
+    "style": "Gouache-style illustration, thick expressive brushstrokes, naive perspective, flat color blocking, visible canvas texture",
+    "palette": [
+     "#F5EEDC",
+     "#3A75B5",
+     "#D9452B",
+     "#C59332",
+     "#2D4B32"
+    ],
+    "composition": "Vertical orientation, leading lines created by the blue-striped stairs, asymmetrical balance with cafe furniture on the left and climbing vines on the right.",
+    "typography": null,
+    "mood": "Nostalgic, sunny, and inviting",
+    "audience": "Travel enthusiasts and home decorators seeking a coastal or Mediterranean aesthetic for kitchens and sunrooms.",
+    "hook": "Captures the effortless romance of a European summer through tactile, painterly textures and a high-contrast primary palette.",
+    "swaps": {
+     "subjects": [
+      "A vintage mint-green Vespa",
+      "A sleeping ginger cat on a stone ledge",
+      "A laundry line with white linens",
+      "A wooden gelato cart",
+      "A basket of oversized lemons",
+      "A small blue fishing boat"
+     ],
+     "settings": [
+      "A balcony overlooking the Amalfi coast",
+      "A hidden courtyard with a fountain",
+      "A bustling Italian piazza",
+      "A cliffside path lined with flowers",
+      "A shaded pergola in a vineyard",
+      "A vibrant local fruit market"
+     ],
+     "props": [
+      "A tiny cup of espresso",
+      "A folded newspaper and sunglasses",
+      "A wide-brimmed straw hat",
+      "A bottle of chilled limoncello",
+      "A plate of spaghetti al limone",
+      "A ceramic pitcher of wildflowers"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv12p8qw.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "title": "Sunlit Terrace Table",
+   "brief": "Paint a vertical view of a quiet Mediterranean cafe corner. The foreground features a small round table with a blue-and-white checkered cloth and two red cafe chairs. A large mustard-yellow umbrella hangs overhead in place of an awning. The background shows a white-washed wall with a dark blue door and shutters. Use thick, visible gouache brushstrokes and a palette of cream, cobalt blue, terracotta red, and deep leaf green. Lighting is flat and bright, suggesting high noon in a coastal town.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv13hoq0.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "title": "Aegean Balcony Morning",
+   "brief": "Illustrate a Mediterranean breakfast scene on a stone balcony overlooking a deep blue sea. The focus is a marble bistro table in the lower third of the frame, holding a ceramic carafe and a bowl of bright oranges. Frame the view with a sun-bleached archway draped in vibrant purple bougainvillea. Use a shifted palette of seafoam green, coral pink, ochre, and warm white. Apply dry-brush textures to the stone walls and smooth, flat color blocks for the water. The lighting is soft morning gold, casting gentle shadows.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv13k3x1.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "title": "Coastal Window Still Life",
+   "brief": "Create a minimalist travel-themed still life set on a rustic wooden window sill. The scene includes a wide-brimmed straw hat resting against a vintage bottle of olive oil and a single sprig of rosemary in a glass. In the background, a simple window frame looks out onto a hazy, abstract lavender field under a pale sky. Use a palette of sage green, dusty rose, burnt sienna, and parchment white. The rendering combines thin charcoal linework with translucent watercolor washes and heavy paper texture. Soft, diffused lighting creates long, subtle shadows across the sill.",
+   "width": 1792,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1050
+ }
+}

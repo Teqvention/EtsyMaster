@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { RotateCwIcon, SlidersHorizontalIcon, SquareIcon } from "lucide-react"
+import { PlusIcon, RotateCwIcon, SlidersHorizontalIcon, SquareIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +14,7 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useEtsyUsage } from "@/hooks/use-etsy-usage"
-import type { AnalysisRun } from "@/hooks/use-shop-analysis"
+import { listingTarget, runProgress, type AnalysisRun } from "@/hooks/use-shop-analysis"
 import {
   planCost,
   REVIEW_WINDOWS,
@@ -24,6 +24,7 @@ import {
 } from "@/lib/etsy/analysis"
 import { formatNumber } from "@/lib/etsy/format"
 import type { ListingShop, ShopListingSort } from "@/lib/etsy/types"
+import { timeAgo } from "@/lib/shops/time-ago"
 import { cn } from "@/lib/utils"
 
 const PRESETS = [100, 250, 500, 1000, 2500]
@@ -32,13 +33,15 @@ const PRESETS = [100, 250, 500, 1000, 2500]
 const STEPS = 1000
 
 // How much of the shop to fetch, what it costs in API quota, and — once a run
-// starts — how far along it is. Collapses to a one-line summary when done.
+// starts — how far along it is. Collapses to a one-line summary when done, or
+// when the shop opens with an analysis kept from an earlier visit.
 export function ScopePanel({
   shop,
   plan,
   run,
   onPlanChange,
   onStart,
+  onUpdate,
   onStop,
 }: {
   shop: ListingShop
@@ -46,6 +49,8 @@ export function ScopePanel({
   run: AnalysisRun | null
   onPlanChange: (plan: AnalysisPlan) => void
   onStart: () => void
+  /** Fetches the settled run's scope again. */
+  onUpdate: () => void
   onStop: () => void
 }) {
   const [editing, setEditing] = React.useState(false)
@@ -53,7 +58,15 @@ export function ScopePanel({
   const settled = run && !running && !editing && samePlan(run.plan, plan)
 
   if (settled) {
-    return <RunSummary shop={shop} run={run} onEdit={() => setEditing(true)} onResume={onStart} />
+    return (
+      <RunSummary
+        shop={shop}
+        run={run}
+        onEdit={() => setEditing(true)}
+        onResume={onStart}
+        onUpdate={onUpdate}
+      />
+    )
   }
 
   return (
@@ -157,7 +170,7 @@ export function ScopePanel({
         </div>
       </footer>
 
-      {running && <ProgressBar value={progressOf(run, shop)} />}
+      {running && <ProgressBar value={runProgress(run, shop)} />}
     </section>
   )
 }
@@ -302,15 +315,20 @@ function RunSummary({
   run,
   onEdit,
   onResume,
+  onUpdate,
 }: {
   shop: ListingShop
   run: AnalysisRun
   onEdit: () => void
   onResume: () => void
+  onUpdate: () => void
 }) {
   const sort = SHOP_SORTS.find((s) => s.value === run.plan.sort)?.label.toLowerCase()
   const window = REVIEW_WINDOWS.find((w) => w.value === run.plan.reviews)
   const total = run.listingTotal ?? shop.activeListings
+  const now = useMinute()
+  // Kept from an earlier visit and more than a week old: worth a fresh look.
+  const stale = run.stored && run.analysedAt !== null && now - Date.parse(run.analysedAt) > 7 * 86_400_000
 
   return (
     <section
@@ -318,7 +336,17 @@ function RunSummary({
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3 py-2 text-xs"
     >
       <p className="text-muted-foreground tabular-nums">
-        {run.status === "stopped" && <span className="font-medium text-foreground">Stopped · </span>}
+        {run.analysedAt && (
+          <time
+            dateTime={run.analysedAt}
+            title={new Date(run.analysedAt).toLocaleString()}
+            className={cn("font-medium text-foreground", stale && "text-amber-700 dark:text-amber-400")}
+          >
+            Analysed {timeAgo(run.analysedAt, now, "long")}
+          </time>
+        )}
+        {run.analysedAt && " · "}
+        {run.status === "stopped" && <span className="font-medium text-foreground">Stopped at </span>}
         <span className="font-medium text-foreground">{formatNumber(run.listings.length)}</span> of{" "}
         {formatNumber(total)} listings, {sort}
         {run.plan.reviews !== "none" && window && (
@@ -330,38 +358,47 @@ function RunSummary({
         )}
       </p>
       {run.error && <p className="text-destructive">{run.error}</p>}
-      <div className="ml-auto flex items-center gap-2">
-        {run.status !== "done" && (
-          <Button variant="outline" size="sm" onClick={onResume} title="Pages already fetched are free">
+      <div className="ml-auto flex items-center gap-1.5">
+        {run.status !== "done" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="active:scale-[0.97]"
+            onClick={onResume}
+            title="Pages fetched in the last few hours are free"
+          >
             <RotateCwIcon />
             {run.status === "error" ? "Retry" : "Continue"}
           </Button>
+        ) : (
+          <Button
+            variant={stale ? "outline" : "ghost"}
+            size="sm"
+            className="active:scale-[0.97]"
+            onClick={onUpdate}
+            title="Fetch the same listings again for today's numbers"
+          >
+            <RotateCwIcon />
+            Update
+          </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          <SlidersHorizontalIcon />
-          Adjust scope
+        <Button variant="ghost" size="sm" className="active:scale-[0.97]" onClick={onEdit}>
+          {run.listings.length < total ? <PlusIcon /> : <SlidersHorizontalIcon />}
+          {run.listings.length < total ? "Analyse more" : "Adjust scope"}
         </Button>
       </div>
     </section>
   )
 }
 
-function listingTarget(run: AnalysisRun) {
-  return Math.min(run.plan.limit, run.listingTotal ?? run.plan.limit)
-}
-
-// Weighted by requests: a listing page costs two (page + batch), a review page one.
-function progressOf(run: AnalysisRun, shop: ListingShop) {
-  const listingPages = Math.ceil(listingTarget(run) / 100) * 2
-  const reviewPages =
-    run.plan.reviews === "none"
-      ? 0
-      : run.reviewTotal !== null
-        ? Math.max(Math.ceil(run.reviewTotal / 100), 1)
-        : planCost({ ...run.plan, limit: 0 }, shop)
-  const done =
-    Math.ceil(run.listings.length / 100) * 2 + Math.ceil(run.reviews.length / 100)
-  return Math.min(done / Math.max(listingPages + reviewPages, 1), 1)
+// Now, to the minute, so "Analysed 5 minutes ago" keeps up while the page is open.
+function useMinute() {
+  const [now, setNow] = React.useState(() => Date.now())
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  return now
 }
 
 function samePlan(a: AnalysisPlan, b: AnalysisPlan) {

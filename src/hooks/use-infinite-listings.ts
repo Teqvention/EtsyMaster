@@ -121,7 +121,7 @@ export function useInfiniteListings(endpoint: string | null) {
 
 // The margin only extends the root's box, so observe against the nearest
 // scrolling ancestor rather than the viewport.
-function scrollParent(node: HTMLElement) {
+export function scrollParent(node: HTMLElement) {
   for (let el = node.parentElement; el; el = el.parentElement) {
     const { overflowY } = getComputedStyle(el)
     if (overflowY === "auto" || overflowY === "scroll") return el

@@ -1,0 +1,155 @@
+{
+ "id": "mv10usx6-vhf5h",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591586594,
+  "title": "Inspirational Quote Poster | Botanical Wall Art | Gardening Print | Floral Typography Home Decor | Motivational Plant Quote Artwork",
+  "image": "https://i.etsystatic.com/24426965/r/il/594128/8647145022/il_fullxfull.8647145022_1yno.jpg",
+  "url": "https://www.etsy.com/listing/4591586594/inspirational-quote-poster-botanical",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.866Z",
+ "updatedAt": "2026-10-09T15:17:12.200Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10utzq.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11luiu.jpg",
+   "width": 750,
+   "height": 1050,
+   "index": 0,
+   "analysis": {
+    "summary": "A naive linocut-style illustration of red poppies in terracotta pots on a windowsill, paired with an encouraging gardening metaphor.",
+    "subject": "Red poppies in terracotta pots",
+    "setting": "A sunlit windowsill or garden shelf",
+    "action": "Blooming and sprouting from the soil",
+    "style": "Risograph-inspired illustration with bold black outlines, flat color blocks, slight registration errors, and a grainy paper texture.",
+    "palette": [
+     "#F2E9D8",
+     "#E67E6E",
+     "#00A896",
+     "#FF0000",
+     "#006D5B",
+     "#0077B6",
+     "#000000"
+    ],
+    "composition": "Eye-level, frontal view of a windowsill; the composition is grounded by a horizontal shelf and framed by a thick blue border on the left and bottom, with text centered in the upper negative space.",
+    "typography": "\"Trust the seeds you are planting.\" in a hand-drawn, bold, rounded sans-serif font with a slightly irregular, stamped ink texture.",
+    "mood": "Encouraging, patient, hopeful, and cozy.",
+    "audience": "Gardeners, people undergoing personal growth or career changes, and home decor enthusiasts looking for kitchen or office art.",
+    "hook": "It uses the 'slow living' gardening metaphor to provide a gentle reminder of patience, delivered through a tactile, retro printmaking aesthetic that feels handmade and authentic.",
+    "swaps": {
+     "subjects": [
+      "A rising loaf of sourdough bread",
+      "A half-knitted wool sweater",
+      "A stack of vintage polaroids",
+      "A steaming ceramic teapot",
+      "A cluster of small succulents",
+      "A birdhouse under construction"
+     ],
+     "settings": [
+      "A sun-drenched potting shed",
+      "A cluttered artist's studio",
+      "A rustic farmhouse kitchen",
+      "A quiet library corner",
+      "A wooden back porch",
+      "A cozy bedside table"
+     ],
+     "props": [
+      "A pair of garden shears",
+      "A ball of colorful yarn",
+      "A wooden rolling pin",
+      "A fountain pen and inkwell",
+      "A worn leather journal",
+      "A basket of fresh eggs"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.866Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv13v27z.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.866Z",
+   "title": "Marigolds on the Sill",
+   "brief": "A linocut-style illustration of two tall yellow marigolds in a long rectangular planter box on a wooden windowsill. To the left, a pair of striped gardening gloves rests next to a small metal trowel. The composition remains frontal and eye-level, framed by a thick navy blue border along the bottom and right edges. The palette uses cream, marigold yellow, terracotta orange, and dark forest green with heavy black outlines. The text 'Patience brings progress' is written in a chunky, hand-stamped black font at the top. The image features visible ink grain and slight color overlaps typical of risograph printing.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv130omw.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.866Z",
+   "title": "The Potting Bench",
+   "brief": "A top-down bird's-eye view of a wooden potting bench cluttered with terracotta pots, a spilled bag of soil, and small green sprouts emerging from seed trays. A pair of garden shears and a ball of twine sit in the corner, creating a busy but organized composition. The art style uses flat, textured color blocks with grainy gradients and jagged linocut-style edges. The palette focuses on sage green, lavender, ochre, and charcoal grey on a speckled off-white paper background. Centered at the bottom, the words 'Roots before leaves' are rendered in a bold, irregular woodblock typeface. Soft, diffused indoor lighting is suggested through overlapping semi-transparent color layers.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv13ydeq.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.866Z",
+   "title": "The Sun Always Returns",
+   "brief": "A stylized, folk-art inspired landscape showing a giant, geometric sun rising over rolling hills covered in abstract leaf patterns and wild blooms. The composition uses a circular motif, with the sun's rays acting as dividers for different botanical textures like ferns, petals, and berries. The style is a clean-edge paper collage with visible fiber textures and high-contrast color overlays. The palette consists of burnt orange, mustard yellow, deep teal, and cream, avoiding black outlines for a softer feel. The text 'The sun always returns' follows the curve of the horizon in a clean, modern serif font. This piece emphasizes cyclical nature and resilience rather than a domestic garden scene.",
+   "width": 1792,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1050
+ }
+}

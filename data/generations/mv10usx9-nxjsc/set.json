@@ -1,0 +1,153 @@
+{
+ "id": "mv10usx9-nxjsc",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591569139,
+  "title": "Abstract Geometric Wall Art | Pink and Green Botanical Poster | Modern Minimalist Home Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/5283dd/8647107084/il_fullxfull.8647107084_ez03.jpg",
+  "url": "https://www.etsy.com/listing/4591569139/abstract-geometric-wall-art-pink-and",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.869Z",
+ "updatedAt": "2026-10-09T15:17:12.205Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10uvph.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11kr37.jpg",
+   "width": 750,
+   "height": 1061,
+   "index": 0,
+   "analysis": {
+    "summary": "A textured, abstract vertical composition featuring a column of pink blocky shapes with star-like motifs against a mossy green background.",
+    "subject": "A vertical stack of block-printed pink squares with four-pointed star motifs.",
+    "setting": "A distressed, textured green field reminiscent of handmade washi paper.",
+    "action": "Repeating in a rhythmic, vertical column that suggests organic growth or textile patterns.",
+    "style": "Linocut print style with heavy distress, organic bleeding edges, flat color with subtle tonal variations, and a visible washi paper texture.",
+    "palette": [
+     "#8DA642",
+     "#E8A4B6",
+     "#B02E63",
+     "#B5C77A",
+     "#F2F4E6"
+    ],
+    "composition": "Vertical orientation with a primary off-center column and a secondary ghosted column on the far left, framed by a thin natural wood border.",
+    "typography": null,
+    "mood": "Artisanal, serene, rhythmic, and earthy.",
+    "audience": "Minimalist interior design enthusiasts and boho-chic decorators looking for bedroom or living room accents.",
+    "hook": "The juxtaposition of a structured geometric column with a raw, organic, and highly textured background creates a 'perfectly imperfect' artisanal feel that bridges modernism and nature.",
+    "swaps": {
+     "subjects": [
+      "Stacked ceramic bowls",
+      "Vertical row of citrus slices",
+      "Series of abstract eyes",
+      "Column of river pebbles",
+      "Row of stylized ginkgo leaves",
+      "Stack of vintage hardcover books"
+     ],
+     "settings": [
+      "Terracotta plaster wall",
+      "Deep indigo watercolor wash",
+      "Sun-bleached linen fabric",
+      "Charcoal slate background",
+      "Dusty ochre clay surface",
+      "Muted teal canvas texture"
+     ],
+     "props": [
+      "Gold leaf flecks",
+      "Stitched thread lines",
+      "Watercolor drips",
+      "Charcoal scribbles",
+      "Wax seal stamps",
+      "Torn paper edges"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv12t0tx.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Artisan Pillar Circles",
+   "brief": "A vertical column of soft pink rectangular blocks is stacked off-center against a mossy green background. Instead of star motifs, each block contains a unique hand-carved circular symbol like a spiral or concentric rings in deep magenta ink. A faint, ghosted column of empty square outlines sits on the far left of the composition. The style is a distressed linocut print with bleeding ink edges and a heavy washi paper grain visible throughout. The mood is rhythmic and artisanal, intended to be hung as a pair with the original star-motif print.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv13rgdm.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Earth Tone Tile Grid",
+   "brief": "This piece features a three-by-three grid of organic, hand-stamped square tiles centered on a warm cream canvas. Each tile is rendered in a deep terracotta hue and contains a single, stylized golden ochre leaf silhouette. The tiles are intentionally wobbly and spaced unevenly to emphasize a wabi-sabi aesthetic. The rendering uses a grainy woodblock print texture with uneven ink coverage that lets the underlying cream paper show through in patches. The overall palette shifts to terracotta, ochre, and cream for a grounded, rustic feel.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv12wtl0.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.869Z",
+   "title": "Torn Paper Horizon",
+   "brief": "A minimalist abstract landscape composed of large, flat organic shapes. A large, imperfectly round sun made of layered dusty-peach paper segments sits in the upper half of the frame. Below it, three wide horizontal bands in sage green, charcoal, and dusty navy represent a stylized shoreline. The rendering mimics a paper collage with rough, deckled edges and subtle drop shadows between the layers to create a sense of physical depth. The composition is spacious and calm, targeting the same minimalist interior design enthusiasts with a fresh, collage-based style.",
+   "width": 1610,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1061
+ }
+}

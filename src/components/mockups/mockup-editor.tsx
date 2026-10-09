@@ -8,6 +8,8 @@ import {
   BrushIcon,
   DownloadIcon,
   EraserIcon,
+  FilmIcon,
+  LayersIcon,
   LoaderCircleIcon,
   MaximizeIcon,
   MousePointer2Icon,
@@ -18,11 +20,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { ClipsPanel, useTemplates } from "@/components/mockups/clips-panel"
 import { IconButton, LayersPanel } from "@/components/mockups/layers-panel"
+import { MotionPanel, type KeyPatch } from "@/components/mockups/motion-panel"
 import { PosterPicker, usePoster } from "@/components/mockups/poster-picker"
 import { PropertiesPanel } from "@/components/mockups/properties-panel"
 import { SceneCanvas, type Phase, type Tool } from "@/components/mockups/scene-canvas"
+import { Timeline } from "@/components/mockups/timeline"
 import { useHistory } from "@/components/mockups/use-history"
+import { usePlayer } from "@/components/mockups/use-player"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Slider } from "@/components/ui/slider"
@@ -51,17 +57,23 @@ import {
   updateLayer,
   type AnyLayer,
 } from "@/lib/mockups/edit"
-import { exportName, exportScene } from "@/lib/mockups/export"
+import { exportName, exportScene, thumbJpeg } from "@/lib/mockups/export"
+import { clipFrom, hash, motionOf, shotAt } from "@/lib/mockups/motion"
 import { decode, SceneRenderer, type Source } from "@/lib/mockups/renderer"
 import type {
+  Clip,
   ImageLayer,
+  Keyframe,
   Layer,
+  Motion,
   Point,
   PosterChild,
   PosterLayer,
   Quad,
   Scene,
+  Template,
 } from "@/lib/mockups/types"
+import { clipFileName, encodeMotion, exportClip, PREVIEW } from "@/lib/mockups/video"
 
 export function MockupEditor({ id }: { id: Promise<string> }) {
   const sceneId = React.use(id)
@@ -99,8 +111,12 @@ export function MockupEditor({ id }: { id: Promise<string> }) {
 }
 
 type Busy = "save" | "export" | "generate" | "brush" | null
+type Mode = "layers" | "animate"
 
 const sheetKey = (p: PosterLayer) => JSON.stringify([p.quad, p.sheet?.flat])
+
+/** The whole room, still: what the viewfinder shows before any animation. */
+const IDLE: Motion = { duration: 1, shake: 0, keys: [] }
 
 function Editor({ initial }: { initial: Scene }) {
   const router = useRouter()
@@ -135,7 +151,20 @@ function Editor({ initial }: { initial: Scene }) {
   const [fit, setFit] = React.useState(0)
   const [rebuild, setRebuild] = React.useState(0)
   const [busy, setBusy] = React.useState<Busy>(null)
+  /** Percent done of a long save or export. */
+  const [progress, setProgress] = React.useState<number | null>(null)
   const display = React.useRef<SceneRenderer | null>(null)
+
+  const [mode, setMode] = React.useState<Mode>("layers")
+  const clips = scene.clips ?? []
+  const [clipId, setClipId] = React.useState<string | null>(
+    () => (initial.clips?.find((c) => c.listing) ?? initial.clips?.[0])?.id ?? null
+  )
+  const clip = clips.find((c) => c.id === clipId) ?? null
+  const [keyIndex, setKeyIndex] = React.useState<number | null>(0)
+  const player = usePlayer()
+  const templates = useTemplates()
+  const [still, setStill] = React.useState<string | null>(null)
 
   // Light maps that came with the scene count as made for its corners.
   const [generatedFor, setGeneratedFor] = React.useState<Record<string, string>>(() =>
@@ -160,7 +189,7 @@ function Editor({ initial }: { initial: Scene }) {
   const layer = findLayer(scene, selected)
   const selectedPoster = layer?.kind === "poster" ? layer : null
   const canBrush = isImage(layer) && layer.role === "front"
-  const tool: Tool = canBrush ? chosenTool : "move"
+  const tool: Tool = canBrush && mode === "layers" ? chosenTool : "move"
 
   const patch = (id: string, p: Partial<AnyLayer>, merge?: string) =>
     history.commit((s) => updateLayer(s, id, p), merge)
@@ -452,6 +481,152 @@ function Editor({ initial }: { initial: Scene }) {
     setSelected(copy.id)
   }
 
+  // ── Animations ──────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    player.setDuration(clip?.duration ?? 1)
+  }, [player, clip?.duration])
+
+  const stillTimer = React.useRef(0)
+  const makeStill = () => {
+    window.clearTimeout(stillTimer.current)
+    stillTimer.current = window.setTimeout(() => {
+      const r = display.current
+      const s = sceneRef.current
+      if (!r) return
+      try {
+        // Twice the tile size; the browser scales it down more cleanly than Pixi.
+        const c = toCanvas(r.pixels(Math.min(1, 720 / Math.min(s.width, s.height))))
+        setStill(c.toDataURL("image/jpeg", 0.85))
+      } catch {
+        // Not built yet; the next build tries again.
+      }
+    }, 150)
+  }
+
+  function switchMode(next: Mode) {
+    setMode(next)
+    if (next === "animate") {
+      makeStill()
+      player.seek(0)
+    } else player.pause()
+  }
+
+  function selectClip(id: string, play = false) {
+    setClipId(id)
+    setKeyIndex(0)
+    player.pause()
+    player.seek(0)
+    if (play) player.play()
+  }
+
+  const commitClips = (fn: (clips: Clip[]) => Clip[], merge?: string) =>
+    history.commit((s) => ({ ...s, clips: fn(s.clips ?? []) }), merge)
+
+  const patchClip = (id: string, p: Partial<Clip>, merge?: string) =>
+    commitClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...p } : c)), merge)
+
+  function addClip(template: Template) {
+    const c = clipFrom(template, sceneRef.current)
+    commitClips((cs) => [...cs, c])
+    selectClip(c.id, true)
+  }
+
+  function duplicateClip(id: string) {
+    const original = clips.find((c) => c.id === id)
+    if (!original) return
+    const c = clipFrom({ ...original, name: `${original.name} copy` }, sceneRef.current)
+    commitClips((cs) => {
+      const next = [...cs]
+      next.splice(cs.findIndex((x) => x.id === id) + 1, 0, c)
+      return next
+    })
+    selectClip(c.id)
+  }
+
+  function deleteClip(id: string) {
+    const i = clips.findIndex((c) => c.id === id)
+    commitClips((cs) => {
+      const rest = cs.filter((c) => c.id !== id)
+      // Etsy shows one video; keep one when the listing clip goes.
+      if (cs.some((c) => c.id === id && c.listing) && rest.length) rest[0] = { ...rest[0], listing: true }
+      return rest
+    })
+    const next = clips.filter((c) => c.id !== id)[Math.min(i, clips.length - 2)]
+    if (next) selectClip(next.id)
+    else setClipId(null)
+  }
+
+  const setListing = (id: string, listing: boolean) =>
+    commitClips((cs) => cs.map((c) => (c.id === id ? { ...c, listing } : listing ? { ...c, listing: false } : c)))
+
+  const patchKeys = (fn: (keys: Keyframe[]) => Keyframe[], merge?: string) =>
+    clip && commitClips((cs) => cs.map((c) => (c.id === clip.id ? { ...c, keys: fn(c.keys) } : c)), merge)
+
+  function selectKey(index: number) {
+    if (!clip) return
+    setKeyIndex(index)
+    player.pause()
+    player.seek(clip.keys[index].t * clip.duration)
+  }
+
+  function patchKey(index: number, p: KeyPatch, merge?: string) {
+    patchKeys(
+      (keys) => keys.map((k, i) => (i === index ? { ...k, ...p, shot: { ...k.shot, ...p.shot } } : k)),
+      merge
+    )
+    // Show the key being edited.
+    if (clip) {
+      player.pause()
+      player.seek(clip.keys[index].t * clip.duration)
+    }
+  }
+
+  function addKey() {
+    if (!clip) return
+    const t = Math.round((player.time / clip.duration) * 1000) / 1000
+    const near = clip.keys.findIndex((k) => Math.abs(k.t - t) < 0.01)
+    if (near >= 0) return selectKey(near)
+    const at = clip.keys.findIndex((k) => k.t > t)
+    const index = at < 0 ? clip.keys.length : at
+    const key: Keyframe = { t, ease: clip.keys[index - 1]?.ease ?? "smooth", shot: shotAt(clip, t) }
+    patchKeys((keys) => [...keys.slice(0, index), key, ...keys.slice(index)])
+    setKeyIndex(index)
+    player.pause()
+  }
+
+  function deleteKey() {
+    if (!clip || keyIndex === null || clip.keys.length < 2) return
+    patchKeys((keys) => keys.filter((_, i) => i !== keyIndex))
+    setKeyIndex(Math.min(keyIndex, clip.keys.length - 2))
+  }
+
+  async function saveTemplate(id: string) {
+    const c = clips.find((x) => x.id === id)
+    if (c) await templates.save(c).catch((e: Error) => toast.error(`Couldn't save template: ${e.message}`))
+  }
+
+  /** Hover previews for the mockups page, re-made only for clips whose look changed. */
+  async function withPreviews(r: SceneRenderer, s: Scene, posterKey: string): Promise<Scene> {
+    if (!s.clips?.length) return s
+    const named = s.clips.map((c) => ({
+      clip: c,
+      name: `motion-${hash(JSON.stringify([motionOf(c), s.layers, s.width, s.height, posterKey]))}.mp4`,
+    }))
+    const todo = named.filter(({ clip, name }) => clip.preview !== name)
+    try {
+      for (const [i, { name, clip }] of todo.entries()) {
+        const video = await encodeMotion(r, s, clip, PREVIEW, (p) =>
+          setProgress(Math.floor(((i + p) / todo.length) * 100))
+        )
+        await putFile(s.id, name, video)
+      }
+      return { ...s, clips: named.map(({ clip, name }) => ({ ...clip, preview: name })) }
+    } catch (e) {
+      toast.warning(`Saved without hover previews: ${(e as Error).message}`)
+      return s
+    }
+  }
+
   // ── Save / export ───────────────────────────────────────────────────────
   async function save() {
     if (busy) return
@@ -470,25 +645,30 @@ function Editor({ initial }: { initial: Scene }) {
         await putFile(s.id, src, blob)
         uploaded.current.add(src)
       }
-      await putScene(s)
+      let out = s
       if (poster) {
         const r = await SceneRenderer.create()
         try {
           await r.build(s, { resolve, poster: poster.bitmap })
-          const thumb = toCanvas(r.pixels(Math.min(1, 720 / Math.max(s.width, s.height))))
-          const blob = await new Promise<Blob | null>((res) => thumb.toBlob(res, "image/jpeg", 0.86))
-          if (blob) await putFile(s.id, "thumb.jpg", blob)
+          await putFile(s.id, "thumb.jpg", await thumbJpeg(r, s))
+          // Painted pixels keep their file names, so they need fresh previews.
+          const { name, bitmap } = poster
+          out = await withPreviews(r, s, [name, bitmap.width, bitmap.height, unsavedPixels && Date.now()].join())
         } finally {
           r.destroy()
         }
       }
-      setSaved(s)
+      // After the previews: saving drops files the scene doesn't name.
+      await putScene(out)
+      history.replace(s, out)
+      setSaved(out)
       setUnsavedPixels(false)
       toast.success("Saved")
     } catch (e) {
       toast.error(`Save failed: ${(e as Error).message}`)
     } finally {
       setBusy(null)
+      setProgress(null)
     }
   }
 
@@ -505,6 +685,22 @@ function Editor({ initial }: { initial: Scene }) {
     }
   }
 
+  async function exportVideo() {
+    if (!poster || !clip || busy) return
+    setBusy("export")
+    setProgress(0)
+    try {
+      const s = sceneRef.current
+      const video = await exportClip(s, clip, poster.bitmap, resolve, (p) => setProgress(Math.floor(p * 100)))
+      download(video, clipFileName(s, clip))
+    } catch (e) {
+      toast.error(`Export failed: ${(e as Error).message}`)
+    } finally {
+      setBusy(null)
+      setProgress(null)
+    }
+  }
+
   async function deleteScene() {
     if (!confirm(`Delete “${scene.name}” and all its layer images?`)) return
     const response = await fetch(`/api/mockups/${scene.id}`, { method: "DELETE" })
@@ -515,11 +711,30 @@ function Editor({ initial }: { initial: Scene }) {
   }
 
   // ── Keyboard ────────────────────────────────────────────────────────────
+  // What the pointer focused last. :focus-visible can't tell: any key press
+  // makes the focused element match it.
+  const clicked = React.useRef<EventTarget | null>(null)
+  React.useEffect(() => {
+    let pointer = false
+    const down = () => {
+      pointer = true
+      setTimeout(() => (pointer = false))
+    }
+    const focus = (e: FocusEvent) => (clicked.current = pointer ? e.target : null)
+    window.addEventListener("pointerdown", down, true)
+    window.addEventListener("focusin", focus)
+    return () => {
+      window.removeEventListener("pointerdown", down, true)
+      window.removeEventListener("focusin", focus)
+    }
+  }, [])
+
   const keys = React.useRef<(e: KeyboardEvent) => void>(() => {})
   React.useEffect(() => {
     keys.current = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
-      if (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return
+      const range = el instanceof HTMLInputElement && el.type === "range"
+      if (el.isContentEditable || (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) && !range)) return
       const mod = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
       if (mod && key === "z") {
@@ -534,10 +749,18 @@ function Editor({ initial }: { initial: Scene }) {
         save()
       } else if (mod) {
         return
+      } else if (key === "f") setFit((f) => f + 1)
+      else if (mode === "animate") {
+        if (key !== " " || e.defaultPrevented) return
+        // Space belongs to a control the keyboard reached. One that was just
+        // clicked (a template, a clip, a slider) hands it back to playback.
+        if (el !== document.body && el !== clicked.current) return
+        e.preventDefault()
+        el.blur()
+        player.toggle()
       } else if (key === "v") setTool("move")
       else if (key === "b" && canBrush) setTool("reveal")
       else if (key === "e" && canBrush) setTool("hide")
-      else if (key === "f") setFit((f) => f + 1)
       else if (key === "[") setBrush((b) => Math.max(1, Math.round(b / 1.2)))
       else if (key === "]") setBrush((b) => Math.min(800, Math.round(b * 1.2) + 1))
     }
@@ -585,21 +808,38 @@ function Editor({ initial }: { initial: Scene }) {
           variant="outline"
           size="sm"
           spacing={0}
-          value={[tool]}
-          onValueChange={(v) => v[0] && setTool(v[0] as Tool)}
-          aria-label="Tool"
+          value={[mode]}
+          onValueChange={(v) => v[0] && switchMode(v[0] as Mode)}
+          aria-label="Mode"
           className="ml-2"
         >
-          <ToggleGroupItem value="move" aria-label="Move (V)">
-            <MousePointer2Icon />
+          <ToggleGroupItem value="layers">
+            <LayersIcon /> Layers
           </ToggleGroupItem>
-          <ToggleGroupItem value="reveal" aria-label="Reveal brush (B)" disabled={!canBrush}>
-            <BrushIcon /> Reveal
-          </ToggleGroupItem>
-          <ToggleGroupItem value="hide" aria-label="Hide brush (E)" disabled={!canBrush}>
-            <EraserIcon /> Hide
+          <ToggleGroupItem value="animate">
+            <FilmIcon /> Animate
           </ToggleGroupItem>
         </ToggleGroup>
+        {mode === "layers" && (
+          <ToggleGroup
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={[tool]}
+            onValueChange={(v) => v[0] && setTool(v[0] as Tool)}
+            aria-label="Tool"
+          >
+            <ToggleGroupItem value="move" aria-label="Move (V)">
+              <MousePointer2Icon />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="reveal" aria-label="Reveal brush (B)" disabled={!canBrush}>
+              <BrushIcon /> Reveal
+            </ToggleGroupItem>
+            <ToggleGroupItem value="hide" aria-label="Hide brush (E)" disabled={!canBrush}>
+              <EraserIcon /> Hide
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
         {tool !== "move" && (
           <div className="flex w-44 items-center gap-2 text-xs text-muted-foreground">
             <Slider
@@ -630,62 +870,115 @@ function Editor({ initial }: { initial: Scene }) {
           <IconButton label="Delete mockup" onClick={deleteScene}>
             <Trash2Icon />
           </IconButton>
-          <Button variant="outline" size="sm" onClick={exportJpeg} disabled={!poster || !!busy}>
-            {busy === "export" ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
-            {exportName(scene)}
-          </Button>
+          {mode === "layers" ? (
+            <Button variant="outline" size="sm" onClick={exportJpeg} disabled={!poster || !!busy}>
+              {busy === "export" ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
+              {exportName(scene)}
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={exportVideo} disabled={!poster || !clip || !!busy}>
+              {busy === "export" ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
+              {clip ? clipFileName(scene, clip) : "Export MP4"}
+              {busy === "export" && progress !== null && (
+                <span className="text-muted-foreground tabular-nums">{progress} %</span>
+              )}
+            </Button>
+          )}
           <Button size="sm" onClick={save} disabled={!dirty || !!busy}>
             {busy === "save" ? <LoaderCircleIcon className="animate-spin" /> : <SaveIcon />}
             Save
+            {busy === "save" && progress !== null && <span className="tabular-nums opacity-70">{progress} %</span>}
           </Button>
         </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_17rem] overflow-hidden rounded-xl border bg-card">
-        <LayersPanel
-          scene={scene}
-          selected={selected}
-          onSelect={setSelected}
-          onToggle={(id, visible) => patch(id, { visible })}
-          onMove={(id, by) => history.commit((s) => moveLayer(s, id, by))}
-          onDuplicate={duplicate}
-          onDelete={(id) => {
-            history.commit((s) => removeLayer(s, id))
-            setSelected(null)
-          }}
-          onAddImage={(file) => addImage(file).catch((e: Error) => toast.error(e.message))}
-          onAddPoster={addPoster}
-          onAddFront={addFront}
-        />
-        <div className="min-h-0 border-x">
-          <SceneCanvas
+        {mode === "animate" ? (
+          <ClipsPanel
             scene={scene}
-            build={build}
-            rebuild={rebuild}
-            selected={selected}
-            tool={tool}
-            brush={brush}
-            loupeSrc={loupeSrc}
-            fit={fit}
-            onQuad={onQuad}
-            onStroke={onStroke}
-            onRenderer={(r) => (display.current = r)}
+            selected={clip?.id ?? null}
+            still={still}
+            saved={templates.saved}
+            onSelect={(id) => selectClip(id)}
+            onAdd={addClip}
+            onDuplicate={duplicateClip}
+            onDelete={deleteClip}
+            onSaveTemplate={saveTemplate}
+            onRemoveTemplate={(t) => templates.remove(t).catch((e: Error) => toast.error(e.message))}
           />
+        ) : (
+          <LayersPanel
+            scene={scene}
+            selected={selected}
+            onSelect={setSelected}
+            onToggle={(id, visible) => patch(id, { visible })}
+            onMove={(id, by) => history.commit((s) => moveLayer(s, id, by))}
+            onDuplicate={duplicate}
+            onDelete={(id) => {
+              history.commit((s) => removeLayer(s, id))
+              setSelected(null)
+            }}
+            onAddImage={(file) => addImage(file).catch((e: Error) => toast.error(e.message))}
+            onAddPoster={addPoster}
+            onAddFront={addFront}
+          />
+        )}
+        <div className="flex min-h-0 flex-col border-x">
+          <div className="min-h-0 flex-1">
+            <SceneCanvas
+              scene={scene}
+              build={build}
+              rebuild={rebuild}
+              selected={selected}
+              tool={tool}
+              brush={brush}
+              loupeSrc={loupeSrc}
+              fit={fit}
+              onQuad={onQuad}
+              onStroke={onStroke}
+              onRenderer={(r) => (display.current = r)}
+              onBuilt={() => mode === "animate" && makeStill()}
+              motion={mode === "animate" ? { clip: clip ?? IDLE, player } : null}
+            />
+          </div>
+          {mode === "animate" && clip && (
+            <Timeline
+              clip={clip}
+              player={player}
+              selected={keyIndex}
+              onSelect={selectKey}
+              onRetime={(index, t, merge) =>
+                patchKeys((keys) => keys.map((k, i) => (i === index ? { ...k, t } : k)), merge)
+              }
+              onAdd={addKey}
+              onDelete={deleteKey}
+            />
+          )}
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="px-3 py-2 text-sm font-medium">
-            {layer ? (layer.kind === "poster" ? "Poster" : "Layer") : "Mockup"}
+            {mode === "animate" ? "Animation" : layer ? (layer.kind === "poster" ? "Poster" : "Layer") : "Mockup"}
           </div>
-          <PropertiesPanel
-            scene={scene}
-            layer={layer}
-            stale={stale}
-            generating={busy === "generate"}
-            onScene={(p, merge) => history.commit((s) => ({ ...s, ...p }), merge)}
-            onPatch={(p, merge) => selected && patch(selected, p, merge)}
-            onReplace={(file) => replaceImage(file).catch((e: Error) => toast.error(e.message))}
-            onGenerate={generate}
-          />
+          {mode === "animate" ? (
+            <MotionPanel
+              clip={clip}
+              keyIndex={keyIndex}
+              onClip={(p, merge) => clip && patchClip(clip.id, p, merge)}
+              onListing={(on) => clip && setListing(clip.id, on)}
+              onKey={patchKey}
+            />
+          ) : (
+            <PropertiesPanel
+              scene={scene}
+              layer={layer}
+              stale={stale}
+              generating={busy === "generate"}
+              onScene={(p, merge) => history.commit((s) => ({ ...s, ...p }), merge)}
+              onPatch={(p, merge) => selected && patch(selected, p, merge)}
+              onReplace={(file) => replaceImage(file).catch((e: Error) => toast.error(e.message))}
+              onGenerate={generate}
+            />
+          )}
         </div>
       </div>
     </div>

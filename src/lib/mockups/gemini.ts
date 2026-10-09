@@ -7,7 +7,8 @@ import sharp from "sharp"
 import type { Quad } from "./types"
 
 // Vertex AI with a service-account key: Nano Banana redraws a reference
-// mockup with a blank sheet, Gemini Flash points at where the sheet is.
+// mockup with a blank sheet, Gemini Flash points at where the sheet is (or
+// the prints are).
 // The key file is GOOGLE_APPLICATION_CREDENTIALS (relative to the app).
 
 const IMAGE_MODEL = "gemini-nano-banana-2.1"
@@ -47,17 +48,59 @@ async function auth() {
 
 type Part = { text?: string; inlineData?: { mimeType: string; data: string } }
 
-// Vertex's shared quota answers 429 when busy; it usually clears in seconds.
-const RETRIES = [2_000, 5_000, 12_000]
+// Vertex's shared quota answers 429 ("Resource has been exhausted") when
+// busy. Every model's calls go through a gate: a few at a time, and when one
+// is told to back off, they all pause — longer while it keeps happening —
+// and fewer go at once until calls succeed again.
+const MAX_PARALLEL = 4
+const ATTEMPTS = 8
+
+type Gate = { limit: number; active: number; waiting: (() => void)[]; until: number; strikes: number; streak: number }
+
+// On globalThis, so every route (and a dev reload) shares the one gate per model.
+const global = globalThis as typeof globalThis & { __geminiGates?: Map<string, Gate> }
+const gates = (global.__geminiGates ??= new Map())
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function gateFor(model: string) {
+  let gate = gates.get(model)
+  if (!gate) gates.set(model, (gate = { limit: MAX_PARALLEL, active: 0, waiting: [], until: 0, strikes: 0, streak: 0 }))
+  return gate
+}
+
+async function enter(gate: Gate) {
+  while (gate.active >= gate.limit) await new Promise<void>((r) => gate.waiting.push(r))
+  gate.active++
+  while (Date.now() < gate.until) await sleep(gate.until - Date.now() + Math.random() * 1_500)
+}
+
+function leave(gate: Gate) {
+  gate.active--
+  gate.waiting.shift()?.()
+}
 
 async function generate(model: string, parts: Part[], generationConfig: object) {
-  for (let attempt = 0; ; attempt++) {
+  const gate = gateFor(model)
+  for (let attempt = 1; ; attempt++) {
+    await enter(gate)
     try {
-      return await generateOnce(model, parts, generationConfig)
+      const result = await generateOnce(model, parts, generationConfig)
+      gate.strikes = 0
+      if (++gate.streak >= 3 && gate.limit < MAX_PARALLEL) {
+        gate.limit++
+        gate.streak = 0
+      }
+      return result
     } catch (error) {
-      const busy = error instanceof BusyError
-      if (!busy || attempt >= RETRIES.length) throw error
-      await new Promise((r) => setTimeout(r, RETRIES[attempt]))
+      if (!(error instanceof BusyError) || attempt >= ATTEMPTS) throw error
+      gate.streak = 0
+      gate.strikes++
+      gate.limit = Math.max(1, gate.limit - 1)
+      const wait = Math.min(60_000, 5_000 * 2 ** Math.min(gate.strikes - 1, 4))
+      gate.until = Math.max(gate.until, Date.now() + wait * (0.75 + Math.random() * 0.5))
+    } finally {
+      leave(gate)
     }
   }
 }
@@ -114,14 +157,79 @@ Keep everything that lies on top of the artwork exactly as it is: glass reflecti
 
 /** The reference mockup redrawn with a blank white sheet in the frame. */
 export async function blankReplica(reference: Buffer) {
-  const { width, height } = await sharp(reference).rotate().metadata()
-  const parts = await generate(IMAGE_MODEL, [await inline(reference), { text: BLANK_PROMPT }], {
-    responseModalities: ["IMAGE"],
-    imageConfig: { aspectRatio: nearestRatio(width!, height!), imageSize: "2K" },
-  })
-  const image = parts.find((p) => p.inlineData)?.inlineData
-  if (!image) throw new Error("Nano Banana returned no image")
-  return Buffer.from(image.data, "base64")
+  return redraw(reference, BLANK_PROMPT)
+}
+
+// A new design from someone else's poster, at three levels of distance from
+// it. Ideas, themes and styles are free to use; the drawing, characters and
+// wording are someone's work, so even the closest version redraws all of it.
+const REIMAGINE_PROMPT = `This is a poster design someone else made and sells. Create a NEW, ORIGINAL design for a printable wall-art poster based on it.
+It must not be a copy, trace or close derivative: draw every element yourself. Never reproduce its characters, mascots, exact composition or linework, and never include any logo, trademark, brand, signature, watermark or copyrighted character. Do not copy its lettering; if there is text, write new wording.
+Output only the flat artwork, front-on and edge to edge: no frame, wall, room, mockup or drop shadow. Crisp and print-ready, with clean, correctly spelled lettering.`
+
+export const CREATIVITY = {
+  low: "Creativity: low. Stay close to the original's subject, art style, colour palette and overall layout, so it would sit in the same shop next to it — but redraw everything with clearly different details: different poses and shapes, a different arrangement of the secondary elements, different patterns and textures, and new wording in a similar lettering style.",
+  medium: "Creativity: medium. Keep the theme, mood and style genre, but make a new composition: a different main subject or viewpoint, new supporting elements, a shifted colour palette and new wording.",
+  high: "Creativity: high. Take only the theme and the kind of buyer it appeals to as loose inspiration. Invent a fresh concept, composition, palette and style that suits it — a sister product, not a variation.",
+} as const
+
+export type Creativity = keyof typeof CREATIVITY
+
+/** A new, original poster after `poster` at the given distance from it. */
+export async function reimagine(poster: Buffer, creativity: Creativity) {
+  return redraw(poster, `${REIMAGINE_PROMPT}\n${CREATIVITY[creativity]}`)
+}
+
+/** Nano Banana's take on `image` as told by `prompt`, at the image's aspect ratio. */
+async function redraw(image: Buffer, prompt: string) {
+  return paint(prompt, [image])
+}
+
+/**
+ * Nano Banana: a new image from `prompt` and the `images` it refers to (in the
+ * order the prompt names them), at the first image's aspect ratio unless
+ * `aspect` (width / height) is given.
+ */
+export async function paint(prompt: string, images: Buffer[], aspect?: number) {
+  const first = images[0] ? await sharp(images[0]).rotate().metadata() : null
+  const ratio = aspect ?? (first ? first.width! / first.height! : 1)
+  const parts = await generate(
+    IMAGE_MODEL,
+    [...(await Promise.all(images.map(inline))), { text: prompt }],
+    {
+      responseModalities: ["IMAGE"],
+      imageConfig: { aspectRatio: nearestRatio(ratio, 1), imageSize: "2K" },
+    }
+  )
+  const result = parts.find((p) => p.inlineData)?.inlineData
+  if (!result) throw new Error("Nano Banana returned no image")
+  return Buffer.from(result.data, "base64")
+}
+
+/**
+ * Gemini Flash answering `prompt` (about `images`, if any) as JSON. With a
+ * `schema` (Vertex's OpenAPI subset) the answer is held to that shape.
+ */
+export async function askJson<T>(
+  prompt: string,
+  images: Buffer[] = [],
+  { schema, temperature = 0.7 }: { schema?: object; temperature?: number } = {}
+): Promise<T> {
+  const parts = await generate(
+    VISION_MODEL,
+    [...(await Promise.all(images.map(inline))), { text: prompt }],
+    {
+      responseMimeType: "application/json",
+      ...(schema && { responseSchema: schema }),
+      temperature,
+    }
+  )
+  const text = parts.filter((p) => p.text).map((p) => p.text).join("")
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error(`${VISION_MODEL}: answer wasn't JSON`)
+  }
 }
 
 /**
@@ -130,19 +238,38 @@ export async function blankReplica(reference: Buffer) {
  * asked for directly come back far less accurate.
  */
 export async function guessSheets(image: Buffer): Promise<Quad[]> {
+  const quads = await detectBoxes(
+    image,
+    "Detect every blank white paper sheet inside a picture frame (the paper only, inside the frame moulding and mat) — there may be one or several frames."
+  )
+  if (!quads.length) throw new Error("Couldn't find a sheet")
+  return readingOrder(quads)
+}
+
+/** Bounding box of every framed print in a finished mockup, largest first; none for a flat design. */
+export async function guessArtwork(image: Buffer): Promise<Quad[]> {
+  const quads = await detectBoxes(
+    image,
+    "Detect every printed artwork or poster shown in this photo (the printed image only, inside any frame moulding and mat). Skip the photo itself if it is just a flat design with no room around it."
+  )
+  const area = (q: Quad) => (q[1][0] - q[0][0]) * (q[3][1] - q[0][1])
+  return quads.sort((a, b) => area(b) - area(a))
+}
+
+async function detectBoxes(image: Buffer, prompt: string): Promise<Quad[]> {
   const { width, height } = await sharp(image).metadata()
   const parts = await generate(
     VISION_MODEL,
     [
       await inline(image),
       {
-        text: 'Detect every blank white paper sheet inside a picture frame (the paper only, inside the frame moulding and mat) — there may be one or several frames. Output a JSON list where each entry has the 2D bounding box in "box_2d" as [ymin, xmin, ymax, xmax] normalized to 0-1000.',
+        text: `${prompt} Output a JSON list where each entry has the 2D bounding box in "box_2d" as [ymin, xmin, ymax, xmax] normalized to 0-1000.`,
       },
     ],
     { responseMimeType: "application/json", temperature: 0 }
   )
   const json = JSON.parse(parts.find((p) => p.text)?.text ?? "[]")
-  const quads = (Array.isArray(json) ? json : [])
+  return (Array.isArray(json) ? json : [])
     .map((s) => s?.box_2d)
     .filter((b): b is number[] => Array.isArray(b) && b.length === 4 && b.every(Number.isFinite))
     .map(([ymin, xmin, ymax, xmax]) => {
@@ -150,7 +277,9 @@ export async function guessSheets(image: Buffer): Promise<Quad[]> {
       const [y0, y1] = [(ymin / 1000) * height!, (ymax / 1000) * height!]
       return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Quad
     })
-  if (!quads.length) throw new Error("Couldn't find a sheet")
+}
+
+function readingOrder(quads: Quad[]) {
   // Rows top to bottom (centres within half a sheet height), then left to right.
   const centre = (q: Quad) => [q.reduce((s, p) => s + p[0], 0) / 4, q.reduce((s, p) => s + p[1], 0) / 4]
   const tall = (q: Quad) => (q[3][1] - q[0][1] + q[2][1] - q[1][1]) / 2

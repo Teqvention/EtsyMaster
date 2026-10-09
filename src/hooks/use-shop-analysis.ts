@@ -3,13 +3,25 @@
 import * as React from "react"
 
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
-import { reviewsSince, type AnalysisPlan } from "@/lib/etsy/analysis"
-import type { Listing, ListingPage, ShopReview, ShopReviewPage } from "@/lib/etsy/types"
+import { recordShopAnalysis, type ShopAnalysisSummary } from "@/hooks/use-shop-history"
+import { applyReviews, planCost, reviewsSince, type AnalysisPlan } from "@/lib/etsy/analysis"
+import type {
+  Listing,
+  ListingPage,
+  ListingShop,
+  ShopReview,
+  ShopReviewPage,
+} from "@/lib/etsy/types"
+import type { StoredAnalysis } from "@/lib/shops/types"
 
 // Fetches a shop's listings (then its reviews) page by page, so the analysis
-// fills in as data lands and the run can be stopped part way. Each page goes
-// through the server's cache, so re-running a plan costs no quota; finished
-// runs are also kept for the session, so coming back to one is instant.
+// fills in as data lands and the run can be stopped part way. Runs belong to
+// the app, not the page: one keeps going when you leave the Shops page or open
+// another shop, the header shows how far along it is, and coming back picks it
+// up where it got to. Each page goes through the server's cache, so re-running
+// a plan costs no quota; finished runs are also kept for the session, and
+// every run that settles is stored on the server, so a shop analysed before
+// opens with its listings at once.
 
 const PAGE = 100
 
@@ -26,17 +38,127 @@ export type AnalysisRun = {
   /** Reviews in the window, once the first page says. */
   reviewTotal: number | null
   error: string | null
+  /** ISO 8601, once settled: when its data was fetched. */
+  analysedAt: string | null
+  /** Shown from the server's copy, not fetched in this visit. */
+  stored: boolean
 }
 
+export type ShopRun = { shop: ListingShop; run: AnalysisRun }
+
+// --- The store: each shop's latest run, on show or in progress ---
+
+type Entry = { shop: ListingShop; run: AnalysisRun; abort: AbortController | null }
+
+const entries = new Map<number, Entry>()
 const finished = new Map<string, AnalysisRun>()
+/** Shops whose page is on screen, counted: their runs aren't "in the background". */
+const onScreen = new Map<number, number>()
+const listeners = new Set<() => void>()
+const settleListeners = new Set<(settled: ShopRun) => void>()
+const NONE: ShopRun[] = []
+let background: ShopRun[] = NONE
+
+function emit() {
+  const running = [...entries.values()].filter((e) => e.run.status === "running")
+  const away = running.filter((e) => !onScreen.has(e.shop.id))
+  background = away.length ? away.map(({ shop, run }) => ({ shop, run })) : NONE
+  warnBeforeUnload(running.length > 0)
+  listeners.forEach((notify) => notify())
+}
+
+function subscribe(notify: () => void) {
+  listeners.add(notify)
+  return () => {
+    listeners.delete(notify)
+  }
+}
+
+// A reload or a closed tab would lose a run part way, so the browser asks first.
+const confirmUnload = (event: BeforeUnloadEvent) => event.preventDefault()
+let warning = false
+function warnBeforeUnload(on: boolean) {
+  if (on === warning) return
+  warning = on
+  if (on) window.addEventListener("beforeunload", confirmUnload)
+  else window.removeEventListener("beforeunload", confirmUnload)
+}
 
 function runKey(shopId: number, plan: AnalysisPlan) {
   return `${shopId}:${plan.limit}:${plan.sort}:${plan.reviews}`
 }
 
 /** A finished run from earlier in the session, if there is one. */
-export function cachedRun(shopId: number, plan: AnalysisPlan) {
+function cachedRun(shopId: number, plan: AnalysisPlan) {
   return finished.get(runKey(shopId, plan)) ?? null
+}
+
+/** The shop's run this session — in progress, settled or restored — if it has one. */
+export function currentRun(shopId: number) {
+  return entries.get(shopId)?.run ?? null
+}
+
+/** Whether any shop is being analysed. */
+export function isAnalysing() {
+  return [...entries.values()].some((e) => e.run.status === "running")
+}
+
+/** The shop's last analysis stored on the server, or null if it was never analysed. */
+export async function fetchStoredAnalysis(shopId: number): Promise<StoredAnalysis | null> {
+  const res = await fetch(`/api/shops/${shopId}/analysis`, { cache: "no-store" })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
+  return res.json()
+}
+
+/** The run a stored analysis was. */
+export function storedRun(stored: StoredAnalysis): AnalysisRun {
+  return {
+    shopId: stored.shop.id,
+    plan: stored.plan,
+    status: stored.status,
+    listings: stored.listings,
+    listingTotal: stored.listingTotal,
+    reviews: stored.reviews,
+    reviewTotal: stored.reviewTotal,
+    error: null,
+    analysedAt: stored.analysedAt,
+    stored: true,
+  }
+}
+
+// What was fetched is kept even when a run is stopped or fails part way.
+function storeRun(shop: ListingShop, run: AnalysisRun) {
+  if (run.listings.length === 0 || run.status === "running" || run.status === "idle") return
+  const body: StoredAnalysis = {
+    shop,
+    plan: run.plan,
+    status: run.status,
+    listings: run.listings,
+    listingTotal: run.listingTotal,
+    reviews: run.reviews,
+    reviewTotal: run.reviewTotal,
+    analysedAt: run.analysedAt ?? new Date().toISOString(),
+  }
+  fetch(`/api/shops/${shop.id}/analysis`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch((error) => console.error(`Storing the analysis of ${shop.name}:`, error))
+}
+
+function show(shop: ListingShop, run: AnalysisRun, abort: AbortController | null = null) {
+  const entry: Entry = { shop, run, abort }
+  entries.set(shop.id, entry)
+  emit()
+  return entry
+}
+
+// A settled run on show goes into the recent shops list, so it's there even
+// when the run finished while you were on another page.
+function remember(shop: ListingShop, run: AnalysisRun) {
+  if (run.listings.length === 0 || run.status === "running" || run.status === "idle") return
+  recordShopAnalysis(shop, summarise(run))
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -47,111 +169,209 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
   return data
 }
 
-export function useShopAnalysis() {
-  const [run, setRun] = React.useState<AnalysisRun | null>(null)
-  const controller = React.useRef<AbortController | null>(null)
-  // Bumped by every start/reset, so a superseded run can't write over a newer one.
-  const generation = React.useRef(0)
+/**
+ * Fetches the shop with `plan`, or shows the session's copy of that run.
+ * `fresh` fetches again even then (the server's page cache still applies).
+ */
+export async function startAnalysis(
+  shop: ListingShop,
+  plan: AnalysisPlan,
+  { fresh = false } = {}
+) {
+  stopAnalysis(shop.id)
+  const shopId = shop.id
+  const cached = fresh ? null : cachedRun(shopId, plan)
+  if (cached) {
+    show(shop, cached)
+    remember(shop, cached)
+    return
+  }
 
-  const stop = React.useCallback(() => {
-    controller.current?.abort()
-    controller.current = null
-  }, [])
+  const abort = new AbortController()
+  let current: AnalysisRun = {
+    shopId,
+    plan,
+    status: "running",
+    listings: [],
+    listingTotal: null,
+    reviews: [],
+    reviewTotal: null,
+    error: null,
+    analysedAt: null,
+    stored: false,
+  }
+  const entry = show(shop, current, abort)
+  // A run superseded by a newer one of the same shop no longer writes to the store.
+  const isCurrent = () => entries.get(shopId) === entry
+  const update = (patch: Partial<AnalysisRun>) => {
+    current = { ...current, ...patch }
+    if (!isCurrent()) return
+    entry.run = current
+    emit()
+  }
 
-  // Leaving the page cancels whatever is in flight.
-  React.useEffect(() => stop, [stop])
+  try {
+    // Listings, in the plan's order, up to its limit.
+    const seen = new Set<number>()
+    for (let offset: number | null = 0; offset !== null; ) {
+      const remaining = plan.limit - current.listings.length
+      if (remaining <= 0) break
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(Math.min(PAGE, remaining)),
+        sort: plan.sort,
+      })
+      const page: ListingPage = await getJson<ListingPage>(
+        `/api/shops/${shopId}/listings?${params}`,
+        abort.signal
+      )
+      // Offset paging over a live shop can repeat a listing across pages.
+      const fresh = page.listings.filter((l) => !seen.has(l.id))
+      fresh.forEach((l) => seen.add(l.id))
+      update({
+        listings: [...current.listings, ...fresh].slice(0, plan.limit),
+        listingTotal: page.total,
+      })
+      offset = page.nextOffset
+    }
 
-  const start = React.useCallback(
-    async (shopId: number, plan: AnalysisPlan) => {
-      stop()
-      const id = ++generation.current
-      const cached = cachedRun(shopId, plan)
-      if (cached) {
-        setRun(cached)
-        return
+    // Then every review in the window, newest first.
+    if (plan.reviews !== "none") {
+      const since = reviewsSince(plan.reviews)
+      for (let offset: number | null = 0; offset !== null; ) {
+        const params = new URLSearchParams({ offset: String(offset) })
+        if (since) params.set("since", String(since))
+        const page: ShopReviewPage = await getJson<ShopReviewPage>(
+          `/api/shops/${shopId}/reviews?${params}`,
+          abort.signal
+        )
+        update({ reviews: [...current.reviews, ...page.reviews], reviewTotal: page.total })
+        offset = page.nextOffset
       }
+    }
 
-      const abort = new AbortController()
-      controller.current = abort
-      let current: AnalysisRun = {
-        shopId,
-        plan,
-        status: "running",
-        listings: [],
-        listingTotal: null,
-        reviews: [],
-        reviewTotal: null,
-        error: null,
-      }
-      const update = (patch: Partial<AnalysisRun>) => {
-        current = { ...current, ...patch }
-        if (generation.current === id) setRun(current)
-      }
-      update({})
+    update({ status: "done", analysedAt: new Date().toISOString() })
+    finished.set(runKey(shopId, plan), current)
+  } catch (error) {
+    if (abort.signal.aborted) {
+      update({ status: "stopped", analysedAt: new Date().toISOString() })
+    } else {
+      update({
+        status: "error",
+        error: error instanceof Error ? error.message : "Couldn't load the shop",
+        analysedAt: new Date().toISOString(),
+      })
+    }
+  } finally {
+    // Superseded runs too: what came in is worth keeping.
+    storeRun(shop, current)
+    if (isCurrent()) {
+      entry.abort = null
+      remember(shop, current)
+      if (!onScreen.has(shopId)) settleListeners.forEach((notify) => notify({ shop, run: current }))
+    }
+  }
+}
 
-      try {
-        // Listings, in the plan's order, up to its limit.
-        const seen = new Set<number>()
-        for (let offset: number | null = 0; offset !== null; ) {
-          const remaining = plan.limit - current.listings.length
-          if (remaining <= 0) break
-          const params = new URLSearchParams({
-            offset: String(offset),
-            limit: String(Math.min(PAGE, remaining)),
-            sort: plan.sort,
-          })
-          const page: ListingPage = await getJson<ListingPage>(
-            `/api/shops/${shopId}/listings?${params}`,
-            abort.signal
-          )
-          // Offset paging over a live shop can repeat a listing across pages.
-          const fresh = page.listings.filter((l) => !seen.has(l.id))
-          fresh.forEach((l) => seen.add(l.id))
-          update({
-            listings: [...current.listings, ...fresh].slice(0, plan.limit),
-            listingTotal: page.total,
-          })
-          offset = page.nextOffset
-        }
+export function stopAnalysis(shopId: number) {
+  entries.get(shopId)?.abort?.abort()
+}
 
-        // Then every review in the window, newest first.
-        if (plan.reviews !== "none") {
-          const since = reviewsSince(plan.reviews)
-          for (let offset: number | null = 0; offset !== null; ) {
-            const params = new URLSearchParams({ offset: String(offset) })
-            if (since) params.set("since", String(since))
-            const page: ShopReviewPage = await getJson<ShopReviewPage>(
-              `/api/shops/${shopId}/reviews?${params}`,
-              abort.signal
-            )
-            update({ reviews: [...current.reviews, ...page.reviews], reviewTotal: page.total })
-            offset = page.nextOffset
-          }
-        }
+/** Shows a stored analysis without fetching anything. */
+export function restoreAnalysis(stored: StoredAnalysis) {
+  stopAnalysis(stored.shop.id)
+  const run = storedRun(stored)
+  show(stored.shop, run)
+  remember(stored.shop, run)
+}
 
-        update({ status: "done" })
-        finished.set(runKey(shopId, plan), current)
-      } catch (error) {
-        if (abort.signal.aborted) {
-          update({ status: "stopped" })
-        } else {
-          update({
-            status: "error",
-            error: error instanceof Error ? error.message : "Couldn't load the shop",
-          })
-        }
-      } finally {
-        if (controller.current === abort) controller.current = null
-      }
-    },
-    [stop]
+/** The shop's run, live, and what can be done with it. */
+export function useShopAnalysis(shop: ListingShop) {
+  const run = React.useSyncExternalStore(
+    subscribe,
+    () => currentRun(shop.id),
+    () => null
   )
+  const start = React.useCallback(
+    (plan: AnalysisPlan, options?: { fresh?: boolean }) => startAnalysis(shop, plan, options),
+    [shop]
+  )
+  const stop = React.useCallback(() => stopAnalysis(shop.id), [shop.id])
+  return { run, start, stop, restore: restoreAnalysis }
+}
 
-  const reset = React.useCallback(() => {
-    generation.current++
-    stop()
-    setRun(null)
-  }, [stop])
+/**
+ * Marks the shop's page as on screen until the returned cleanup runs: its run
+ * stays out of the header, and finishing it doesn't call for a toast.
+ */
+export function watchAnalysis(shopId: number) {
+  onScreen.set(shopId, (onScreen.get(shopId) ?? 0) + 1)
+  emit()
+  return () => {
+    const count = (onScreen.get(shopId) ?? 1) - 1
+    if (count > 0) onScreen.set(shopId, count)
+    else onScreen.delete(shopId)
+    emit()
+  }
+}
 
-  return { run, start, stop, reset }
+/** Runs in progress for shops whose page isn't on screen. */
+export function useBackgroundAnalyses() {
+  return React.useSyncExternalStore(subscribe, () => background, () => NONE)
+}
+
+/** Calls `notify` when a run settles while its shop's page isn't on screen. */
+export function onBackgroundSettle(notify: (settled: ShopRun) => void) {
+  settleListeners.add(notify)
+  return () => {
+    settleListeners.delete(notify)
+  }
+}
+
+// --- Reading a run ---
+
+/** Exact review counts need every review there is, all of them loaded. */
+export function isSharpened(run: AnalysisRun) {
+  return run.plan.reviews === "all" && run.status === "done"
+}
+
+/** The run's listings, their estimates redone from exact review counts when it has them. */
+export function analysedListings(run: AnalysisRun) {
+  return isSharpened(run) ? applyReviews(run.listings, run.reviews) : run.listings
+}
+
+// What the recent shops list shows of a run.
+function summarise(run: AnalysisRun): ShopAnalysisSummary {
+  const listings = analysedListings(run)
+  const top = [...listings]
+    .sort((a, b) => b.estimate.revenuePerMonthCents - a.estimate.revenuePerMonthCents)
+    .slice(0, 3)
+  return {
+    plan: run.plan,
+    listings: listings.length,
+    complete: run.status === "done",
+    revenuePerMonthCents: listings.reduce((total, l) => total + l.estimate.revenuePerMonthCents, 0),
+    salesPerMonth: listings.reduce((total, l) => total + l.estimate.salesPerMonth, 0),
+    top: top.map((l) => ({ title: l.title, thumb: l.images[0]?.thumb ?? null })),
+    analysedAt: run.analysedAt ?? new Date().toISOString(),
+  }
+}
+
+/** Listings the run is after: the plan's limit, or all the shop has if fewer. */
+export function listingTarget(run: AnalysisRun) {
+  return Math.min(run.plan.limit, run.listingTotal ?? run.plan.limit)
+}
+
+// Weighted by requests: a listing page costs two (page + batch), a review page one.
+export function runProgress(run: AnalysisRun, shop: ListingShop) {
+  const listingPages = Math.ceil(listingTarget(run) / 100) * 2
+  const reviewPages =
+    run.plan.reviews === "none"
+      ? 0
+      : run.reviewTotal !== null
+        ? Math.max(Math.ceil(run.reviewTotal / 100), 1)
+        : planCost({ ...run.plan, limit: 0 }, shop)
+  const done =
+    Math.ceil(run.listings.length / 100) * 2 + Math.ceil(run.reviews.length / 100)
+  return Math.min(done / Math.max(listingPages + reviewPages, 1), 1)
 }

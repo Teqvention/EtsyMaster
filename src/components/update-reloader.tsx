@@ -2,6 +2,8 @@
 
 import { useEffect } from "react"
 
+import { isAnalysing } from "@/hooks/use-shop-analysis"
+
 const POLL_MS = 10_000
 
 // Reloads the tab once the server runs a newer build — scripts/autoupdate.sh
@@ -14,7 +16,8 @@ export function UpdateReloader() {
         const response = await fetch("/api/version", { cache: "no-store" })
         if (!response.ok) return
         const { version } = await response.json()
-        if (version !== process.env.APP_VERSION) location.reload()
+        // A shop analysis running in the background would be lost; wait it out.
+        if (version !== process.env.APP_VERSION && !isAnalysing()) location.reload()
       } catch {
         // Server is down while it rebuilds; try again next tick.
       }

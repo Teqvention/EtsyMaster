@@ -1,0 +1,155 @@
+{
+ "id": "mv10usx2-5zu43",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591569636,
+  "title": "Crayon Goose Wall Art | Quirky Animal Illustration | Colorful Bird Drawing | Kids Room Decor | Whimsical Nursery Poster",
+  "image": "https://i.etsystatic.com/24426965/r/il/af97d4/8694847081/il_fullxfull.8694847081_h0f9.jpg",
+  "url": "https://www.etsy.com/listing/4591569636/crayon-goose-wall-art-quirky-animal",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.862Z",
+ "updatedAt": "2026-10-09T15:20:06.519Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10ut57.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11mxs1.jpg",
+   "width": 750,
+   "height": 1061,
+   "index": 0,
+   "analysis": {
+    "summary": "A whimsical, naive oil pastel illustration of a vibrant orange goose with bold blue outlines standing beneath a row of colorful abstract shapes.",
+    "subject": "A stylized goose with an elongated neck and orange plumage.",
+    "setting": "A minimalist, flat beige background with decorative abstract triangular forms at the top.",
+    "action": "Standing still and looking towards the left in a proud, upright posture.",
+    "style": "Naive art, oil pastel or wax crayon illustration, thick textured strokes, bold expressive outlines, loose scribbly filling, childlike aesthetic with visible paper grain.",
+    "palette": [
+     "#E8D8C3",
+     "#F9A84D",
+     "#006699",
+     "#008040",
+     "#FF69B4",
+     "#FFD700",
+     "#FF4500"
+    ],
+    "composition": "Vertical orientation, centered subject, eye-level perspective, significant negative space, decorative top border created by abstract shapes.",
+    "typography": null,
+    "mood": "Playful, nostalgic, cheerful, and charmingly imperfect.",
+    "audience": "Parents decorating nurseries or children's bedrooms, and young adults seeking 'dopamine decor' or 'maximalist' apartment art.",
+    "hook": "The 'ugly-cute' naive aesthetic that feels authentic and handmade, providing a burst of vibrant color and quirky personality that balances high-art concepts with childhood simplicity.",
+    "swaps": {
+     "subjects": [
+      "A chunky, round calico cat",
+      "A wobbly, long-bodied dachshund",
+      "A wide-eyed, squat green frog",
+      "A lanky, spotted giraffe with a tiny head",
+      "A fluffy, rectangular sheep",
+      "A curious raccoon with a masked face"
+     ],
+     "settings": [
+      "A field of scribbled wildflower stems",
+      "A wavy, minimalist blue ocean line",
+      "A simple house with a smoking chimney",
+      "A sky filled with messy yellow stars",
+      "A red and white checkered picnic blanket",
+      "A row of wonky, colorful potted plants"
+     ],
+     "props": [
+      "Wearing a tiny, pointed party hat",
+      "Holding a single, bright red balloon string",
+      "Standing on a small, four-wheeled skateboard",
+      "Wearing bright yellow rubber rain boots",
+      "Balancing a single red apple on its head",
+      "Holding a giant, oversized sunflower in its beak"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.862Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv1360po.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.862Z",
+   "title": "The Honking Goose Sibling",
+   "brief": "A central illustration of a white and orange goose captured mid-honk with its wings spread wide. Use heavy, textured oil pastel strokes in Cobalt Blue for the outlines and Bright Orange for the body feathers. A row of six colorful, hand-drawn arch shapes in Pink, Yellow, and Green forms a border across the top of the frame. The background is a flat, warm Cream paper texture with visible grain. The lighting is flat and graphic, emphasizing the bold, messy crayon application.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv1426lv.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.862Z",
+   "title": "Quirky Giraffe Reach",
+   "brief": "A whimsical, long-necked giraffe reaches upward toward a single, oversized flower in the top corner. The giraffe is rendered in Mustard Yellow with Terracotta spots and thick, expressive Deep Teal outlines. The background is a muted Sage Green paper with a rough, toothy texture. A large, scribbly yellow sun sits in the upper left, while the flower has a thick, bright Pink stem. The strokes are deliberate and chunky, mimicking a child's energetic drawing style.",
+   "width": 1610,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv143eyc.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.862Z",
+   "title": "Maximalist Breakfast Table",
+   "brief": "A top-down, flattened perspective of a breakfast table featuring a large, lumpy Electric Blue teapot and a plate of vibrant Tomato Red strawberries. The table is covered in a Mint Green cloth with a simple Lilac checkerboard pattern. Everything is painted in thick, opaque gouache with wiggly, imperfect edges and no black outlines. Small, hand-painted crumbs and spilled tea droplets are scattered across the surface to add a sense of messy playfulness. The composition is a busy, edge-to-edge maximalist display of bold color and flat shape.",
+   "width": 1610,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1061
+ }
+}

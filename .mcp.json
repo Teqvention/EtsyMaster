@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "hetzner": {
+      "type": "stdio",
+      "command": "sh",
+      "args": [
+        "-c",
+        "HCLOUD_TOKEN=\"$(grep -E \"^HETZNER_MCP=\" .env | cut -d= -f2- | tr -d \"\\\"\\r\")\" exec mcp-hetzner"
+      ],
+      "env": {}
+    }
+  }
+}

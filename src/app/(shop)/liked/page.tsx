@@ -1,12 +1,12 @@
 import { Suspense } from "react"
 
-import { LikedView } from "@/components/listings/liked-view"
+import { SavedView } from "@/components/saved/saved-view"
 import { DISPLAY_CURRENCY } from "@/lib/etsy/listings"
 
-export default function LikedPage() {
+export default function SavedPage() {
   return (
     <Suspense>
-      <LikedView currency={DISPLAY_CURRENCY} />
+      <SavedView currency={DISPLAY_CURRENCY} />
     </Suspense>
   )
 }

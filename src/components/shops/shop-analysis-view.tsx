@@ -3,13 +3,24 @@
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import * as React from "react"
-import { ExternalLinkIcon, MapPinIcon, StarIcon, StoreIcon, XIcon } from "lucide-react"
+import {
+  ChartColumnIcon,
+  ExternalLinkIcon,
+  LayoutGridIcon,
+  MapPinIcon,
+  StarIcon,
+  StoreIcon,
+  XIcon,
+} from "lucide-react"
 
 import { ListingGrid } from "@/components/listings/listing-grid"
 import { SplitView } from "@/components/listings/split-view"
+import { bySales, ListingGallery } from "@/components/shops/listing-gallery"
+import { LibraryButton } from "@/components/shops/library-button"
 import { RecentShops } from "@/components/shops/recent-shops"
 import { ScopePanel } from "@/components/shops/scope-panel"
 import { ShopInsightsView } from "@/components/shops/shop-insights"
+import { ShopLabelButton } from "@/components/shops/shop-labels"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -28,29 +39,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
 import { useLikes } from "@/hooks/use-likes"
-import { cachedRun, useShopAnalysis } from "@/hooks/use-shop-analysis"
 import {
-  getShopVisit,
-  recordShopAnalysis,
-  recordShopVisit,
-  useShopHistory,
-} from "@/hooks/use-shop-history"
-import {
-  analyse,
-  applyReviews,
-  countByListing,
-  defaultPlan,
-  type AnalysisPlan,
-} from "@/lib/etsy/analysis"
+  analysedListings,
+  currentRun,
+  fetchStoredAnalysis,
+  isSharpened,
+  useShopAnalysis,
+  watchAnalysis,
+} from "@/hooks/use-shop-analysis"
+import { getShopVisit, recordShopVisit, useShopHistory } from "@/hooks/use-shop-history"
+import { analyse, countByListing, defaultPlan, type AnalysisPlan } from "@/lib/etsy/analysis"
 import { formatCompact, formatNumber } from "@/lib/etsy/format"
 import type { Listing, ListingShop } from "@/lib/etsy/types"
 
 // Analyse one shop: look it up, choose how much of it to fetch, then read
 // what sells. The shop lives in the URL (`?shop=`), so an analysis can be
-// linked to and reloaded; reopening a shop starts from the scope it was last
-// analysed with.
+// linked to and reloaded. A shop analysed before opens with what was found
+// then (kept on the server); updating it, or fetching more, is up to you. A
+// run keeps going in the background when you leave the page.
 
 export function ShopAnalysisView({ currency }: { currency: string }) {
   const searchParams = useSearchParams()
@@ -97,92 +106,144 @@ export function ShopAnalysisView({ currency }: { currency: string }) {
 }
 
 function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string }) {
-  const [plan, setPlan] = React.useState<AnalysisPlan>(() => lastPlan(shop) ?? defaultPlan(shop))
-  const { run, start, stop } = useShopAnalysis()
+  const [plan, setPlan] = React.useState<AnalysisPlan>(
+    () => currentRun(shop.id)?.plan ?? lastPlan(shop) ?? defaultPlan(shop)
+  )
+  const { run, start, stop, restore } = useShopAnalysis(shop)
   const [tag, setTag] = React.useState<string | null>(null)
+  const [view, setView] = useShopView()
+  // Until the server says whether there's an earlier analysis, show neither
+  // it nor the scope editor, so the page doesn't flash one into the other.
+  const [checking, setChecking] = React.useState(() => !currentRun(shop.id))
 
   React.useEffect(() => recordShopVisit(shop), [shop])
 
-  // Back to a shop analysed earlier this session: show it straight away.
+  // Runs go on when the page is left; while it's on screen, this one isn't
+  // shown in the header.
+  React.useEffect(() => watchAnalysis(shop.id), [shop.id])
+
+  // Back to a shop analysed before: this session's run (maybe still going),
+  // else the server's copy.
   React.useEffect(() => {
-    if (cachedRun(shop.id, plan)) start(shop.id, plan)
-    // Only on arrival; later plan changes wait for the Analyse button.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shop.id, start])
+    if (currentRun(shop.id)) return
+    let cancelled = false
+    fetchStoredAnalysis(shop.id)
+      .then((stored) => {
+        if (cancelled || !stored || currentRun(shop.id)) return
+        setPlan(stored.plan)
+        restore(stored)
+      })
+      .catch((error) => console.error(`Loading the analysis of ${shop.name}:`, error))
+      .finally(() => {
+        if (!cancelled) setChecking(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [shop.id, shop.name, restore])
 
   const reviews = run && run.plan.reviews !== "none" ? run.reviews : null
-  // Exact review counts need every review there is, all of them loaded.
-  const sharpened = run?.plan.reviews === "all" && run.status === "done"
-
-  const listings = React.useMemo(() => {
-    if (!run) return []
-    return sharpened ? applyReviews(run.listings, run.reviews) : run.listings
-  }, [run, sharpened])
+  const sharpened = run !== null && isSharpened(run)
+  const listings = React.useMemo(() => (run ? analysedListings(run) : []), [run])
 
   const recentReviews = React.useMemo(() => (reviews ? countByListing(reviews) : null), [reviews])
   const insights = React.useMemo(() => analyse(listings, currency), [listings, currency])
+  const bestSelling = React.useMemo(() => bySales(listings), [listings])
 
-  // Once a run settles, remember what it found for the recent shops list.
   const settled = run !== null && run.status !== "running" && run.status !== "idle"
-  React.useEffect(() => {
-    if (!settled || !run || listings.length === 0) return
-    const top = [...listings]
-      .sort((a, b) => b.estimate.revenuePerMonthCents - a.estimate.revenuePerMonthCents)
-      .slice(0, 3)
-    recordShopAnalysis(shop, {
-      plan: run.plan,
-      listings: listings.length,
-      complete: run.status === "done",
-      revenuePerMonthCents: insights.revenuePerMonthCents,
-      salesPerMonth: insights.salesPerMonth,
-      top: top.map((l) => ({ title: l.title, thumb: l.images[0]?.thumb ?? null })),
-      analysedAt: new Date().toISOString(),
-    })
-  }, [settled, run, listings, insights, shop])
 
   return (
-    <SplitView listings={listings}>
+    // ←/→ in the open listing follow the order on screen.
+    <SplitView listings={view === "listings" ? bestSelling : listings}>
       <div className="flex flex-col gap-3">
-        <ShopHeader shop={shop} />
-        <ScopePanel
-          shop={shop}
-          plan={plan}
-          run={run}
-          onPlanChange={setPlan}
-          onStart={() => start(shop.id, plan)}
-          onStop={stop}
-        />
+        <ShopHeader shop={shop}>
+          <LibraryButton
+            shop={shop}
+            listings={settled ? listings : null}
+            analysedAt={run?.analysedAt ?? null}
+            running={run?.status === "running"}
+          />
+        </ShopHeader>
+        {checking && !run ? (
+          <Skeleton className="h-11 rounded-lg" />
+        ) : (
+          <ScopePanel
+            shop={shop}
+            plan={plan}
+            run={run}
+            onPlanChange={setPlan}
+            onStart={() => start(plan)}
+            onUpdate={() => {
+              if (!run) return
+              setPlan(run.plan)
+              start(run.plan, { fresh: true })
+            }}
+            onStop={stop}
+          />
+        )}
 
         {run?.error && run.listings.length === 0 && (
           <p className="text-sm text-destructive">{run.error}</p>
         )}
 
         {listings.length > 0 && (
-          <>
-            <ShopInsightsView
-              shop={shop}
-              listings={listings}
-              insights={insights}
-              reviews={reviews}
-              reviewWindow={run!.plan.reviews}
-              recentReviews={recentReviews}
-              sharpened={sharpened}
-              currency={currency}
-              activeTag={tag}
-              onTag={setTag}
-            />
-            <AllListings
-              listings={listings}
-              recentReviews={recentReviews}
-              loading={run?.status === "running"}
-              tag={tag}
-              onClearTag={() => setTag(null)}
-            />
-          </>
+          <Tabs value={view} onValueChange={(value) => setView(value as ShopView)} className="gap-3">
+            <TabsList>
+              <TabsTrigger value="analytics" className="px-3">
+                <ChartColumnIcon />
+                Analytics
+              </TabsTrigger>
+              <TabsTrigger value="listings" className="px-3">
+                <LayoutGridIcon />
+                Listings
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="analytics" className="flex flex-col gap-3">
+              <ShopInsightsView
+                shop={shop}
+                listings={listings}
+                insights={insights}
+                reviews={reviews}
+                reviewWindow={run!.plan.reviews}
+                recentReviews={recentReviews}
+                sharpened={sharpened}
+                currency={currency}
+                activeTag={tag}
+                onTag={setTag}
+              />
+              <AllListings
+                listings={listings}
+                recentReviews={recentReviews}
+                loading={run?.status === "running"}
+                tag={tag}
+                onClearTag={() => setTag(null)}
+              />
+            </TabsContent>
+            <TabsContent value="listings">
+              <ListingGallery listings={bestSelling} loading={run?.status === "running"} />
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </SplitView>
   )
+}
+
+type ShopView = "analytics" | "listings"
+
+// The open tab lives in the URL (`?view=listings`) next to the shop, so a
+// reload or a shared link lands on the same tab.
+function useShopView() {
+  const searchParams = useSearchParams()
+  const view: ShopView = searchParams.get("view") === "listings" ? "listings" : "analytics"
+  const setView = React.useCallback((next: ShopView) => {
+    const params = new URLSearchParams(window.location.search)
+    if (next === "analytics") params.delete("view")
+    else params.set("view", next)
+    window.history.replaceState(null, "", `?${params}`)
+  }, [])
+  return [view, setView] as const
 }
 
 /** The scope the shop was last analysed with, fitted to its current size. */
@@ -332,7 +393,7 @@ function Welcome({ currency, onPick }: { currency: string; onPick: (shop: string
 
 // --- Shop ---
 
-function ShopHeader({ shop }: { shop: ListingShop }) {
+function ShopHeader({ shop, children }: { shop: ListingShop; children?: React.ReactNode }) {
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
       <div className="flex min-w-0 items-center gap-3">
@@ -367,14 +428,18 @@ function ShopHeader({ shop }: { shop: ListingShop }) {
                 {shop.reviewAverage.toFixed(2)} ({formatCompact(shop.reviewCount)})
               </span>
             )}
+            <ShopLabelButton shop={shop} />
           </div>
         </div>
       </div>
-      <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs tabular-nums sm:ml-auto">
-        <Fact label="Sales, lifetime" value={shop.totalSales ? formatCompact(shop.totalSales) : "Hidden"} />
-        <Fact label="Active listings" value={formatCompact(shop.activeListings)} />
-        <Fact label="Shop favorites" value={formatCompact(shop.favorites)} />
-      </dl>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 sm:ml-auto">
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs tabular-nums">
+          <Fact label="Sales, lifetime" value={shop.totalSales ? formatCompact(shop.totalSales) : "Hidden"} />
+          <Fact label="Active listings" value={formatCompact(shop.activeListings)} />
+          <Fact label="Shop favorites" value={formatCompact(shop.favorites)} />
+        </dl>
+        {children}
+      </div>
     </header>
   )
 }

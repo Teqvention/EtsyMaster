@@ -1,0 +1,452 @@
+"use client"
+
+import * as React from "react"
+import { LightbulbIcon, LoaderCircleIcon, RepeatIcon, SparklesIcon } from "lucide-react"
+
+import { ImagePicker, ThumbStack, type ImagePick } from "@/components/generation/image-picker"
+import { CreativityMeter } from "@/components/generation/parts"
+import { StyleSelect } from "@/components/styles/style-select"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import {
+  CREATIVITIES,
+  CREATIVITY_LABEL,
+  DEFAULT_OPTIONS,
+  MAX_IDEAS,
+  MAX_INSPIRATION,
+  MAX_VARIANTS,
+  spread,
+  type Creativity,
+  type GenerateGroup,
+  type GenerateOptions,
+} from "@/lib/generation/types"
+import { cn } from "@/lib/utils"
+
+// What to make from the posters of one or many steals: variants (redraws at a
+// creativity, spread evenly over any of five levels, optionally in a saved
+// style) and, as an add-on, new ideas on the same selling concept. Given
+// `inspiration`, it asks for new ideas only, after the images picked of it.
+
+/** An image a batch of new ideas can take after; approved ones start picked. */
+export type InspirationPick = ImagePick
+
+export function GenerateDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  thumbs = [],
+  references,
+  notes = true,
+  notesFirst = false,
+  initial,
+  submitLabel = "Generate",
+  inspiration,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description?: React.ReactNode
+  /** A few of the steals' photos, stacked in the header. */
+  thumbs?: string[]
+  /** Posters (or steals) the options apply to; the total is counted from it. */
+  references: { count: number; noun: string }
+  notes?: boolean
+  /** Notes on top and focused: for "more like this", where they're the point. */
+  notesFirst?: boolean
+  initial?: GenerateOptions
+  submitLabel?: string
+  /** New ideas only, after the ones picked of these (approved picked to start). */
+  inspiration?: InspirationPick[]
+  /** Throw to keep the dialog open. */
+  onSubmit: (options: GenerateOptions) => Promise<void> | void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 p-0 sm:max-w-xl">
+        {open && (
+          <Form
+            title={title}
+            description={description}
+            thumbs={thumbs}
+            references={references}
+            notes={notes}
+            notesFirst={notesFirst}
+            initial={initial ?? DEFAULT_OPTIONS}
+            submitLabel={submitLabel}
+            inspiration={inspiration}
+            onSubmit={async (options) => {
+              await onSubmit(options)
+              onOpenChange(false)
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Form({
+  title,
+  description,
+  thumbs,
+  references,
+  notes,
+  notesFirst,
+  initial,
+  submitLabel,
+  inspiration,
+  onSubmit,
+}: {
+  title: string
+  description?: React.ReactNode
+  thumbs: string[]
+  references: { count: number; noun: string }
+  notes: boolean
+  notesFirst: boolean
+  initial: GenerateOptions
+  submitLabel: string
+  inspiration?: InspirationPick[]
+  onSubmit: (options: GenerateOptions) => Promise<void>
+}) {
+  const inspired = inspiration !== undefined
+  const [picked, setPicked] = React.useState(
+    () => new Set(inspiration?.filter((i) => i.approved).slice(0, MAX_INSPIRATION).map((i) => i.id))
+  )
+  const [variantsOn, setVariantsOn] = React.useState(!inspired && initial.variants.count > 0)
+  const [variants, setVariants] = React.useState<GenerateGroup>({
+    count: initial.variants.count || 3,
+    creativity: initial.variants.creativity,
+  })
+  const [styleId, setStyleId] = React.useState(initial.variants.styleId)
+  const [ideasOn, setIdeasOn] = React.useState(inspired || initial.ideas.count > 0)
+  const [ideas, setIdeas] = React.useState<GenerateGroup>({
+    count: initial.ideas.count || 6,
+    creativity: initial.ideas.creativity,
+  })
+  const [feedback, setFeedback] = React.useState(initial.feedback ?? "")
+  const [busy, setBusy] = React.useState(false)
+
+  const perReference = (variantsOn ? variants.count : 0) + (ideasOn ? ideas.count : 0)
+  const total = perReference * references.count
+  const empty = perReference === 0 || (inspired && picked.size === 0)
+
+  async function submit() {
+    if (empty || busy) return
+    setBusy(true)
+    try {
+      await onSubmit({
+        variants: {
+          ...(variantsOn ? variants : { ...variants, count: 0 }),
+          styleId: variantsOn ? styleId : null,
+        },
+        ideas: ideasOn ? ideas : { ...ideas, count: 0 },
+        ...(feedback.trim() && { feedback: feedback.trim() }),
+        ...(initial.posters && { posters: initial.posters }),
+        ...(inspired && {
+          inspiration: inspiration.filter((i) => picked.has(i.id)).map((i) => i.id),
+        }),
+      })
+    } catch {
+      // Whoever submitted said what went wrong; the dialog stays for another go.
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const notesField = notes && (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">
+        {notesFirst ? "What should be different?" : "Notes for the AI"} <span className="font-normal">· optional</span>
+      </span>
+      <Textarea
+        value={feedback}
+        onChange={(event) => setFeedback(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault()
+            submit()
+          }
+        }}
+        rows={2}
+        autoFocus={notesFirst}
+        placeholder={
+          notesFirst
+            ? "What should be different? e.g. darker background, swap the dog for a fox, no text…"
+            : "e.g. warmer colours, no text, more minimal, make the dog a cat…"
+        }
+        className="min-h-0 resize-none"
+      />
+    </label>
+  )
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        submit()
+      }}
+      // min-w-0: a long truncated description must not size the dialog's grid column.
+      className="flex max-h-[min(88svh,52rem)] min-w-0 flex-col"
+    >
+      <DialogHeader className="flex-row items-center gap-3 border-b p-4 pr-12">
+        {thumbs.length > 0 && <ThumbStack thumbs={thumbs} />}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription className="truncate">{description}</DialogDescription>}
+        </div>
+      </DialogHeader>
+
+      <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4">
+        {notesFirst && notesField}
+        {inspired ? (
+          <>
+            <ImagePicker
+              label="Inspiration"
+              items={inspiration}
+              picked={picked}
+              max={MAX_INSPIRATION}
+              onChange={setPicked}
+            />
+            <div className="flex flex-col gap-3">
+              <CountField
+                label="Ideas"
+                value={ideas.count}
+                min={1}
+                max={MAX_IDEAS}
+                onChange={(count) => setIdeas((v) => ({ ...v, count }))}
+              />
+              <CreativityField group={ideas} onChange={(creativity) => setIdeas((v) => ({ ...v, creativity }))} />
+            </div>
+            {notesField}
+          </>
+        ) : (
+          <>
+            <Section
+              icon={<RepeatIcon />}
+              title="Variants"
+              hint="New posters drawn after the reference, close to far."
+              on={variantsOn}
+              onToggle={setVariantsOn}
+            >
+              <CountField
+                label="Variants"
+                value={variants.count}
+                min={1}
+                max={MAX_VARIANTS}
+                onChange={(count) => setVariants((v) => ({ ...v, count }))}
+              />
+              <CreativityField group={variants} onChange={(creativity) => setVariants((v) => ({ ...v, creativity }))} />
+              <div className="grid gap-1.5 sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:items-center">
+                <span className="text-xs font-medium text-muted-foreground">Style</span>
+                <StyleSelect value={styleId} onChange={setStyleId} />
+              </div>
+            </Section>
+
+            <Separator className="bg-border/60" />
+
+            <Section
+              icon={<LightbulbIcon />}
+              title="New ideas"
+              hint="Same selling concept and art style, new scenes: another animal, place or prop."
+              on={ideasOn}
+              onToggle={setIdeasOn}
+            >
+              <CountField
+                label="Ideas"
+                value={ideas.count}
+                min={1}
+                max={MAX_IDEAS}
+                onChange={(count) => setIdeas((v) => ({ ...v, count }))}
+              />
+              <CreativityField group={ideas} onChange={(creativity) => setIdeas((v) => ({ ...v, creativity }))} />
+            </Section>
+          </>
+        )}
+      </div>
+
+      <DialogFooter className="m-0 flex-row items-center gap-2 rounded-b-xl border-t bg-muted/40 p-3 sm:justify-between">
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {inspired && picked.size === 0 ? (
+            "Pick at least one image"
+          ) : empty ? (
+            "Turn on variants or ideas"
+          ) : inspired ? (
+            <>
+              After <span className="font-medium text-foreground">{picked.size}</span>{" "}
+              {picked.size === 1 ? "image" : "images"}
+            </>
+          ) : (
+            <>
+              <span className="font-medium text-foreground">{perReference}</span> per {references.noun}
+              {references.count > 1 && (
+                <>
+                  {" "}
+                  × {references.count} = <span className="font-medium text-foreground">{total}</span> images
+                </>
+              )}
+            </>
+          )}
+        </p>
+        <Button type="submit" disabled={empty || busy} className="active:scale-[0.97]">
+          {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+          {submitLabel} {!empty && `${total} ${total === 1 ? "image" : "images"}`}
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function Section({
+  icon,
+  title,
+  hint,
+  on,
+  onToggle,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  hint: string
+  on: boolean
+  onToggle: (on: boolean) => void
+  children: React.ReactNode
+}) {
+  const id = React.useId()
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <div className="flex items-start gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground [&_svg]:size-4">
+          {icon}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h3 id={id} className="text-sm font-medium">
+            {title}
+          </h3>
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        </div>
+        <Switch checked={on} onCheckedChange={onToggle} aria-label={`${title} on`} />
+      </div>
+      {/* Collapses without moving what's above; grid rows animate the height. */}
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out-strong motion-reduce:transition-none",
+          on ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        )}
+        inert={!on}
+      >
+        <div className="flex min-h-0 flex-col gap-3 overflow-hidden pl-11">{children}</div>
+      </div>
+    </section>
+  )
+}
+
+function CountField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  onChange: (value: number) => void
+}) {
+  const [draft, setDraft] = React.useState<string | null>(null)
+  const clamp = (n: number) => Math.max(min, Math.min(max, Math.round(n)))
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:items-center">
+      <span className="text-xs font-medium text-muted-foreground">How many</span>
+      <div className="flex items-center gap-3">
+        <Slider
+          value={[value]}
+          min={min}
+          max={max}
+          step={1}
+          onValueChange={(next) => onChange(Array.isArray(next) ? next[0] : next)}
+          aria-label={label}
+          className="flex-1"
+        />
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={draft ?? String(value)}
+          onChange={(event) => {
+            setDraft(event.target.value)
+            const n = Number(event.target.value)
+            if (event.target.value !== "" && Number.isFinite(n)) onChange(clamp(n))
+          }}
+          onBlur={() => setDraft(null)}
+          aria-label={`${label}, number`}
+          className="h-8 w-16 [appearance:textfield] text-center tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+      </div>
+    </div>
+  )
+}
+
+function CreativityField({ group, onChange }: { group: GenerateGroup; onChange: (creativity: Creativity[]) => void }) {
+  const mix = group.count > 1 && group.creativity.length > 1
+  const counts = CREATIVITIES.map((level) => ({
+    level,
+    n: spread(group.count, group.creativity).filter((l) => l === level).length,
+  })).filter((c) => c.n > 0)
+
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:items-start">
+      <span className="pt-1.5 text-xs font-medium text-muted-foreground">Creativity</span>
+      <div className="flex flex-col gap-1.5">
+        <ToggleGroup
+          multiple
+          variant="outline"
+          size="sm"
+          spacing={0}
+          value={group.creativity}
+          onValueChange={(value) => {
+            // Order follows the scale, and one level always stays on.
+            const next = CREATIVITIES.filter((c) => (value as string[]).includes(c))
+            if (next.length) onChange(next)
+          }}
+          aria-label="Creativity"
+          className="w-full"
+        >
+          {CREATIVITIES.map((level) => (
+            <ToggleGroupItem
+              key={level}
+              value={level}
+              className="flex-1 gap-1 text-muted-foreground aria-pressed:bg-brand/12 aria-pressed:text-foreground dark:aria-pressed:bg-brand/20"
+            >
+              <CreativityMeter level={level} />
+              {CREATIVITY_LABEL[level]}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          {mix
+            ? `Mixed evenly: ${counts.map((c) => `${c.n} ${CREATIVITY_LABEL[c.level].toLowerCase()}`).join(" · ")}`
+            : group.creativity.length > 1
+              ? "Pick more than one image to mix levels"
+              : "Select several levels to mix them evenly"}
+        </p>
+      </div>
+    </div>
+  )
+}

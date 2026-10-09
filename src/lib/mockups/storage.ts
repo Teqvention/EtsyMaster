@@ -1,10 +1,10 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import sharp from "sharp"
 
 import { isTemplate } from "./motion"
-import type { Scene, SceneSummary, Template } from "./types"
+import type { CategorySummary, Scene, SceneSummary, Template } from "./types"
 
 // Scenes live on disk next to the app: data/mockups/<id>/scene.json plus one
 // image per layer. This is a local tool, so the file system is the database.
@@ -32,14 +32,15 @@ export async function listScenes(): Promise<SceneSummary[]> {
     ids.map(async (id) => {
       try {
         const scene = await getScene(id)
+        // Written with the poster by the editor's save, or by the grid when missing.
         const thumb = await stat(filePath(id, "thumb.jpg"))
-          .catch(() => roomThumb(scene).then(() => stat(filePath(id, "thumb.jpg"))))
           .then((s) => `thumb.jpg?v=${s.mtimeMs | 0}`)
           .catch(() => null)
         return {
           id,
           name: scene.name,
           order: scene.order,
+          category: scene.category,
           width: scene.width,
           height: scene.height,
           thumb,
@@ -59,17 +60,6 @@ export async function listScenes(): Promise<SceneSummary[]> {
   return scenes
     .filter((s) => s !== null)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
-}
-
-// The editor writes thumb.jpg (with the poster) on save; until then the
-// grid shows the bare room.
-async function roomThumb(scene: Scene) {
-  const room = scene.layers.find((l) => l.kind === "image" && l.role === "background")
-  if (room?.kind !== "image") throw new NotFoundError("No room image")
-  await sharp(filePath(scene.id, room.src))
-    .resize(720, 720, { fit: "inside" })
-    .jpeg({ quality: 86 })
-    .toFile(filePath(scene.id, "thumb.jpg"))
 }
 
 export async function getScene(id: string): Promise<Scene> {
@@ -134,11 +124,16 @@ const MAX_WORK_EDGE = 4096
 
 // A new scene from a room photo with an empty sheet in the frame: the photo
 // becomes the background, the poster starts as a centred 5:7 rectangle.
-export async function createScene(name: string, image: Buffer): Promise<Scene> {
+export async function createScene(
+  name: string,
+  image: Buffer,
+  about: Pick<Scene, "category" | "source"> = {}
+): Promise<Scene> {
   await mkdir(ROOT, { recursive: true })
   const existing = new Set(await readdir(ROOT))
-  // Taken by the export, reference and templates routes.
-  existing.add("export").add("reference").add("templates")
+  // Taken by the export, reference, templates, categories and chains routes.
+  existing.add("export").add("reference").add("templates").add("categories").add("chains")
+  const category = about.category ? await addCategory(about.category) : undefined
   let id = slug(name)
   for (let n = 2; existing.has(id); n++) id = `${slug(name)}-${n}`
 
@@ -171,6 +166,8 @@ export async function createScene(name: string, image: Buffer): Promise<Scene> {
     id,
     name,
     order,
+    ...(category && { category }),
+    ...(about.source && { source: about.source }),
     width,
     height,
     layers: [
@@ -227,6 +224,62 @@ export async function toListingJpeg(
     .removeAlpha()
     .jpeg({ quality: 92 })
     .toBuffer()
+}
+
+// Categories mockups are filed under. One exists from the moment it's named,
+// before any scene is in it (a mockup from a reference takes a minute), so
+// the names are kept here as well as on the scenes.
+const CATEGORIES = path.join(ROOT, "categories.json")
+
+async function savedCategories(): Promise<string[]> {
+  try {
+    const list = JSON.parse(await readFile(CATEGORIES, "utf8"))
+    return Array.isArray(list) ? list.filter((c) => typeof c === "string") : []
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    throw error
+  }
+}
+
+/** Every category, A–Z, with how many scenes are in it. */
+export async function listCategories(): Promise<CategorySummary[]> {
+  const [saved, scenes] = await Promise.all([savedCategories(), listScenes()])
+  const names = new Map<string, string>()
+  const counts = new Map<string, number>()
+  for (const name of saved) names.set(name.toLowerCase(), name)
+  for (const { category } of scenes) {
+    if (!category) continue
+    const key = category.toLowerCase()
+    if (!names.has(key)) names.set(key, category)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...names]
+    .map(([key, name]) => ({ name, count: counts.get(key) ?? 0 }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// Adds go one after another (two at once would each drop the other's name),
+// and the file is replaced whole, so a read never sees half of it.
+const global = globalThis as typeof globalThis & { __categoryWrites?: Promise<unknown> }
+
+/** Adds a category unless one by that name exists; returns the name as stored. */
+export function addCategory(name: string) {
+  const clean = name.trim().replace(/\s+/g, " ").slice(0, 40)
+  if (!clean) return Promise.reject(new Error("Category name is empty"))
+  const add = (global.__categoryWrites ?? Promise.resolve())
+    .catch(() => {})
+    .then(async () => {
+      const saved = await savedCategories()
+      const existing = saved.find((c) => c.toLowerCase() === clean.toLowerCase())
+      if (existing) return existing
+      await mkdir(ROOT, { recursive: true })
+      const temp = `${CATEGORIES}.${process.pid}-${Date.now()}.tmp`
+      await writeFile(temp, JSON.stringify([...saved, clean], null, 1))
+      await rename(temp, CATEGORIES)
+      return clean
+    })
+  global.__categoryWrites = add
+  return add
 }
 
 // Animation templates the user saved; the built-in ones live in code.

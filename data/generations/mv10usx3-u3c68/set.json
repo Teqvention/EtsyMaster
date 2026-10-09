@@ -1,0 +1,153 @@
+{
+ "id": "mv10usx3-u3c68",
+ "kind": "poster",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4591579043,
+  "title": "Stacked Monkey Print | Japanese Woodblock Animal Art | Vintage Style Wildlife Wall Decor | Neutral Aesthetic Poster",
+  "image": "https://i.etsystatic.com/24426965/r/il/1e92cb/8695007755/il_fullxfull.8695007755_3iyk.jpg",
+  "url": "https://www.etsy.com/listing/4591579043/stacked-monkey-print-japanese-woodblock",
+  "shop": "TheWorldGallery"
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T13:49:25.863Z",
+ "updatedAt": "2026-10-09T15:17:12.196Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv10ut68.jpg",
+  "width": 1427,
+  "height": 1376
+ },
+ "posters": [
+  {
+   "status": "done",
+   "file": "poster-mv11mfc0.jpg",
+   "width": 750,
+   "height": 1050,
+   "index": 0,
+   "analysis": {
+    "summary": "A vertical stack of three playful monkeys rendered in a vintage Japanese woodblock style on textured neutral paper.",
+    "subject": "Three monkeys with dark faces and tan bodies",
+    "setting": "A minimalist, textured washi paper background",
+    "action": "Balancing on top of each other to form a vertical column",
+    "style": "Japanese woodblock print, stippled texture, flat earthy tones, bold outlines, traditional red seal accents",
+    "palette": [
+     "#d3c5b0",
+     "#b5a66a",
+     "#332222",
+     "#c93c20",
+     "#f2ead3"
+    ],
+    "composition": "Vertical orientation, centered subject, ample negative space, balanced by red seals in the corners",
+    "typography": null,
+    "mood": "Whimsical, serene, vintage, and balanced",
+    "audience": "Home decorators seeking a blend of playful subject matter and sophisticated, neutral aesthetics; ideal for living rooms or nurseries.",
+    "hook": "The charming contrast between a silly, circus-like animal stack and the refined, traditional medium of a Japanese woodblock print.",
+    "swaps": {
+     "subjects": [
+      "Red pandas",
+      "Chubby calico cats",
+      "Green tree frogs",
+      "Plump tanuki",
+      "White rabbits",
+      "Spotted deer"
+     ],
+     "settings": [
+      "Bamboo forest",
+      "Misty mountain peak",
+      "Koi pond edge",
+      "Tatami room",
+      "Cherry blossom branch",
+      "Snowy rooftop"
+     ],
+     "props": [
+      "Balancing bowls of ramen",
+      "Holding paper umbrellas",
+      "Juggling citrus fruits",
+      "Wearing tiny kimonos",
+      "Reading scrolls",
+      "Catching falling petals"
+     ]
+    }
+   }
+  }
+ ],
+ "batches": [
+  {
+   "id": "first",
+   "options": {
+    "variants": {
+     "count": 3,
+     "creativity": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T13:49:25.863Z",
+   "expanded": true
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-low-mv133w79.jpg",
+   "id": "low",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "low",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.863Z",
+   "title": "Macaque Pendulum Print",
+   "brief": "Redraw the three monkeys in a descending chain, with the top monkey hanging by its tail from a stylized, calligraphic pine branch. Use the same mustard-gold and dark-umber palette on a stippled oatmeal paper texture. Maintain the vertical composition and red block seals, but change the seal designs to circular shapes. The monkeys should have new, distinct facial expressions—one curious, one sleepy, and one grinning. Focus on a heavy, stippled ink texture that mimics traditional woodblock grain.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-medium-mv13zog2.jpg",
+   "id": "medium",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "medium",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.863Z",
+   "title": "Stacked Red-Crowned Cranes",
+   "brief": "A vertical arrangement of three elegant cranes standing on each other's backs in a playful balancing act, rendered in a traditional ukiyo-e style. The palette shifts to soft indigo, charcoal grey, and cream, with the cranes' heads providing small pops of vermillion red. The background is a weathered, light grey paper with a subtle horizontal wood grain texture. A large, rectangular red seal sits in the top right corner to balance the tall, thin subject. The style remains flat with bold, clean outlines.",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "status": "done",
+   "file": "out-high-mv134mgj.jpg",
+   "id": "high",
+   "poster": 0,
+   "batch": "first",
+   "mode": "variant",
+   "creativity": "high",
+   "review": null,
+   "createdAt": "2026-10-09T13:49:25.863Z",
+   "title": "Lunar Hare Ascent",
+   "brief": "A fresh concept featuring three stylized hares leaping toward a large, textured golden moon in a vertical, spaced-out line. The style is inspired by Japanese folk art (Mingei) with bold, chunky shapes and a coarse linen-like texture overlay. The palette uses deep navy, ochre, and terracotta on a warm parchment background. There is no black line work; the hare shapes are defined entirely by flat color blocks and heavy stippled grain. A single, minimalist geometric stamp in red is placed at the bottom center.",
+   "width": 1792,
+   "height": 2400
+  }
+ ],
+ "layout": "single",
+ "extraction": {
+  "status": "done",
+  "file": null,
+  "width": 750,
+  "height": 1050
+ }
+}

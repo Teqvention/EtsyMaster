@@ -12,8 +12,12 @@ import type { PosterLayer, Quad, Scene } from "./types"
 // A scene from someone else's finished mockup: Nano Banana redraws it with
 // blank sheets, every sheet's corners are found, and each gets its own poster
 // layer with light & shine exactly as the editor's "Generate" would make them.
-export async function createSceneFromReference(name: string, reference: Buffer) {
-  const scene = await createScene(name, await blankReplica(reference))
+export async function createSceneFromReference(
+  name: string,
+  reference: Buffer,
+  about: Pick<Scene, "category" | "source"> = {}
+) {
+  const scene = await createScene(name, await blankReplica(reference), about)
   try {
     return { ...(await placeSheets(scene)), located: true }
   } catch (error) {
@@ -21,6 +25,17 @@ export async function createSceneFromReference(name: string, reference: Buffer) 
     console.error(`Locating the sheets in ${scene.id}:`, error)
     return { ...scene, located: false }
   }
+}
+
+/** A listing photo from Etsy's image CDN, the only host references are fetched from. */
+export async function fetchReference(url: string) {
+  const parsed = URL.canParse(url) ? new URL(url) : null
+  if (parsed?.protocol !== "https:" || !parsed.hostname.endsWith(".etsystatic.com")) {
+    throw new Error("Only Etsy listing photos can be used as a reference")
+  }
+  const response = await fetch(parsed, { signal: AbortSignal.timeout(30_000) })
+  if (!response.ok) throw new Error(`Couldn't download the listing photo (${response.status})`)
+  return Buffer.from(await response.arrayBuffer())
 }
 
 /** Replaces the scene's placeholder poster with one poster per sheet found. */

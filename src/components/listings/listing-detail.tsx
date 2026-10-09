@@ -16,6 +16,7 @@ import { EstimateBreakdown } from "@/components/listings/estimate-breakdown"
 import { HeatBar } from "@/components/listings/heat-bar"
 import { LikeButton } from "@/components/listings/like-button"
 import { ListingGrid } from "@/components/listings/listing-grid"
+import { StealButton, StealMockupsButton } from "@/components/steal/steal-buttons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
@@ -83,27 +84,41 @@ export function ListingDetail({
   onClose: () => void
 }) {
   const { listing, refined, error } = useListingDetail(listingId, initial)
+  // The photo on screen; the toolbar steals its mockup by default.
+  const [shown, setShown] = React.useState({ id: listingId, index: 0 })
+  // Back to the first photo whenever another listing opens.
+  const photo = shown.id === listingId ? shown.index : 0
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="sticky top-0 z-10 flex h-11 shrink-0 items-center gap-1.5 border-b bg-background/90 px-2 backdrop-blur-md">
+      <div className="@container/toolbar sticky top-0 z-10 flex h-11 shrink-0 items-center gap-1.5 border-b bg-background/90 px-2 backdrop-blur-md">
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
           <XIcon />
         </Button>
-        <span className="hidden text-[11px] text-muted-foreground lg:inline">
+        <span className="hidden text-[11px] whitespace-nowrap text-muted-foreground @[44rem]/toolbar:inline">
           <kbd className="font-sans">←</kbd> <kbd className="font-sans">→</kbd> to browse ·{" "}
           <kbd className="font-sans">esc</kbd> to close
         </span>
         {listing && (
-          <div className="ml-auto flex items-center gap-1.5">
-            <LikeButton listing={listing} variant="toolbar" />
+          <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            {/* One group: keep it quick (Like), file it (Steal), take its mockups. */}
+            <div
+              role="group"
+              aria-label="Steal"
+              className="flex min-w-0 items-center [&>*]:rounded-none [&>*:first-child]:rounded-l-lg [&>*:last-child]:rounded-r-lg [&>*:not(:first-child)]:-ml-px [&>*:focus-visible]:z-10"
+            >
+              <LikeButton listing={listing} variant="toolbar" />
+              <StealButton listing={listing} />
+              <StealMockupsButton listing={listing} photo={photo} />
+            </div>
             <Button
               variant="outline"
               size="sm"
               nativeButton={false}
+              aria-label="Open on Etsy"
               render={<a href={listing.url} target="_blank" rel="noopener noreferrer" />}
             >
-              Etsy
+              <span className="hidden @[30rem]/toolbar:inline">Etsy</span>
               <ExternalLinkIcon data-icon="inline-end" />
             </Button>
           </div>
@@ -111,7 +126,12 @@ export function ListingDetail({
       </div>
 
       {listing ? (
-        <ListingBody listing={listing} refined={refined} />
+        <ListingBody
+          listing={listing}
+          refined={refined}
+          photo={photo}
+          onPhoto={(index) => setShown({ id: listing.id, index })}
+        />
       ) : (
         <div className="grid flex-1 place-items-center p-6 text-sm text-muted-foreground">
           {error ?? "Loading listing…"}
@@ -121,13 +141,23 @@ export function ListingDetail({
   )
 }
 
-function ListingBody({ listing, refined }: { listing: Listing; refined: boolean }) {
+function ListingBody({
+  listing,
+  refined,
+  photo,
+  onPhoto,
+}: {
+  listing: Listing
+  refined: boolean
+  photo: number
+  onPhoto: (index: number) => void
+}) {
   const { estimate, shop } = listing
   const perDay = (n: number) => n / Math.max(listing.ageDays, 1)
 
   return (
     <div className="flex flex-col">
-      <Gallery listing={listing} />
+      <Gallery listing={listing} index={photo} onSelect={onPhoto} />
 
       <section className="flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -291,10 +321,15 @@ function ListingBody({ listing, refined }: { listing: Listing; refined: boolean 
   )
 }
 
-function Gallery({ listing }: { listing: Listing }) {
-  const [active, setActive] = React.useState({ id: listing.id, index: 0 })
-  // Back to the first photo whenever another listing opens.
-  const index = active.id === listing.id ? active.index : 0
+function Gallery({
+  listing,
+  index,
+  onSelect,
+}: {
+  listing: Listing
+  index: number
+  onSelect: (index: number) => void
+}) {
   const image = listing.images[index]
 
   return (
@@ -319,9 +354,9 @@ function Gallery({ listing }: { listing: Listing }) {
         <div className="flex gap-1.5 no-scrollbar overflow-x-auto">
           {listing.images.map((img, i) => (
             <button
-              key={img.thumb}
+              key={`${i}-${img.thumb}`}
               type="button"
-              onClick={() => setActive({ id: listing.id, index: i })}
+              onClick={() => onSelect(i)}
               aria-label={`Photo ${i + 1}`}
               aria-current={i === index}
               className={cn(
