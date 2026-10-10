@@ -140,8 +140,9 @@ export function statusOf(uploads: PosterUploads, key: string, state: PosterState
  * a real upload of it is underway or failed (that one is retried instead, so
  * a half made listing never gets a twin). An upload cancelled before Gelato
  * got anything doesn't count. The same rule as the server's (createJob); and
- * only an approved poster whose set is still there.
+ * only a poster whose set is still there and that isn't rejected. A server
+ * from before `approved` sends none: createJob leaves out what isn't anyway.
  */
 export function canUpload(uploads: PosterUploads, key: string, poster: GroupPoster | undefined) {
-  return !!poster?.approved && poster.state !== "uploaded" && !uploads.taken.has(key)
+  return !!poster && poster.approved !== false && poster.state !== "uploaded" && !uploads.taken.has(key)
 }
