@@ -5,7 +5,7 @@ import { getSet } from "@/lib/generation/storage"
 import { listChains } from "@/lib/mockups/chains"
 import { NotFoundError } from "@/lib/mockups/storage"
 import { getProfile } from "@/lib/pricing/store"
-import { isApproved, isOnEtsy, posterKey } from "@/lib/uploads/groups"
+import { isApproved, leavesFree, posterKey } from "@/lib/uploads/groups"
 import type { Draft } from "@/lib/uploads/types"
 
 import { accountMissing, storageBlocker } from "./blockers"
@@ -121,28 +121,18 @@ export async function itemForListing(listingId: number): Promise<JobItem | null>
   return items.findLast((i) => i.etsyListingId === listingId && real.has(i.jobId)) ?? null
 }
 
-/**
- * Whether an earlier real upload of a poster leaves it free to go again: only
- * one stopped before anything of it reached Gelato. Mirrors canUpload on the
- * Uploads page.
- */
-function leavesFree(item: JobItem, job: UploadJob | undefined) {
-  const stopped = item.status === "cancelled" || (job?.status === "cancelled" && !isOnEtsy(item))
-  return stopped && !item.steps?.gelatoSent && !item.gelatoProductId && !item.etsyListingId
-}
-
 // --- Jobs ---
 
 /**
  * Makes a job of `plan`: every poster approved and in the plan once, every
  * account an upload account, the chains there. A live job also needs print
  * file hosting and each of its accounts set up for live uploads (shop,
- * grant, Gelato store and template, price profile), and never takes a poster
- * that is on Etsy or on its way there. The mockup chain is settled here per
- * account: the plan's pick, else the account's own, else the default one,
- * else (no chain at all) the poster alone.
+ * grant, Gelato store and template, price profile), and leaves out every
+ * poster that is on Etsy or on its way there (`skipped`). The mockup chain
+ * is settled here per account: the plan's pick, else the account's own, else
+ * the default one, else (no chain at all) the poster alone.
  */
-export async function createJob(plan: UploadPlan): Promise<UploadJob> {
+export async function createJob(plan: UploadPlan): Promise<{ job: UploadJob; skipped: number }> {
   const groups = Array.isArray(plan?.groups) ? plan.groups : []
   if (!groups.some((g) => Array.isArray(g?.outputs) && g.outputs.length)) throw new PlanError("The plan has no posters")
   const dryRun = plan.dryRun === true
@@ -242,28 +232,32 @@ export async function createJob(plan: UploadPlan): Promise<UploadJob> {
       updatedAt: now,
     }
   })
-  job.items = items.map((i) => i.id)
 
   return change((data) => {
+    let taking = items
     if (!dryRun) {
+      // On Etsy or on its way meanwhile (a failed one is retried where it is):
+      // left out of the job, the rest still goes.
       const jobs = new Map(data.jobs.map((j) => [j.id, j]))
-      for (const item of items) {
+      const taken = new Set(
+        data.items
+          .filter((i) => !jobs.get(i.jobId)?.dryRun && !leavesFree(i, jobs.get(i.jobId)))
+          .map((i) => posterKey(i.groupId, i.outputId))
+      )
+      taking = items.filter((item) => {
         const key = posterKey(item.groupId, item.outputId)
-        const name = item.title ? `"${item.title.slice(0, 60)}"` : "A poster of the plan"
-        if (drafts.get(key)?.status === "uploaded") throw new PlanError(`${name} is on Etsy already`)
-        const before = data.items.find(
-          (i) => posterKey(i.groupId, i.outputId) === key && !jobs.get(i.jobId)?.dryRun && !leavesFree(i, jobs.get(i.jobId))
+        return drafts.get(key)?.status !== "uploaded" && !taken.has(key)
+      })
+      if (!taking.length) {
+        throw new PlanError(
+          items.length === 1 ? "The poster is on Etsy or on its way already" : "Every poster of the plan is on Etsy or on its way already"
         )
-        if (before) {
-          throw new PlanError(
-            `${name} ${isOnEtsy(before) ? "is on Etsy already" : before.status === "failed" ? "failed in an earlier upload: retry it there" : "is uploading already"}`
-          )
-        }
       }
     }
+    job.items = taking.map((i) => i.id)
     data.jobs.push(job)
-    data.items.push(...items)
-    return job
+    data.items.push(...taking)
+    return { job, skipped: items.length - taking.length }
   })
 }
 

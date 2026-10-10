@@ -90,17 +90,29 @@ export const isFinished = (item: JobItem) =>
 export const isUnderway = ({ item, job }: PosterUpload) =>
   !isFinished(item) && job.status !== "cancelled" && job.status !== "done"
 
+/**
+ * Whether a real upload of a poster leaves it free to go again: only one
+ * stopped before anything of it reached Gelato.
+ */
+export function leavesFree(item: JobItem, job: UploadJob | undefined) {
+  const stopped = item.status === "cancelled" || (job?.status === "cancelled" && !isOnEtsy(item))
+  return stopped && !item.steps?.gelatoSent && !item.gelatoProductId && !item.etsyListingId
+}
+
 export type PosterUploads = {
   /** Per poster key, its newest item in a real upload. */
   real: Map<string, PosterUpload>
   /** Per poster key, its newest item in a test run. */
   test: Map<string, PosterUpload>
+  /** Poster keys a real upload holds, any of them (not only the newest): on Etsy, on its way or failed. */
+  taken: Set<string>
 }
 
 export function uploadsByPoster(pipeline: PipelineState | null): PosterUploads {
   const real = new Map<string, PosterUpload>()
   const test = new Map<string, PosterUpload>()
-  if (!pipeline) return { real, test }
+  const taken = new Set<string>()
+  if (!pipeline) return { real, test, taken }
   const jobs = new Map(pipeline.jobs.map((j) => [j.id, j]))
   for (const item of pipeline.items) {
     const job = jobs.get(item.jobId)
@@ -109,8 +121,9 @@ export function uploadsByPoster(pipeline: PipelineState | null): PosterUploads {
     const key = posterKey(item.groupId, item.outputId)
     const before = into.get(key)
     if (!before || item.createdAt >= before.item.createdAt) into.set(key, { item, job })
+    if (!job.dryRun && !leavesFree(item, job)) taken.add(key)
   }
-  return { real, test }
+  return { real, test, taken }
 }
 
 export function statusOf(uploads: PosterUploads, key: string, state: PosterState): PosterStatus {
@@ -125,12 +138,8 @@ export function statusOf(uploads: PosterUploads, key: string, state: PosterState
  * Whether a poster may go into a new job: never twice to Etsy, and not while
  * a real upload of it is underway or failed (that one is retried instead, so
  * a half made listing never gets a twin). An upload cancelled before Gelato
- * made anything doesn't count.
+ * got anything doesn't count. The same rule as the server's (createJob).
  */
 export function canUpload(uploads: PosterUploads, key: string, state: PosterState) {
-  if (state === "uploaded") return false
-  const real = uploads.real.get(key)
-  if (!real) return true
-  const stopped = real.item.status === "cancelled" || (real.job.status === "cancelled" && !isOnEtsy(real.item))
-  return stopped && !real.item.gelatoProductId && !real.item.etsyListingId
+  return state !== "uploaded" && !uploads.taken.has(key)
 }

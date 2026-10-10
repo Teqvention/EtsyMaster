@@ -49,7 +49,7 @@ import {
   type Placeable,
   type SpreadMode,
 } from "@/lib/uploads/distribute"
-import { canUpload, posterKey, statusOf, type PosterStatus, type PosterUploads } from "@/lib/uploads/groups"
+import { canUpload, posterKey, type PosterUploads } from "@/lib/uploads/groups"
 import type { GroupPoster, UploadGroup } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
 
@@ -86,13 +86,6 @@ const DRAG = "application/x-upload-poster"
 const nameOf = (a: AccountView) => a.shop?.name ?? a.label
 const plural = (n: number, word: string) => `${formatNumber(n)} ${word}${n === 1 ? "" : "s"}`
 const ratio = (p: GroupPoster) => (p.posterWidth && p.posterHeight ? `${p.posterWidth} / ${p.posterHeight}` : "3 / 4")
-
-const NOT_FREE: Partial<Record<PosterStatus, string>> = {
-  live: "Already on Etsy",
-  uploading: "Uploading now",
-  failed: "Its upload failed: retry that one rather than start it again",
-  uploaded: "Marked as uploaded",
-}
 
 export function UploadDialog({
   open,
@@ -368,12 +361,13 @@ function Form({
     }
     setBusy(true)
     try {
-      await startUpload(plan)
-      const count = plural(posters.length, "poster")
+      const { skipped } = await startUpload(plan)
+      const count = plural(posters.length - skipped, "poster")
+      const left = skipped ? ` ${plural(skipped, "poster")} left out: on Etsy or on its way already.` : ""
       toast(testRun ? `Test run of ${count} started` : `Uploading ${count}`, {
         description: testRun
           ? "Everything is made here; nothing is sent to Etsy or Gelato."
-          : `To ${plural(shops, "shop")}. ${activate ? "Each goes live once its print route is proven." : "They stay inactive for a look."}`,
+          : `To ${plural(shops, "shop")}. ${activate ? "Each goes live once its print route is proven." : "They stay inactive for a look."}${left}`,
       })
       onDone()
     } catch (error) {
@@ -444,7 +438,6 @@ function Form({
       <div className="min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[19rem_minmax(0,1fr)] md:overflow-hidden">
         <Picker
           groups={groups}
-          uploads={uploads}
           free={free}
           picked={deleting ?? picked}
           deleting={!!deleting}
@@ -666,7 +659,6 @@ function Form({
 
 function Picker({
   groups,
-  uploads,
   free,
   picked,
   deleting,
@@ -680,7 +672,6 @@ function Picker({
   onGroupTarget,
 }: {
   groups: UploadGroup[]
-  uploads: PosterUploads
   free: Set<string>
   /** Picked to upload, or marked to delete while `deleting`. */
   picked: Set<string>
@@ -694,9 +685,19 @@ function Picker({
   onPickNone: () => void
   onGroupTarget: (group: string, to: string) => void
 }) {
+  // Only what may still go: posters on Etsy, on their way or failed (retried
+  // in the jobs panel) are left out, and groups with nothing left with them.
+  const shown = React.useMemo(
+    () =>
+      groups.flatMap((g) => {
+        const posters = g.posters.filter((p) => free.has(posterKey(g.id, p.outputId)))
+        return posters.length ? [{ ...g, posters }] : []
+      }),
+    [groups, free]
+  )
   // The group the dialog was opened for starts open, or the only one.
   const [open, setOpen] = React.useState(
-    () => new Set(start ? [start.split("/")[0]] : groups.length === 1 ? [groups[0].id] : [])
+    () => new Set(start ? [start.split("/")[0]] : shown.length === 1 ? [shown[0].id] : [])
   )
   const count = [...picked].filter((key) => free.has(key)).length
 
@@ -716,18 +717,16 @@ function Picker({
           </Button>
         </div>
       </div>
-      {groups.length === 0 || free.size === 0 ? (
+      {shown.length === 0 ? (
         <p className="p-4 text-xs text-muted-foreground">
           Nothing to upload: every approved poster is on Etsy or on its way.
         </p>
       ) : (
         <ul className="flex min-h-0 flex-1 flex-col gap-0.5 p-2 md:overflow-y-auto">
-          {groups.map((group) => (
+          {shown.map((group) => (
             <GroupPick
               key={group.id}
               group={group}
-              uploads={uploads}
-              free={free}
               picked={picked}
               deleting={deleting}
               open={open.has(group.id)}
@@ -753,8 +752,6 @@ function Picker({
 
 function GroupPick({
   group,
-  uploads,
-  free,
   picked,
   deleting,
   open,
@@ -764,9 +761,8 @@ function GroupPick({
   onPick,
   onTarget,
 }: {
+  /** With only its posters that may still go. */
   group: UploadGroup
-  uploads: PosterUploads
-  free: Set<string>
   picked: Set<string>
   deleting: boolean
   open: boolean
@@ -777,7 +773,7 @@ function GroupPick({
   onPick: (keys: string[], on: boolean) => void
   onTarget: (to: string) => void
 }) {
-  const keys = group.posters.map((p) => posterKey(group.id, p.outputId)).filter((key) => free.has(key))
+  const keys = group.posters.map((p) => posterKey(group.id, p.outputId))
   const on = keys.filter((key) => picked.has(key)).length
   const title = shortTitle(group.source.title)
   const targets = [{ value: SPLIT, label: "Split evenly" }, ...usable.map((a) => ({ value: a.id, label: nameOf(a) }))]
@@ -786,9 +782,8 @@ function GroupPick({
     <li className="flex flex-col">
       <div className="flex items-center gap-2.5 rounded-lg p-1.5 transition-colors duration-150 [@media(hover:hover)]:hover:bg-muted/60">
         <Checkbox
-          checked={keys.length > 0 && on === keys.length}
+          checked={on === keys.length}
           indeterminate={on > 0 && on < keys.length}
-          disabled={keys.length === 0}
           onCheckedChange={(checked) => onPick(keys, checked)}
           aria-label={`${deleting ? "Delete" : "Upload"} the posters of ${title}`}
           // Some picked: a dash on the filled box, instead of the check.
@@ -817,7 +812,7 @@ function GroupPick({
               {title}
             </span>
             <span className="truncate text-xs text-muted-foreground tabular-nums">
-              {keys.length === 0 ? "Nothing left to upload" : `${on} of ${keys.length}`} · {group.folder}
+              {on} of {keys.length} · {group.folder}
             </span>
           </span>
           <ChevronDownIcon
@@ -829,7 +824,7 @@ function GroupPick({
         </button>
       </div>
 
-      {target !== null && keys.length > 0 && (
+      {target !== null && (
         <div className="flex items-center gap-2 py-1 pr-1.5 pl-8 text-xs text-muted-foreground">
           <span className="shrink-0">Goes to</span>
           <Select value={target} items={targets} onValueChange={(value) => value && onTarget(value)}>
@@ -863,10 +858,8 @@ function GroupPick({
                 <PosterPick
                   key={key}
                   poster={p}
-                  free={free.has(key)}
                   picked={picked.has(key)}
                   deleting={deleting}
-                  status={statusOf(uploads, key, p.state)}
                   onToggle={() => onPick([key], !picked.has(key))}
                 />
               )
@@ -880,25 +873,16 @@ function GroupPick({
 
 function PosterPick({
   poster,
-  free,
-  picked,
+  picked: on,
   deleting,
-  status,
   onToggle,
 }: {
   poster: GroupPoster
-  free: boolean
   picked: boolean
   deleting: boolean
-  status: PosterStatus
   onToggle: () => void
 }) {
-  const on = free && picked
-  const note = free
-    ? poster.draftId
-      ? null
-      : "Its copy is written first"
-    : (NOT_FREE[status] ?? "Gelato made it once already: retry that upload instead")
+  const note = poster.draftId ? null : "Its copy is written first"
   return (
     <Tooltip>
       <TooltipTrigger
@@ -906,12 +890,10 @@ function PosterPick({
           <button
             type="button"
             aria-pressed={on}
-            aria-disabled={!free}
-            onClick={() => free && onToggle()}
+            onClick={onToggle}
             className={cn(
-              "group/tile relative overflow-hidden rounded-md bg-muted ring-1 ring-foreground/10 transition-[opacity,transform] duration-150 ease-out-strong outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
-              free ? "active:scale-[0.97]" : "cursor-not-allowed",
-              deleting ? !free && "opacity-40" : !on && "opacity-40",
+              "group/tile relative overflow-hidden rounded-md bg-muted ring-1 ring-foreground/10 transition-[opacity,transform] duration-150 ease-out-strong outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97] motion-reduce:transition-none",
+              !deleting && !on && "opacity-40",
               deleting && on && "ring-2 ring-destructive"
             )}
             style={{ aspectRatio: ratio(poster) }}
@@ -920,24 +902,19 @@ function PosterPick({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={poster.thumb} alt="" loading="lazy" draggable={false} className="size-full object-cover" />
-        {free && (
-          <span
-            aria-hidden
-            className={cn(
-              "absolute top-1 left-1 grid size-3.5 place-items-center rounded-full border shadow-sm transition-colors duration-150",
-              on
-                ? deleting
-                  ? "border-destructive bg-destructive text-white"
-                  : "border-brand bg-brand text-white"
-                : "border-white bg-black/25 text-transparent"
-            )}
-          >
-            {deleting ? <Trash2Icon className="size-2" strokeWidth={3} /> : <CheckIcon className="size-2.5" strokeWidth={3} />}
-          </span>
-        )}
-        {status === "live" && (
-          <span aria-hidden className="absolute right-1 bottom-1 size-1.5 rounded-full bg-emerald-500 ring-1 ring-white" />
-        )}
+        <span
+          aria-hidden
+          className={cn(
+            "absolute top-1 left-1 grid size-3.5 place-items-center rounded-full border shadow-sm transition-colors duration-150",
+            on
+              ? deleting
+                ? "border-destructive bg-destructive text-white"
+                : "border-brand bg-brand text-white"
+              : "border-white bg-black/25 text-transparent"
+          )}
+        >
+          {deleting ? <Trash2Icon className="size-2" strokeWidth={3} /> : <CheckIcon className="size-2.5" strokeWidth={3} />}
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-64 flex-col items-start gap-0.5">
         <span className="font-medium">{poster.title}</span>

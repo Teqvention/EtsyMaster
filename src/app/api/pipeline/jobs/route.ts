@@ -4,14 +4,14 @@ import { pipelineState } from "@/lib/pipeline/state"
 import { createJob } from "@/lib/pipeline/store"
 import { kickPipeline } from "@/lib/pipeline/worker"
 
-/** An UploadPlan from the Upload dialog: starts a job, answers the whole pipeline. */
+/** An UploadPlan from the Upload dialog: starts a job, answers the whole pipeline and how many posters it left out. */
 export async function POST(request: Request) {
   return respond(async () => {
     const plan = await request.json().catch(() => {
       throw new PlanError("The plan isn't JSON")
     })
-    await createJob(plan)
+    const { skipped } = await createJob(plan)
     kickPipeline()
-    return pipelineState()
+    return { ...(await pipelineState()), skipped }
   })
 }

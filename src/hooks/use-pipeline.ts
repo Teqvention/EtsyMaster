@@ -111,8 +111,12 @@ async function call(url: string, init: RequestInit) {
 }
 
 /** Starts a job: the posters of the plan, each to its account. */
-export function startUpload(plan: UploadPlan) {
-  return call("/api/pipeline/jobs", { method: "POST", body: JSON.stringify(plan) })
+export async function startUpload(plan: UploadPlan) {
+  const { skipped, ...pipeline } = (await call("/api/pipeline/jobs", {
+    method: "POST",
+    body: JSON.stringify(plan),
+  })) as PipelineState & { skipped?: number }
+  return { pipeline, skipped: skipped ?? 0 }
 }
 
 export function setJobStatus(id: string, status: Exclude<JobStatus, "done">) {
