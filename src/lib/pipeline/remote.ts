@@ -55,8 +55,13 @@ const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 /** Etsy requests a stage spends at most; its account's quota must hold them (plus RESERVE) first. */
 const CALLS = { listing: 30, verify: 2, live: 2, postcheck: 10 }
-/** Gelato publishes no limits; this many new products an hour per store keeps clear of any. */
-const GELATO_PER_HOUR = 24
+/**
+ * Gelato publishes no limits; this many new products an hour per store keeps
+ * clear of any (a 429 parks the create for ten minutes). Many products of one
+ * template can be in the making at once: a store's creates are one at a time,
+ * but each holds the store only for its request, not while Gelato publishes.
+ */
+const GELATO_PER_HOUR = 60
 /** A create that got no answer: looked for this long before it's taken as never made. */
 const RECOVER_AFTER = 10 * MINUTE
 /** Gelato usually has the listing on Etsy within minutes; one still unpublished gets a nudge. */
