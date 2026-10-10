@@ -57,11 +57,17 @@ const DAY = 24 * HOUR
 const CALLS = { listing: 30, verify: 2, live: 2, postcheck: 10 }
 /**
  * Gelato publishes no limits; this many new products an hour per store keeps
- * clear of any (a 429 parks the create for ten minutes). Many products of one
- * template can be in the making at once: a store's creates are one at a time,
- * but each holds the store only for its request, not while Gelato publishes.
+ * clear of any (a 429 parks the create for ten minutes). Any number of
+ * products can come from one template at once; a store's creates go one at
+ * a time, each holding the store only for its request.
  */
 const GELATO_PER_HOUR = 60
+/**
+ * At most this many of a store's products on their way to Etsy at once: four
+ * sent within minutes took Gelato over ten minutes each, so a store's pace
+ * follows how fast Gelato publishes rather than a guess.
+ */
+const GELATO_IN_FLIGHT = 6
 /** A create that got no answer: looked for this long before it's taken as never made. */
 const RECOVER_AFTER = 10 * MINUTE
 /** Gelato usually has the listing on Etsy within minutes; one still unpublished gets a nudge. */
@@ -142,6 +148,9 @@ async function pace(ctx: StageContext, storeId: string) {
     throw new Parked(today[today.length - account.dailyTarget] + DAY - now, `${account.label} has had its ${account.dailyTarget} for today`)
   }
   const sameStore = new Set((await listAccounts()).filter((a) => a.gelato?.storeId === storeId).map((a) => a.id))
+  // What Gelato is still putting on Etsy: the store's pace follows how fast it gets there.
+  const pending = sent.filter((i) => sameStore.has(i.account) && !i.etsyListingId && i.status !== "failed").length
+  if (pending >= GELATO_IN_FLIGHT) throw new Parked(MINUTE, `${pending} posters with Gelato already, on their way to Etsy`)
   const hour = times(sent.filter((i) => sameStore.has(i.account)), HOUR)
   if (hour.length >= GELATO_PER_HOUR) {
     throw new Parked(hour[hour.length - GELATO_PER_HOUR] + HOUR - now, `${GELATO_PER_HOUR} new Gelato products an hour per store`)
@@ -202,17 +211,26 @@ async function published(ctx: StageContext, key: string, storeId: string): Promi
     await ctx.save({ etsyListingId: listingId })
     return { note: `Etsy listing ${listingId}` }
   }
-  if (product.publishingErrorCode) throw new Fatal(`Gelato couldn't put it on Etsy (${product.publishingErrorCode})`)
+  // Gelato reports an error now and then (GENERAL_ERROR, often right after a
+  // second publish while its first is still under way) and puts the product
+  // on Etsy minutes later anyway: only the timeout gives up.
+  const error = product.publishingErrorCode
   const since = ctx.did("publishSince") ?? (await ctx.step("publishSince"))
   const waited = Date.now() - Date.parse(since)
   if (waited > PUBLISH_TIMEOUT) {
-    throw new Fatal(`Gelato hasn't put it on Etsy in ${PUBLISH_TIMEOUT / MINUTE} minutes (product ${product.status})`)
+    throw new Fatal(
+      error
+        ? `Gelato couldn't put it on Etsy (${error}) in ${PUBLISH_TIMEOUT / MINUTE} minutes`
+        : `Gelato hasn't put it on Etsy in ${PUBLISH_TIMEOUT / MINUTE} minutes (product ${product.status})`
+    )
   }
-  if (waited > NUDGE_AFTER && !product.publishedAt && !ctx.did("gelatoPublish")) {
+  // A nudge only for a product Gelato never began to publish.
+  const publishing = product.status?.startsWith("publishing")
+  if (waited > NUDGE_AFTER && !publishing && !product.publishedAt && !ctx.did("gelatoPublish")) {
     await ctx.step("gelatoPublish")
     await publishProduct(key, storeId, product.id)
   }
-  throw new Parked(PUBLISH_POLL, "Gelato is putting it on Etsy")
+  throw new Parked(PUBLISH_POLL, error ? `Gelato reports ${error}; waiting whether it gets there anyway` : "Gelato is putting it on Etsy")
 }
 
 // --- Etsy listing ---
