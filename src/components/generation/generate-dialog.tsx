@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { LightbulbIcon, LoaderCircleIcon, RepeatIcon, SparklesIcon } from "lucide-react"
+import { ClockIcon, LightbulbIcon, LoaderCircleIcon, PlusIcon, RepeatIcon, SparklesIcon, XIcon, ZapIcon } from "lucide-react"
 
 import { ImagePicker, ThumbStack, type ImagePick } from "@/components/generation/image-picker"
 import { CreativityMeter } from "@/components/generation/parts"
@@ -30,6 +30,7 @@ import {
   MAX_VARIANTS,
   spread,
   type Creativity,
+  type Delivery,
   type GenerateGroup,
   type GenerateOptions,
 } from "@/lib/generation/types"
@@ -139,27 +140,46 @@ function Form({
     creativity: initial.ideas.creativity,
   })
   const [feedback, setFeedback] = React.useState(initial.feedback ?? "")
+  const [delivery, setDelivery] = useDelivery()
   const [busy, setBusy] = React.useState(false)
 
   const perReference = (variantsOn ? variants.count : 0) + (ideasOn ? ideas.count : 0)
   const total = perReference * references.count
   const empty = perReference === 0 || (inspired && picked.size === 0)
 
-  async function submit() {
-    if (empty || busy) return
+  const current: PresetSettings = {
+    variants: { on: variantsOn, ...variants, styleId },
+    ideas: { on: ideasOn, ...ideas },
+    delivery,
+  }
+
+  /** Runs with what's on screen, or straight away with a preset's settings (shown as it runs). */
+  async function submit(settings: PresetSettings = current) {
+    const { variants: v, ideas: i } = settings
+    if (busy || (v.on ? v.count : 0) + (i.on ? i.count : 0) === 0 || (inspired && picked.size === 0)) return
+    if (settings !== current) {
+      setVariantsOn(v.on)
+      setVariants({ count: v.count, creativity: v.creativity })
+      setStyleId(v.styleId)
+      setIdeasOn(i.on)
+      setIdeas({ count: i.count, creativity: i.creativity })
+      setDelivery(settings.delivery)
+    }
     setBusy(true)
     try {
       await onSubmit({
         variants: {
-          ...(variantsOn ? variants : { ...variants, count: 0 }),
-          styleId: variantsOn ? styleId : null,
+          count: v.on ? v.count : 0,
+          creativity: v.creativity,
+          styleId: v.on ? v.styleId : null,
         },
-        ideas: ideasOn ? ideas : { ...ideas, count: 0 },
+        ideas: { count: i.on ? i.count : 0, creativity: i.creativity },
         ...(feedback.trim() && { feedback: feedback.trim() }),
         ...(initial.posters && { posters: initial.posters }),
         ...(inspired && {
           inspiration: inspiration.filter((i) => picked.has(i.id)).map((i) => i.id),
         }),
+        ...(settings.delivery === "batch" && { delivery: "batch" as const }),
       })
     } catch {
       // Whoever submitted said what went wrong; the dialog stays for another go.
@@ -198,7 +218,7 @@ function Form({
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        submit()
+        void submit()
       }}
       // min-w-0: a long truncated description must not size the dialog's grid column.
       className="flex max-h-[min(88svh,52rem)] min-w-0 flex-col"
@@ -277,6 +297,34 @@ function Form({
             </Section>
           </>
         )}
+      </div>
+
+      {!inspired && <PresetBar current={current} busy={busy} onRun={submit} />}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-4 py-3">
+        <span className="text-xs font-medium text-muted-foreground">Delivery</span>
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          spacing={0}
+          value={[delivery]}
+          onValueChange={(value) => value[0] && setDelivery(value[0] as Delivery)}
+          aria-label="Delivery"
+        >
+          <ToggleGroupItem value="now">
+            <ZapIcon />
+            Now
+          </ToggleGroupItem>
+          <ToggleGroupItem value="batch">
+            <ClockIcon />
+            Batch
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <span className="text-xs text-pretty text-muted-foreground">
+          {delivery === "batch"
+            ? "Half the price, no waiting on quota; back in minutes to a few hours."
+            : "Drawn straight away, up to 20 at a time."}
+        </span>
       </div>
 
       <DialogFooter className="m-0 flex-row items-center gap-2 rounded-b-xl border-t bg-muted/40 p-3 sm:justify-between">
@@ -447,6 +495,188 @@ function CreativityField({ group, onChange }: { group: GenerateGroup; onChange: 
               : "Select several levels to mix them evenly"}
         </p>
       </div>
+    </div>
+  )
+}
+
+// --- How it's painted, remembered on this device ---
+
+const DELIVERY_KEY = "etsy-research:generate-delivery"
+const deliveryListeners = new Set<() => void>()
+
+function useDelivery() {
+  const delivery = React.useSyncExternalStore(
+    (notify) => {
+      deliveryListeners.add(notify)
+      return () => {
+        deliveryListeners.delete(notify)
+      }
+    },
+    (): Delivery => (localStorage.getItem(DELIVERY_KEY) === "batch" ? "batch" : "now"),
+    (): Delivery => "now"
+  )
+  const set = React.useCallback((next: Delivery) => {
+    localStorage.setItem(DELIVERY_KEY, next)
+    deliveryListeners.forEach((notify) => notify())
+  }, [])
+  return [delivery, set] as const
+}
+
+// --- Presets: saved settings, run in one click ---
+
+type PresetSettings = {
+  variants: GenerateGroup & { on: boolean; styleId: string | null }
+  ideas: GenerateGroup & { on: boolean }
+  delivery: Delivery
+}
+
+type Preset = PresetSettings & { id: string; name: string }
+
+const PRESETS_KEY = "etsy-research:generate-presets"
+const presetListeners = new Set<() => void>()
+let presetsCache: { raw: string | null; presets: Preset[] } = { raw: null, presets: [] }
+
+function readPresets(): Preset[] {
+  const raw = localStorage.getItem(PRESETS_KEY)
+  if (raw !== presetsCache.raw) {
+    let presets: Preset[] = []
+    try {
+      presets = raw ? (JSON.parse(raw) as Preset[]) : []
+    } catch {}
+    presetsCache = { raw, presets }
+  }
+  return presetsCache.presets
+}
+
+function writePresets(presets: Preset[]) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+  presetListeners.forEach((notify) => notify())
+}
+
+const NO_PRESETS: Preset[] = []
+
+/** Saved presets, remembered on this device. */
+function usePresets() {
+  return React.useSyncExternalStore(
+    (notify) => {
+      presetListeners.add(notify)
+      return () => {
+        presetListeners.delete(notify)
+      }
+    },
+    readPresets,
+    () => NO_PRESETS
+  )
+}
+
+/** "5 var · 3 ideas" — what a preset makes per poster. */
+function presetSummary(p: PresetSettings) {
+  return [p.variants.on && `${p.variants.count} var`, p.ideas.on && `${p.ideas.count} ideas`].filter(Boolean).join(" · ")
+}
+
+function presetTitle(p: PresetSettings) {
+  const levels = (g: GenerateGroup) => g.creativity.map((c) => CREATIVITY_LABEL[c]).join(", ")
+  return [
+    p.variants.on && `${p.variants.count} variants (${levels(p.variants)})`,
+    p.ideas.on && `${p.ideas.count} new ideas (${levels(p.ideas)})`,
+    p.delivery === "batch" ? "in a batch job" : "now",
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+function PresetBar({
+  current,
+  busy,
+  onRun,
+}: {
+  current: PresetSettings
+  busy: boolean
+  onRun: (settings: PresetSettings) => void
+}) {
+  const presets = usePresets()
+  const [naming, setNaming] = React.useState(false)
+  const [name, setName] = React.useState("")
+  const empty = (current.variants.on ? current.variants.count : 0) + (current.ideas.on ? current.ideas.count : 0) === 0
+
+  function save() {
+    const clean = name.trim()
+    setNaming(false)
+    setName("")
+    if (!clean) return
+    const settings = structuredClone(current)
+    writePresets([...presets, { ...settings, id: Math.random().toString(36).slice(2, 10), name: clean.slice(0, 32) }])
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-t px-4 py-3">
+      <span className="mr-1.5 text-xs font-medium text-muted-foreground">Presets</span>
+      {presets.map((preset) => (
+        <span
+          key={preset.id}
+          className="group/preset relative flex items-center transition-transform duration-150 ease-out starting:scale-95 starting:opacity-0"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            disabled={busy}
+            onClick={() => onRun(preset)}
+            title={`Run now: ${presetTitle(preset)}`}
+            className="gap-1.5 pr-2.5 active:scale-[0.97]"
+          >
+            {preset.delivery === "batch" ? <ClockIcon /> : <ZapIcon />}
+            <span className="font-medium">{preset.name}</span>
+            <span className="text-muted-foreground tabular-nums">{presetSummary(preset)}</span>
+          </Button>
+          <button
+            type="button"
+            aria-label={`Delete preset ${preset.name}`}
+            title="Delete preset"
+            onClick={() => writePresets(presets.filter((p) => p.id !== preset.id))}
+            className="absolute -top-1.5 -right-1.5 grid size-4 place-items-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-xs transition-opacity duration-150 group-hover/preset:opacity-100 hover:text-foreground focus-visible:opacity-100 [&_svg]:size-2.5"
+          >
+            <XIcon />
+          </button>
+        </span>
+      ))}
+      {naming ? (
+        <Input
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              save()
+            }
+            if (event.key === "Escape") {
+              event.preventDefault()
+              event.stopPropagation()
+              setNaming(false)
+              setName("")
+            }
+          }}
+          onBlur={save}
+          placeholder="Name, e.g. Quick 5"
+          aria-label="Preset name"
+          maxLength={32}
+          className="h-6 w-36 px-2 text-xs"
+        />
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          disabled={empty}
+          onClick={() => setNaming(true)}
+          title={`Save these settings as a preset: ${presetTitle(current)}`}
+          className="text-muted-foreground"
+        >
+          <PlusIcon />
+          {presets.length ? "" : "Save as preset"}
+        </Button>
+      )}
     </div>
   )
 }

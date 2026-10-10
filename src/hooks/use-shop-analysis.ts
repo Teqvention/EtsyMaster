@@ -4,7 +4,13 @@ import * as React from "react"
 
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
 import { recordShopAnalysis, type ShopAnalysisSummary } from "@/hooks/use-shop-history"
-import { applyReviews, planCost, reviewsSince, type AnalysisPlan } from "@/lib/etsy/analysis"
+import {
+  applyReviews,
+  defaultPlan,
+  planCost,
+  reviewsSince,
+  type AnalysisPlan,
+} from "@/lib/etsy/analysis"
 import type {
   Listing,
   ListingPage,
@@ -176,7 +182,7 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
 export async function startAnalysis(
   shop: ListingShop,
   plan: AnalysisPlan,
-  { fresh = false } = {}
+  { fresh = false, quiet = false } = {}
 ) {
   stopAnalysis(shop.id)
   const shopId = shop.id
@@ -268,7 +274,7 @@ export async function startAnalysis(
     if (isCurrent()) {
       entry.abort = null
       remember(shop, current)
-      if (!onScreen.has(shopId)) settleListeners.forEach((notify) => notify({ shop, run: current }))
+      if (!onScreen.has(shopId) && !quiet) settleListeners.forEach((notify) => notify({ shop, run: current }))
     }
   }
 }
@@ -326,6 +332,96 @@ export function onBackgroundSettle(notify: (settled: ShopRun) => void) {
   return () => {
     settleListeners.delete(notify)
   }
+}
+
+// --- Many shops at once ---
+
+// "Get all listings" for a list of shops: every active listing of each, two
+// shops at a time, so the server spreads them over both analysis accounts.
+// The runs are ordinary ones (header, recent shops, stored copy); only the
+// batch as a whole ends with a toast.
+
+const BATCH_CONCURRENCY = 2
+
+export type Batch = {
+  total: number
+  done: number
+  failed: string[]
+  /** Shops being fetched right now. */
+  current: ListingShop[]
+}
+
+let batch: Batch | null = null
+let batchQueue: ListingShop[] = []
+let batchStopped = false
+const batchListeners = new Set<() => void>()
+
+function setBatch(next: Batch | null) {
+  batch = next
+  batchListeners.forEach((notify) => notify())
+}
+
+function subscribeBatch(notify: () => void) {
+  batchListeners.add(notify)
+  return () => {
+    batchListeners.delete(notify)
+  }
+}
+
+/** The batch under way, if any. */
+export function useBatch() {
+  return React.useSyncExternalStore(subscribeBatch, () => batch, () => null)
+}
+
+/** Every active listing (and the cheap review window the shop's default plan picks). */
+export function allListingsPlan(shop: ListingShop): AnalysisPlan {
+  return { ...defaultPlan(shop), limit: Math.max(shop.activeListings, 1) }
+}
+
+/**
+ * Fetches every listing of each shop, a couple at a time. Shops already in
+ * the batch are skipped; adding to a running batch queues them behind it.
+ * Resolves with the batch once it's through, or null when this call only
+ * added to one already under way.
+ */
+export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> {
+  const queued = new Set([...batchQueue, ...(batch?.current ?? [])].map((s) => s.id))
+  const fresh = shops.filter((s) => !queued.has(s.id))
+  if (fresh.length === 0) return null
+  batchQueue.push(...fresh)
+  if (batch) {
+    setBatch({ ...batch, total: batch.total + fresh.length })
+    return null
+  }
+
+  batchStopped = false
+  setBatch({ total: fresh.length, done: 0, failed: [], current: [] })
+  const worker = async () => {
+    for (let shop = batchQueue.shift(); shop && !batchStopped; shop = batchQueue.shift()) {
+      setBatch({ ...batch!, current: [...batch!.current, shop] })
+      await startAnalysis(shop, allListingsPlan(shop), { quiet: true })
+      const status = currentRun(shop.id)?.status
+      setBatch({
+        ...batch!,
+        done: batch!.done + 1,
+        failed: status === "error" ? [...batch!.failed, shop.name] : batch!.failed,
+        current: batch!.current.filter((s) => s.id !== shop!.id),
+      })
+    }
+  }
+  await Promise.all(Array.from({ length: BATCH_CONCURRENCY }, worker))
+  const settled = batch
+  batchQueue = []
+  setBatch(null)
+  return settled
+}
+
+/** Stops the batch: the shops under way stop where they got to, the rest aren't started. */
+export function stopBatch() {
+  batchStopped = true
+  const current = batch?.current ?? []
+  batchQueue = []
+  current.forEach((shop) => stopAnalysis(shop.id))
 }
 
 // --- Reading a run ---

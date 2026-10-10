@@ -21,17 +21,17 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { generate } from "@/hooks/use-generations"
-import { useSavedFolder } from "@/hooks/use-saved"
 import type { Listing } from "@/lib/etsy/types"
 import type { GenerationSource } from "@/lib/generation/types"
 import { cn } from "@/lib/utils"
 
 // Turning a listing's photos into blank mockup scenes: the photo on screen
 // (the default), all of them, or a hand-picked few. They land in a mockup
-// category: the listing's own when it's stolen, else the one used last.
-// Mount it afresh (`key`) for each opening.
+// category (not a Saved folder), the one used last to start with. Mount it
+// afresh (`key`) for each opening.
 
-const LAST_CATEGORY = "steal-mockups:category"
+// Not "steal-mockups:category": that one could hold a Saved folder.
+const LAST_CATEGORY = "steal-mockups:mockup-category"
 
 type Choice = "shown" | "all" | "pick"
 
@@ -48,7 +48,6 @@ export function StealMockupsDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
-  const stolenInto = useSavedFolder(listing.id)
   const photos = listing.images
   const [choice, setChoice] = React.useState<Choice>("shown")
   const [picked, setPicked] = React.useState<ReadonlySet<number>>(() => new Set([photo]))
@@ -57,7 +56,7 @@ export function StealMockupsDialog({
     typeof window === "undefined" ? null : localStorage.getItem(LAST_CATEGORY)
   )
   const [busy, setBusy] = React.useState(false)
-  const category = chosenCategory ?? stolenInto ?? last
+  const category = chosenCategory ?? last
 
   const indices =
     choice === "all"
@@ -211,12 +210,9 @@ export function StealMockupsDialog({
                   }
                 />
                 <DropdownMenuContent align="start" className="w-64 p-0">
-                  <CategoryPicker onPick={setCategory} current={category} />
+                  <CategoryPicker of="mockups" onPick={setCategory} current={category} />
                 </DropdownMenuContent>
               </DropdownMenu>
-              {category && category === stolenInto && !chosenCategory && (
-                <span className="text-xs text-muted-foreground">Where the listing is stolen</span>
-              )}
             </div>
           </div>
 

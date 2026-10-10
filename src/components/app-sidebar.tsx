@@ -5,12 +5,11 @@ import * as React from "react"
 import { nav } from "@/components/nav-config"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
+import { NavBatch } from "@/components/nav-batch"
 import { NavUsage } from "@/components/nav-usage"
-import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -21,11 +20,9 @@ import Link from "next/link"
 
 export function AppSidebar({
   shopName,
-  user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   shopName: string
-  user: { name: string; email: string; avatar?: string }
 }) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -44,12 +41,12 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={nav.main} />
-        <NavUsage className="mt-auto" />
+        <div className="mt-auto flex flex-col">
+          <NavBatch className="pb-0" />
+          <NavUsage />
+        </div>
         <NavSecondary items={nav.secondary} />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={user} />
-      </SidebarFooter>
     </Sidebar>
   )
 }

@@ -2,7 +2,7 @@
 // guide Gemini writes from them once. Generation then paints steals in that
 // look from the guide (and a few of the images), so the style is understood
 // one time, not re-guessed on every poster. Stored as
-// data/styles/<id>/style.json next to copies of its images.
+// the document styles/<id>/style next to copies of its images (files under styles/<id>/).
 
 /** The visual language the moodboard shares, written to be applied to any subject. */
 export type StyleGuide = {
@@ -35,7 +35,10 @@ export type StyleImage = {
   height: number
   /** ISO 8601 */
   addedAt: string
-  /** `<generation>/<file>` it was copied from, so pickers can mark it as added. */
+  /**
+   * `<generation>/<file>` it was copied from, or `listing/<listingId>/<n>` for
+   * the n-th poster of a saved listing's photo, so pickers can mark it as added.
+   */
   from?: string
 }
 
@@ -53,12 +56,19 @@ export type Style = {
   guideImages?: string[]
   /** The guide was changed by hand, so new images don't overwrite it. */
   guideEdited?: boolean
+  /** Saved listings whose posters are still being taken out of their photos, to be added. */
+  incoming?: number
+  /** Why some saved listings added last time never made it onto the board. */
+  importError?: string
   /** ISO 8601 */
   createdAt: string
   updatedAt: string
 }
 
-export type StyleSummary = Pick<Style, "id" | "name" | "guide" | "guideStatus" | "createdAt" | "updatedAt"> & {
+export type StyleSummary = Pick<
+  Style,
+  "id" | "name" | "guide" | "guideStatus" | "incoming" | "createdAt" | "updatedAt"
+> & {
   count: number
   /** Image URLs for the cover, up to four. */
   covers: string[]

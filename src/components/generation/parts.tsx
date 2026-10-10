@@ -343,8 +343,10 @@ export function progress(set: GenerationSet) {
         ? "Emptying the frame"
         : set.extraction?.status !== "done"
           ? "Finding the posters"
-          : set.outputs.some((o) => o.status === "running")
+          : set.outputs.some((o) => o.status === "running" && !o.job)
             ? `Drawing ${made} of ${set.outputs.length}`
+            : set.outputs.some((o) => o.job)
+              ? "In a batch job"
             : set.outputs.some((o) => o.status === "pending")
               ? "Writing the briefs"
               : "Finishing"
@@ -392,6 +394,21 @@ export function outputName(output: Output) {
   return output.styleId ? `Styled · ${CREATIVITY_LABEL[output.creativity]}` : CREATIVITY_LABEL[output.creativity]
 }
 
+/** What the mockups' poster is called when it's this image of a set. */
+export const generationPosterKey = (set: GenerationSet, file: string) => `${set.id}/${file}`
+
+/** Makes an image of a set the design every mockup shows. */
+export async function chooseGenerationPoster(set: GenerationSet, file: string, name: string) {
+  const response = await fetch(generationFileUrl(set.id, file))
+  if (!response.ok) throw new Error(response.statusText)
+  const blob = await response.blob()
+  const { choosePoster } = await import("@/lib/mockups/poster-store")
+  await choosePoster(
+    new File([blob], `${fileBase(set)}-${slug(name)}.jpg`, { type: blob.type }),
+    generationPosterKey(set, file)
+  )
+}
+
 /** Makes an image the design every mockup shows, as if picked on the Mockups page. */
 export async function makeMockupPoster(
   set: GenerationSet,
@@ -400,11 +417,7 @@ export async function makeMockupPoster(
   router: ReturnType<typeof useRouter>
 ) {
   try {
-    const response = await fetch(generationFileUrl(set.id, file))
-    if (!response.ok) throw new Error(response.statusText)
-    const blob = await response.blob()
-    const { choosePoster } = await import("@/lib/mockups/poster-store")
-    await choosePoster(new File([blob], `${fileBase(set)}-${slug(name)}.jpg`, { type: blob.type }))
+    await chooseGenerationPoster(set, file, name)
     toast.success("The mockups now show this poster", {
       action: {
         label: "Open mockups",
@@ -451,6 +464,33 @@ export function timeAgo(iso: string) {
     if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit)
   }
   return "just now"
+}
+
+/** A span of time in one or two short units: "40 s", "12 min", "1 h 5 min". */
+export function duration(ms: number) {
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 1) return `${Math.max(1, Math.round(ms / 1000))} s`
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`
+}
+
+/** The set's newest batch job, in words: how many images, and how long it has taken (or took). */
+export function batchSummary(set: GenerationSet) {
+  const job = set.jobs?.at(-1)
+  if (!job) return null
+  const running = job.status === "running"
+  const took = (job.finishedAt ? Date.parse(job.finishedAt) : Date.now()) - Date.parse(job.submittedAt)
+  const n = job.outputs.length
+  const images = `${n} ${n === 1 ? "image" : "images"}`
+  return {
+    running,
+    failed: job.status === "error",
+    text: running ? `Batch · ${images} · ${duration(took)} so far` : `Batch · ${images} in ${duration(took)}`,
+    title: running
+      ? `Sent to Vertex ${new Date(job.submittedAt).toLocaleString()}; checked every 30 s`
+      : `Sent ${new Date(job.submittedAt).toLocaleString()}, back ${new Date(job.finishedAt!).toLocaleString()}${job.error ? ` — ${job.error}` : ""}`,
+  }
 }
 
 /** Done outputs nobody has decided on yet. */

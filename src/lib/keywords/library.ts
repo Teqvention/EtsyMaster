@@ -1,5 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import path from "node:path"
+import { readDoc, updateDoc } from "@/lib/db/documents"
+import { getStoredAnalysis } from "@/lib/shops/analysis-store"
 
 import type {
   KeywordInsight,
@@ -14,60 +14,48 @@ import type {
 
 export type { KeywordInsight } from "./types"
 
-// The keyword library on disk (data/keywords/library.json) and everything
-// read out of it: tag and title-phrase statistics for the Keywords page, and
-// the keywords relevant to a listing for the upload pipeline. Statistics are
-// worked out once per change of the library and kept in memory.
+// The keyword library (the document "keywords/library") and everything read
+// out of it: tag and title-phrase statistics for the Keywords page, and the
+// keywords relevant to a listing for the upload pipeline. Statistics are
+// worked out once per version of the library and kept in memory.
 
-const ROOT = path.join(process.cwd(), "data", "keywords")
-const FILE = path.join(ROOT, "library.json")
+const FILE = "keywords/library"
 
 /** Top sellers: the best fifth of a shop's listings by sales per month. */
 const TOP_SHARE = 0.2
+
+/** Listings first published within this count as new, for a keyword's trend. */
+const RECENT_MS = 365 * 24 * 60 * 60 * 1000
 
 type Library = { version: 1; shops: LibraryShop[]; analysis: LibraryAnalysis | null }
 
 type Stats = { tags: KeywordInsight[]; phrases: KeywordInsight[]; averageSalesPerMonth: number }
 
 type Store = {
-  library: Library
-  stats: Stats | null
-  write: Promise<void>
+  /** The statistics, and the library they were worked out from. */
+  stats: { of: Library; stats: Stats } | null
+  /** Listing dates filled in from the shops' stored analyses, once per start. */
+  dated?: Promise<void>
 }
 
 // On globalThis, so every route (and a dev reload) shares the one copy.
-const global = globalThis as typeof globalThis & { __keywordLibrary?: Promise<Store> }
+const global = globalThis as typeof globalThis & { __keywordLibrary?: Store }
+const memo = (global.__keywordLibrary ??= { stats: null })
 
-function store() {
-  global.__keywordLibrary ??= load()
-  return global.__keywordLibrary
+const EMPTY: Library = { version: 1, shops: [], analysis: null }
+
+/** The library as it is now. Shared: never change what this answers. */
+async function readLibrary(): Promise<Library> {
+  const saved = await readDoc<Library | null>(FILE, null)
+  return Array.isArray(saved?.shops) ? saved : EMPTY
 }
 
-async function load(): Promise<Store> {
-  let library: Library = { version: 1, shops: [], analysis: null }
-  try {
-    const parsed = JSON.parse(await readFile(FILE, "utf8")) as Library
-    if (Array.isArray(parsed.shops)) library = { version: 1, shops: parsed.shops, analysis: parsed.analysis ?? null }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-  }
-  return { library, stats: null, write: Promise.resolve() }
-}
-
-/** Applies `change` and writes the library; changes queue one after another. */
-async function update(change: (library: Library) => Library) {
-  const current = await store()
-  const run = current.write.catch(() => {}).then(async () => {
-    current.library = change(current.library)
-    current.stats = null
-    await mkdir(ROOT, { recursive: true })
-    const temporary = `${FILE}.${process.pid}-${Date.now()}.tmp`
-    await writeFile(temporary, JSON.stringify(current.library))
-    await rename(temporary, FILE)
-  })
-  current.write = run
-  await run
-  return current.library
+/** Applies `change` and writes the library, after every other change on any server. */
+function update(change: (library: Library) => Library) {
+  return updateDoc<Library | null>(FILE, null, (saved) => {
+    const library = Array.isArray(saved?.shops) ? saved : EMPTY
+    return change({ ...library, analysis: library.analysis ?? null })
+  }) as Promise<Library>
 }
 
 // --- Shops ---
@@ -103,57 +91,158 @@ export async function removeShop(shopId: number) {
 
 /** When each shop in the library was last updated, for the shop page's button. */
 export async function libraryMembership(shopId: number) {
-  const shop = (await store()).library.shops.find((s) => s.id === shopId)
+  const shop = (await readLibrary()).shops.find((s) => s.id === shopId)
   return shop ? { updatedAt: shop.updatedAt, listings: shop.listings.length } : null
 }
 
 // --- Statistics ---
 
 async function stats(): Promise<Stats> {
-  const current = await store()
-  current.stats ??= compute(current.library.shops)
-  return current.stats
+  // Worked out afresh once the dates are in, also when a dev reload kept
+  // statistics an older version of this file made.
+  memo.dated ??= fillDates().finally(() => {
+    memo.stats = null
+  })
+  await memo.dated
+  const library = await readLibrary()
+  if (memo.stats?.of !== library) memo.stats = { of: library, stats: compute(library.shops) }
+  return memo.stats.stats
+}
+
+/**
+ * Listings added before their first-published date was kept get it from the
+ * shop's stored analysis (shops/<id>), which has it for every listing.
+ */
+async function fillDates() {
+  try {
+    const library = await readLibrary()
+    const dates = new Map<number, string>()
+    for (const shop of library.shops) {
+      if (shop.listings.every((l) => l.createdAt)) continue
+      const analysis = await getStoredAnalysis(shop.id)
+      for (const l of analysis?.listings ?? []) if (l.createdAt) dates.set(l.id, l.createdAt)
+    }
+    if (!dates.size) return
+    await update((current) => ({
+      ...current,
+      shops: current.shops.map((shop) => ({
+        ...shop,
+        listings: shop.listings.map((l) => (l.createdAt || !dates.has(l.id) ? l : { ...l, createdAt: dates.get(l.id) })),
+      })),
+    }))
+  } catch (error) {
+    console.warn("Keyword library: no listing dates", error)
+  }
 }
 
 function compute(shops: LibraryShop[]): Stats {
-  type Tally = { keyword: string; listings: number; shops: Set<number>; sales: number; top: number }
+  type Tally = {
+    keyword: string
+    listings: number
+    shops: Set<number>
+    sales: number
+    /** Sales, each listing's weighed by how established its shop is. */
+    weighted: number
+    /** Each listing's sales squared, summed: tells one hit from many sellers. */
+    squares: number
+    top: number
+    /** Each listing's sales against its shop's average, summed. */
+    relative: number
+    /** Listings first published in the last year, and the top sellers among them. */
+    recent: number
+    recentTop: number
+  }
+  type Use = { shopId: number; weight: number; perMonth: number; relative: number; recent: boolean; top: boolean }
   const tags = new Map<string, Tally>()
   const phrases = new Map<string, Tally>()
   let listings = 0
   let sales = 0
+  let top = 0
+  let recent = 0
+  let recentTop = 0
+  const now = Date.now()
 
-  const count = (map: Map<string, Tally>, keyword: string, shopId: number, perMonth: number, top: boolean) => {
-    const tally = map.get(keyword) ?? { keyword, listings: 0, shops: new Set<number>(), sales: 0, top: 0 }
+  const count = (map: Map<string, Tally>, keyword: string, use: Use) => {
+    const tally = map.get(keyword) ?? {
+      keyword,
+      listings: 0,
+      shops: new Set<number>(),
+      sales: 0,
+      weighted: 0,
+      squares: 0,
+      top: 0,
+      relative: 0,
+      recent: 0,
+      recentTop: 0,
+    }
     tally.listings++
-    tally.shops.add(shopId)
-    tally.sales += perMonth
-    if (top) tally.top++
+    tally.shops.add(use.shopId)
+    tally.sales += use.perMonth
+    tally.weighted += use.weight * use.perMonth
+    tally.squares += use.perMonth ** 2
+    tally.relative += use.relative
+    if (use.recent) tally.recent++
+    if (use.top) tally.top++
+    if (use.recent && use.top) tally.recentTop++
     map.set(keyword, tally)
   }
 
   for (const shop of shops) {
+    const average = shop.listings.reduce((n, l) => n + l.salesPerMonth, 0) / (shop.listings.length || 1)
+    // A shop with a long record counts fully, a new one's estimates for less.
+    const weight = 0.6 + 0.4 * Math.min(1, Math.log10(1 + shop.totalSales) / 5)
     for (const listing of shop.listings) {
       listings++
       sales += listing.salesPerMonth
+      const use: Use = {
+        shopId: shop.id,
+        weight,
+        perMonth: listing.salesPerMonth,
+        relative: average > 0 ? listing.salesPerMonth / average : 1,
+        recent: !!listing.createdAt && now - Date.parse(listing.createdAt) < RECENT_MS,
+        top: listing.top,
+      }
+      if (listing.top) top++
+      if (use.recent) recent++
+      if (use.recent && listing.top) recentTop++
       for (const tag of new Set(listing.tags.map(normalise))) {
-        if (tag) count(tags, tag, shop.id, listing.salesPerMonth, listing.top)
+        if (tag) count(tags, tag, use)
       }
       for (const phrase of titlePhrases(listing.title)) {
-        count(phrases, phrase, shop.id, listing.salesPerMonth, listing.top)
+        count(phrases, phrase, use)
       }
     }
   }
+  // How often new and older listings make it into their shop's top sellers:
+  // a keyword's trend compares its own new and older ones against these.
+  const newer = recent ? recentTop / recent : 0
+  const older = listings > recent ? (top - recentTop) / (listings - recent) : 0
 
   const finish = (map: Map<string, Tally>, kind: KeywordInsight["kind"]): KeywordInsight[] => {
     const rows = [...map.values()].map((t) => {
       const topShare = t.top / t.listings
+      // How many listings carry its sales, as if evenly: one hit is one.
+      const spread = t.squares > 0 ? t.sales ** 2 / t.squares : 0
+      // Evened out towards 1 (its shops' average) while few listings use it.
+      const lift = (t.relative + 10) / (t.listings + 10)
+      // Evened out towards 1 too; 1 without listings of both ages.
+      const trend =
+        newer > 0 && older > 0
+          ? (t.recentTop + 5 * newer) / ((t.recent + 5) * newer) /
+            ((t.top - t.recentTop + 5 * older) / ((t.listings - t.recent + 5) * older))
+          : 1
       // Sales carried by the keyword, more for keywords that keep showing up
-      // on top sellers and across shops; one listing alone is weak evidence.
+      // on top sellers, across shops and in established ones; less when one
+      // hit carries it all. Nudged up when its listings outsell their shop
+      // and when its new ones do better than its older ones, down when the
+      // opposite.
       const raw =
-        Math.log1p(t.sales) *
+        Math.log1p(t.weighted) *
         (0.6 + 0.8 * topShare) *
         (1 + 0.25 * Math.log(t.shops.size)) *
-        (t.listings / (t.listings + 1))
+        (spread / (spread + 1.5)) *
+        clamp(lift, 0.5, 3) ** 0.35 *
+        clamp(trend, 0.85, 1.2)
       return {
         keyword: t.keyword,
         kind,
@@ -163,6 +252,8 @@ function compute(shops: LibraryShop[]): Stats {
         avgSalesPerMonth: round(t.sales / t.listings),
         topShare: round(topShare, 3),
         score: raw,
+        lift: round(lift),
+        trend: round(trend),
       }
     })
     const best = Math.max(...rows.map((r) => r.score), 0) || 1
@@ -180,7 +271,7 @@ function compute(shops: LibraryShop[]): Stats {
 }
 
 export async function libraryStats(): Promise<LibraryStats> {
-  const { library } = await store()
+  const library = await readLibrary()
   const { tags, phrases } = await stats()
   return {
     shops: library.shops.length,
@@ -191,7 +282,7 @@ export async function libraryStats(): Promise<LibraryStats> {
 
 /** Everything the Keywords page shows; the long tails are cut. */
 export async function overview(): Promise<LibraryOverview> {
-  const { library } = await store()
+  const library = await readLibrary()
   const { tags, phrases, averageSalesPerMonth } = await stats()
   const shops: LibraryShopSummary[] = library.shops.map(({ listings, ...shop }) => ({
     ...shop,
@@ -211,7 +302,7 @@ export async function overview(): Promise<LibraryOverview> {
 
 /** The listings using a keyword, best selling first. */
 export async function keywordListings(keyword: string, kind: KeywordInsight["kind"], limit = 60) {
-  const { library } = await store()
+  const library = await readLibrary()
   const needle = normalise(keyword)
   const found: KeywordListing[] = []
   for (const shop of library.shops) {
@@ -240,27 +331,40 @@ export async function keywordListings(keyword: string, kind: KeywordInsight["kin
 
 /**
  * Keywords from the library that fit a listing (by the words they share with
- * its title and tags), strongest first. Topped up with the library's best
- * keywords overall when few fit, so there is always something to learn from.
+ * its title and tags), strongest first. Those about what the poster itself
+ * shows (`focus`) count for more; those with an `exclude` word (the source's
+ * subject, when ours has another) don't fit at all. Topped up with the
+ * library's best keywords overall when few fit, so there is always something
+ * to learn from.
  */
 export async function keywordContext(
-  query: { title: string; tags: string[] },
+  query: { title: string; tags: string[]; focus?: string; exclude?: string[] },
   limit = 40
 ): Promise<KeywordInsight[]> {
   const { tags, phrases } = await stats()
-  const words = new Set([...wordsOf(query.title), ...query.tags.flatMap(wordsOf)])
+  const focus = new Set(wordsOf(query.focus ?? "").filter((w) => !GENERIC.has(w)))
+  const exclude = new Set((query.exclude ?? []).flatMap(wordsOf))
+  const words = new Set([...wordsOf(query.title), ...query.tags.flatMap(wordsOf), ...focus])
   const exact = new Set(query.tags.map(normalise))
-  if (words.size === 0 && exact.size === 0) return tags.slice(0, limit)
+  const excluded = (own: string[]) => own.some((w) => exclude.has(w))
+  if (words.size === 0 && exact.size === 0) return tags.filter((t) => !excluded(wordsOf(t.keyword))).slice(0, limit)
 
   const relevant: { insight: KeywordInsight; weight: number }[] = []
   for (const insight of [...tags, ...phrases]) {
     const own = wordsOf(insight.keyword)
-    if (own.length === 0) continue
+    if (own.length === 0 || excluded(own)) continue
     const shared = own.filter((w) => words.has(w)).length / own.length
     const relevance = exact.has(insight.keyword) ? 1 : shared
-    // At least half of a keyword's words have to fit the listing.
+    // At least half of a keyword's words have to fit the listing; one whose
+    // telling words don't all fit ("funny cat" on a pig) counts half, one
+    // with no telling word at all ("wall decor") little more.
     if (relevance < 0.5) continue
-    relevant.push({ insight, weight: insight.score * (0.4 + 0.6 * relevance) })
+    const telling = own.filter((w) => !GENERIC.has(w))
+    const whole = exact.has(insight.keyword) || telling.every((w) => words.has(w))
+    const shown = telling.length ? telling.filter((w) => focus.has(w)).length / telling.length : 0
+    const weight =
+      insight.score * (0.4 + 0.6 * relevance) * (whole ? 1 : 0.5) * (telling.length ? 1 : 0.6) * (1 + shown)
+    relevant.push({ insight, weight })
   }
   const picked = relevant
     .sort((a, b) => b.weight - a.weight)
@@ -271,7 +375,7 @@ export async function keywordContext(
     const have = new Set(picked.map((p) => `${p.kind}:${p.keyword}`))
     for (const tag of tags) {
       if (picked.length >= limit) break
-      if (!have.has(`tag:${tag.keyword}`) && tag.shops > 1) picked.push(tag)
+      if (!have.has(`tag:${tag.keyword}`) && tag.shops > 1 && !excluded(wordsOf(tag.keyword))) picked.push(tag)
     }
   }
   return picked
@@ -279,7 +383,7 @@ export async function keywordContext(
 
 /** The latest AI read of the library as plain text, if there is one. */
 export async function libraryInsights(): Promise<string | null> {
-  const { analysis } = (await store()).library
+  const { analysis } = await readLibrary()
   if (!analysis) return null
   const a = analysis.insights
   const lines = [
@@ -316,7 +420,7 @@ export async function saveAnalysis(insights: LibraryAnalysis["insights"]) {
 
 /** What the AI analysis is made from: the strongest keywords and titles, and some that don't sell. */
 export async function analysisDigest() {
-  const { library } = await store()
+  const library = await readLibrary()
   const { tags, phrases, averageSalesPerMonth } = await stats()
   const all = library.shops.flatMap((s) => s.listings.map((l) => ({ ...l, shop: s.name })))
   const best = [...all].sort((a, b) => b.salesPerMonth - a.salesPerMonth)
@@ -360,21 +464,27 @@ export function titlePhrases(title: string) {
   const parts = title
     .split(/\s*[|,•·–—;:]\s*|\s+-\s+|\s+\/\s+/)
     .map(normalise)
-    .filter((p) => p.length >= 3 && p.length <= 60 && /\p{L}/u.test(p))
+    // A word to it, not a size list like "a1/a2/a3/a4".
+    .filter((p) => p.length >= 3 && p.length <= 60 && /\p{L}{3}/u.test(p))
   return [...new Set(parts)]
 }
 
 const STOPWORDS = new Set(["and", "the", "for", "with", "you", "your", "from", "this", "that", "our"])
 
-/** Content words, lightly singularised so "posters" meets "poster". */
+/** Words most wall art keywords have: they say nothing about what a poster shows. */
+const GENERIC = new Set(["art", "print", "poster", "wall", "decor", "artwork", "gift", "home", "printable", "picture"])
+
+/** Content words, lightly singularised so "posters" meets "poster" and "pigs" "pig". */
 function wordsOf(text: string) {
   return normalise(text)
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
-    .map((w) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
 }
 
 function round(n: number, digits = 2) {
   const f = 10 ** digits
   return Math.round(n * f) / f
 }
+
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max)

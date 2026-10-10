@@ -3,7 +3,7 @@
 // each of a set of N), reads what each one is, and then draws new posters
 // from them in batches — variants at a chosen creativity (optionally in a
 // saved style) and new ideas on the same selling concept. A mockup set turns
-// the photo into a blank mockup scene. Stored as data/generations/<id>/set.json
+// the photo into a blank mockup scene. Stored as the document generations/<id>/set
 // next to its images.
 
 export type GenerationKind = "poster" | "mockup"
@@ -92,6 +92,8 @@ export type Output = Asset & {
   from?: string
   /** Approved outputs this idea takes inspiration from. */
   inspiration?: string[]
+  /** The batch job painting it, while it does (see `PaintJob`), or `SENDING` until that job starts. */
+  job?: string
   review: Review | null
   /** ISO 8601 */
   reviewedAt?: string
@@ -116,7 +118,37 @@ export type GenerateOptions = {
   from?: string
   /** New ideas inspired by these approved outputs (ids), on top of the reference. */
   inspiration?: string[]
+  /** "batch": painted in a Vertex batch job — half the price, back in minutes to hours. */
+  delivery?: Delivery
 }
+
+export type Delivery = "now" | "batch"
+
+/**
+ * A Vertex batch job painting some of a set's outputs. One job can paint for
+ * many sets: each lists its own outputs under the same name.
+ */
+export type PaintJob = {
+  /** Vertex's resource name. */
+  name: string
+  outputs: string[]
+  /** ISO 8601 */
+  submittedAt: string
+  finishedAt?: string
+  status: "running" | "done" | "error"
+  error?: string
+  /** Images the whole job has painted so far; Vertex hands them over when it ends. */
+  ready?: number
+  /** ISO 8601: when `ready` last went up. */
+  movedAt?: string
+  /** Requests in the whole job. */
+  size?: number
+  /** Being ended early, so what's painted comes in and the rest goes out again. */
+  harvest?: boolean
+}
+
+/** An output's `job` while it waits, with others, for the batch job they'll go out in. */
+export const SENDING = "sending"
 
 export const MAX_VARIANTS = 20
 export const MAX_IDEAS = 50
@@ -168,6 +200,12 @@ export type GenerationSet = {
   extraction?: Asset
   batches: Batch[]
   outputs: Output[]
+  /** Batch jobs painting its outputs, oldest first. */
+  jobs?: PaintJob[]
+  /** Asked to stop: whatever isn't painting yet won't be (see `stopWaiting`). */
+  stopping?: boolean
+  /** ISO 8601 — set aside as done (out of Everything and To review); cleared when more images are made. */
+  doneAt?: string
   /** Mockup sets: the blank mockup and its scene, for the editor. */
   mockup?: Asset
   sceneId?: string

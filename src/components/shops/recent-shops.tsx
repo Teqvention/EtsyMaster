@@ -3,22 +3,46 @@
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import * as React from "react"
-import { CheckIcon, ListChecksIcon, StarIcon, StoreIcon, TagIcon, TagsIcon, XIcon } from "lucide-react"
+import {
+  ArrowDownIcon,
+  ArrowDownWideNarrowIcon,
+  ArrowUpIcon,
+  ArrowUpNarrowWideIcon,
+  CheckIcon,
+  DownloadIcon,
+  ListChecksIcon,
+  LoaderCircleIcon,
+  SearchIcon,
+  SquareIcon,
+  StarIcon,
+  StoreIcon,
+  TagIcon,
+  TagsIcon,
+  XIcon,
+} from "lucide-react"
 
 import { SelectionBar } from "@/components/selection"
+import { getAllListings } from "@/components/shops/import-shops"
 import { LabelBadges, LabelDialog } from "@/components/shops/shop-labels"
 import { Button } from "@/components/ui/button"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { allListingsPlan, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
 import { forgetShop, hasLabel, useShopLabels, type ShopVisit } from "@/hooks/use-shop-history"
+import { planCost } from "@/lib/etsy/analysis"
+import type { ListingShop } from "@/lib/etsy/types"
 import { useSelection } from "@/hooks/use-selection"
 import { formatCompact, formatCompactCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
 import { timeAgo } from "@/lib/shops/time-ago"
 import { cn } from "@/lib/utils"
 
 // Shops opened before, most recent first: one row each, with what the last
-// analysis found, so the list doubles as a quick comparison. Shops can be
-// filed under labels: chips above the list filter by them (`?label=`), and
-// Select picks shops to label in one go.
+// analysis found, so the list doubles as a quick comparison. The column heads
+// (or the sort menu, where they're hidden) reorder it, and the bar above
+// narrows it by name, country, analysis and sales. Shops can be filed under
+// labels: the chips filter by them, and Select picks shops to label in one go.
+// All but the search live in the URL (`?label=&country=&status=&sales=&sort=`).
 
 const COLUMNS =
   "grid-cols-[minmax(0,1fr)_auto] @2xl:grid-cols-[minmax(0,1fr)_7rem_6rem_5rem_4.5rem] @4xl:grid-cols-[minmax(0,1fr)_5.5rem_7rem_6rem_5rem_4.5rem]"
@@ -33,8 +57,29 @@ export function RecentShops({
   onPick: (shop: string) => void
 }) {
   const now = useNow()
-  const [filter, setFilter] = useLabelFilter()
-  const shown = React.useMemo(() => visits.filter(filter.matches), [visits, filter])
+  const [searchParams, setParams] = useParams()
+  const [search, setSearch] = React.useState("")
+  const filter = React.useMemo(() => labelFilter(searchParams.get("label")), [searchParams])
+  const filters = React.useMemo(() => readFilters(searchParams), [searchParams])
+  const sort = React.useMemo(() => parseSort(searchParams.get("sort")), [searchParams])
+  const shown = React.useMemo(() => {
+    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    return sortVisits(visits.filter((v) => filter.matches(v) && matchesFilters(v, filters, words)), sort)
+  }, [visits, filter, filters, search, sort])
+  const filtering = filter.label !== null || search.trim() !== "" || hasFilters(filters)
+
+  function clearFilters() {
+    setSearch("")
+    setParams({ label: null, ...NO_FILTER_PARAMS })
+  }
+
+  function toggleSort(key: SortKey) {
+    setSort(sort.key === key ? { key, desc: !sort.desc } : { key, desc: SORT_BY[key].desc })
+  }
+
+  function setSort(next: Sort) {
+    setParams({ sort: sortParam(next) })
+  }
   const keys = React.useMemo(() => shown.map((v) => v.shop.id), [shown])
   const selection = useSelection(keys)
   const [picking, setPicking] = React.useState(false)
@@ -63,7 +108,11 @@ export function RecentShops({
     <section aria-labelledby="recent-shops" className="@container flex flex-col gap-2">
       <div className="flex min-h-7 items-center gap-2">
         <h2 id="recent-shops" className="mr-auto text-sm font-medium">
-          Recent shops <span className="text-muted-foreground tabular-nums">{visits.length}</span>
+          Recent shops{" "}
+          <span className="text-muted-foreground tabular-nums" aria-live="polite">
+            {shown.length !== visits.length && `${formatNumber(shown.length)} of `}
+            {formatNumber(visits.length)}
+          </span>
         </h2>
         {selecting ? (
           <>
@@ -81,30 +130,47 @@ export function RecentShops({
             </Button>
           </>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setPicking(true)} title="Pick shops to label">
-            <ListChecksIcon />
-            Select
-          </Button>
+          <>
+            <GetAllListingsButton shops={shown.map((v) => v.shop)} />
+            <Button variant="outline" size="sm" onClick={() => setPicking(true)} title="Pick shops to label">
+              <ListChecksIcon />
+              Select
+            </Button>
+          </>
         )}
       </div>
 
-      <LabelFilter visits={visits} filter={filter} onChange={setFilter} />
+      <FilterBar
+        visits={visits}
+        search={search}
+        onSearch={setSearch}
+        filters={filters}
+        onFilter={(change) => setParams(filterParams({ ...filters, ...change }))}
+        sort={sort}
+        onSort={setSort}
+        onClear={filtering ? clearFilters : undefined}
+      />
+
+      <LabelFilter visits={visits} filter={filter} onChange={(label) => setParams({ label })} />
 
       {shown.length === 0 ? (
-        <p className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-          No shops {filter.label === "" ? "without a label" : `labelled “${filter.label}”`}.
-        </p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-3 py-8 text-center">
+          <p className="text-sm text-muted-foreground">No shop matches these filters.</p>
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear the filters
+          </Button>
+        </div>
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <div
             className={`hidden items-center gap-x-4 border-b bg-muted/40 py-1.5 pr-11 pl-3 text-[11px] text-muted-foreground uppercase @2xl:grid ${COLUMNS}`}
           >
-            <span>Shop</span>
-            <span className="hidden text-right @4xl:block">Active</span>
-            <span className="text-right">Analysed</span>
-            <span className="text-right">Revenue / mo</span>
-            <span className="text-right">Sales / mo</span>
-            <span className="text-right">Viewed</span>
+            <SortHead column="name" label="Shop" sort={sort} onSort={toggleSort} />
+            <SortHead column="active" label="Active" sort={sort} onSort={toggleSort} end className="hidden @4xl:flex" />
+            <SortHead column="analysed" label="Analysed" sort={sort} onSort={toggleSort} end />
+            <SortHead column="revenue" label="Revenue / mo" sort={sort} onSort={toggleSort} end />
+            <SortHead column="sales" label="Sales / mo" sort={sort} onSort={toggleSort} end />
+            <SortHead column="viewed" label="Viewed" sort={sort} onSort={toggleSort} end />
           </div>
           <ul className="divide-y">
             {shown.map((visit) => (
@@ -132,6 +198,16 @@ export function RecentShops({
         onSelectAll={selection.selectAll}
         onClear={selection.clear}
       >
+        <Button
+          variant="outline"
+          size="sm"
+          className="active:scale-[0.97]"
+          onClick={() => getAllListings(picked)}
+          title={`Every active listing of the picked shops, ${allListingsCost(picked)}`}
+        >
+          <DownloadIcon />
+          Get all listings
+        </Button>
         <Button size="sm" className="active:scale-[0.97]" onClick={() => setLabelling(true)}>
           <TagsIcon />
           Label…
@@ -139,6 +215,393 @@ export function RecentShops({
       </SelectionBar>
       <LabelDialog shops={picked} open={labelling && picked.length > 0} onOpenChange={setLabelling} />
     </section>
+  )
+}
+
+// --- Get all listings ---
+
+function allListingsCost(shops: ListingShop[]) {
+  const requests = shops.reduce((total, shop) => total + planCost(allListingsPlan(shop), shop), 0)
+  return `about ${formatNumber(requests)} Etsy requests`
+}
+
+// Every active listing of the shops listed, two shops at a time over both
+// analysis accounts; while that runs, how far it got and a way to stop it.
+function GetAllListingsButton({ shops }: { shops: ListingShop[] }) {
+  const batch = useBatch()
+  if (batch) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={stopBatch}
+        title={`Fetching ${batch.current.map((s) => s.name).join(", ")} · click to stop`}
+      >
+        <LoaderCircleIcon className="animate-spin" />
+        <span className="tabular-nums">
+          {formatNumber(batch.done)} / {formatNumber(batch.total)}
+        </span>
+        <SquareIcon className="fill-current" />
+      </Button>
+    )
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground"
+      disabled={shops.length === 0}
+      onClick={() => getAllListings(shops)}
+      title={`Every active listing of the ${formatNumber(shops.length)} shops listed, ${allListingsCost(shops)}`}
+    >
+      <DownloadIcon />
+      Get all listings
+    </Button>
+  )
+}
+
+/** Search params kept in the address, so a reload or link lands on the same view. */
+function useParams() {
+  const searchParams = useSearchParams()
+  const set = React.useCallback((changes: Record<string, string | null>) => {
+    const params = new URLSearchParams(window.location.search)
+    for (const [name, value] of Object.entries(changes)) {
+      if (value === null) params.delete(name)
+      else params.set(name, value)
+    }
+    const query = params.toString()
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)
+  }, [])
+  return [searchParams, set] as const
+}
+
+// --- Sort ---
+
+type SortKey = "viewed" | "sales" | "revenue" | "sold" | "rating" | "active" | "analysed" | "name"
+type Sort = { key: SortKey; desc: boolean }
+
+// What each order goes by, and which way it runs first: biggest numbers on
+// top, names A–Z. Shops without the number (not analysed yet, sales hidden,
+// no reviews) go last whichever way it runs.
+const SORT_BY: Record<SortKey, { label: string; desc: boolean; value: (v: ShopVisit) => number | string | null }> = {
+  viewed: { label: "Recently viewed", desc: true, value: (v) => v.viewedAt },
+  sales: { label: "Sales / mo", desc: true, value: (v) => v.analysis?.salesPerMonth ?? null },
+  revenue: { label: "Revenue / mo", desc: true, value: (v) => v.analysis?.revenuePerMonthCents ?? null },
+  sold: { label: "Lifetime sales", desc: true, value: (v) => v.shop.totalSales || null },
+  rating: { label: "Rating", desc: true, value: (v) => (v.shop.reviewCount > 0 ? v.shop.reviewAverage : null) },
+  active: { label: "Active listings", desc: true, value: (v) => v.shop.activeListings },
+  analysed: {
+    label: "Share analysed",
+    desc: true,
+    value: (v) => (v.analysis ? v.analysis.listings / Math.max(v.shop.activeListings, 1) : null),
+  },
+  name: { label: "Name", desc: false, value: (v) => v.shop.name.toLowerCase() },
+}
+const SORT_KEYS = Object.keys(SORT_BY) as SortKey[]
+const DEFAULT_SORT: Sort = { key: "viewed", desc: true }
+
+// `?sort=sales` runs the key's own way, `?sort=sales.asc` the other.
+function parseSort(param: string | null): Sort {
+  const [key, dir] = (param ?? "").split(".")
+  if (!Object.hasOwn(SORT_BY, key)) return DEFAULT_SORT
+  const k = key as SortKey
+  return { key: k, desc: dir === "asc" ? false : dir === "desc" ? true : SORT_BY[k].desc }
+}
+
+function sortParam(sort: Sort) {
+  if (sort.key === DEFAULT_SORT.key && sort.desc === DEFAULT_SORT.desc) return null
+  return sort.desc === SORT_BY[sort.key].desc ? sort.key : `${sort.key}.${sort.desc ? "desc" : "asc"}`
+}
+
+function sortVisits(visits: ShopVisit[], sort: Sort) {
+  const value = SORT_BY[sort.key].value
+  const dir = sort.desc ? -1 : 1
+  return visits.toSorted((a, b) => {
+    const x = value(a)
+    const y = value(b)
+    const by =
+      x === null || y === null
+        ? Number(x === null) - Number(y === null)
+        : dir * (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number))
+    return by || b.viewedAt.localeCompare(a.viewedAt)
+  })
+}
+
+function orderLabel(sort: Sort) {
+  if (sort.key === "name") return sort.desc ? "Z–A" : "A–Z"
+  if (sort.key === "viewed") return sort.desc ? "Newest first" : "Oldest first"
+  return sort.desc ? "Highest first" : "Lowest first"
+}
+
+// A column head that sorts by its column; again turns the order round.
+function SortHead({
+  column,
+  label,
+  sort,
+  onSort,
+  end,
+  className,
+}: {
+  column: SortKey
+  label: string
+  sort: Sort
+  onSort: (key: SortKey) => void
+  /** Right-aligned column: the arrow goes before the label so the text lines up with the numbers. */
+  end?: boolean
+  className?: string
+}) {
+  const active = sort.key === column
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      title={active ? `${orderLabel(sort)} · click to reverse` : `Sort by ${SORT_BY[column].label.toLowerCase()}`}
+      className={cn(
+        "flex items-center gap-0.5 rounded uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [@media(hover:hover)]:hover:text-foreground",
+        end && "flex-row-reverse justify-self-end",
+        active && "text-foreground",
+        className
+      )}
+    >
+      {label}
+      <span className="grid size-3 place-items-center">
+        {active && (sort.desc ? <ArrowDownIcon className="size-3" /> : <ArrowUpIcon className="size-3" />)}
+      </span>
+      {active && <span className="sr-only">, {orderLabel(sort)}</span>}
+    </button>
+  )
+}
+
+// The same orders as the column heads and a few more, for when the heads are
+// hidden on a narrow page or the number isn't a column (lifetime sales, rating).
+function SortMenu({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }) {
+  const items = SORT_KEYS.map((key) => ({ value: key, label: SORT_BY[key].label }))
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        value={sort.key}
+        items={items}
+        onValueChange={(key) => key && onSort({ key: key as SortKey, desc: SORT_BY[key as SortKey].desc })}
+      >
+        <SelectTrigger size="sm" aria-label="Sort by">
+          <span className="text-muted-foreground">Sort</span>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        onClick={() => onSort({ ...sort, desc: !sort.desc })}
+        aria-label={`${orderLabel(sort)}, reverse the order`}
+        title={`${orderLabel(sort)} · click to reverse`}
+      >
+        {sort.desc ? <ArrowDownWideNarrowIcon /> : <ArrowUpNarrowWideIcon />}
+      </Button>
+    </div>
+  )
+}
+
+// --- Filters ---
+
+type Status = "all" | "analysed" | "partial" | "none"
+type Filters = { country: string; status: Status; sales: number }
+
+const NO_FILTERS: Filters = { country: "all", status: "all", sales: 0 }
+
+const STATUSES: Record<Status, { label: string; matches: (v: ShopVisit) => boolean }> = {
+  all: { label: "Any analysis", matches: () => true },
+  analysed: { label: "Analysed", matches: (v) => !!v.analysis },
+  // Stopped part way, or more listings than it covered: the ones "Get all listings" would add to.
+  partial: {
+    label: "Partly analysed",
+    matches: (v) => !!v.analysis && (!v.analysis.complete || v.analysis.listings < v.shop.activeListings),
+  },
+  none: { label: "Not analysed", matches: (v) => !v.analysis },
+}
+const STATUS_KEYS = Object.keys(STATUSES) as Status[]
+
+/** Sales a month a shop has to reach to stay listed. */
+const MIN_SALES = [10, 50, 100, 250, 500]
+
+function readFilters(params: URLSearchParams): Filters {
+  const status = params.get("status") ?? ""
+  const sales = Number(params.get("sales"))
+  return {
+    country: params.get("country") || "all",
+    status: Object.hasOwn(STATUSES, status) ? (status as Status) : "all",
+    sales: Number.isFinite(sales) && sales > 0 ? sales : 0,
+  }
+}
+
+function filterParams(f: Filters) {
+  return {
+    country: f.country === "all" ? null : f.country,
+    status: f.status === "all" ? null : f.status,
+    sales: f.sales > 0 ? String(f.sales) : null,
+  }
+}
+
+const NO_FILTER_PARAMS = filterParams(NO_FILTERS)
+
+function hasFilters(f: Filters) {
+  return f.country !== "all" || f.status !== "all" || f.sales > 0
+}
+
+function matchesFilters(v: ShopVisit, f: Filters, words: string[]) {
+  if (f.country !== "all" && (v.shop.country ?? NO_COUNTRY) !== f.country) return false
+  if (!STATUSES[f.status].matches(v)) return false
+  if (f.sales > 0 && (v.analysis?.salesPerMonth ?? 0) < f.sales) return false
+  const name = v.shop.name.toLowerCase()
+  return words.every((w) => name.includes(w))
+}
+
+const NO_COUNTRY = "none"
+const regions = new Intl.DisplayNames(["en-US"], { type: "region" })
+
+function countryName(code: string) {
+  if (code === NO_COUNTRY) return "No country"
+  try {
+    return regions.of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
+function FilterBar({
+  visits,
+  search,
+  onSearch,
+  filters,
+  onFilter,
+  sort,
+  onSort,
+  onClear,
+}: {
+  visits: ShopVisit[]
+  search: string
+  onSearch: (search: string) => void
+  filters: Filters
+  onFilter: (change: Partial<Filters>) => void
+  sort: Sort
+  onSort: (sort: Sort) => void
+  /** Only while something is filtered. */
+  onClear?: () => void
+}) {
+  const countries = new Map<string, number>()
+  for (const v of visits) {
+    const code = v.shop.country ?? NO_COUNTRY
+    countries.set(code, (countries.get(code) ?? 0) + 1)
+  }
+  // A country or threshold from a link that no shop matches any more still shows while picked.
+  if (filters.country !== "all" && !countries.has(filters.country)) countries.set(filters.country, 0)
+  const countryItems = [
+    { value: "all", label: "Every country" },
+    ...[...countries]
+      .sort((a, b) => b[1] - a[1] || countryName(a[0]).localeCompare(countryName(b[0])))
+      .map(([code, count]) => ({ value: code, label: `${countryName(code)} (${formatNumber(count)})` })),
+  ]
+  const statusItems = STATUS_KEYS.map((status) => ({
+    value: status,
+    label:
+      status === "all"
+        ? STATUSES[status].label
+        : `${STATUSES[status].label} (${formatNumber(visits.filter(STATUSES[status].matches).length)})`,
+  }))
+  const thresholds = filters.sales && !MIN_SALES.includes(filters.sales) ? [...MIN_SALES, filters.sales].sort((a, b) => a - b) : MIN_SALES
+  const salesItems = [
+    { value: "all", label: "Any sales / mo" },
+    ...thresholds.map((min) => ({
+      value: String(min),
+      label: `${formatNumber(min)}+ sales / mo (${formatNumber(visits.filter((v) => (v.analysis?.salesPerMonth ?? 0) >= min).length)})`,
+    })),
+  ]
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <InputGroup className="w-full max-w-64 sm:w-56">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && search) {
+              event.stopPropagation()
+              onSearch("")
+            }
+          }}
+          placeholder="Search shops"
+          aria-label="Search recent shops"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {search && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton size="icon-xs" aria-label="Clear the search" onClick={() => onSearch("")}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
+
+      <FilterSelect value={filters.country} items={countryItems} label="Country" onChange={(country) => onFilter({ country })} />
+      <FilterSelect
+        value={filters.status}
+        items={statusItems}
+        label="Analysis"
+        onChange={(status) => onFilter({ status: status as Status })}
+      />
+      <FilterSelect
+        value={filters.sales ? String(filters.sales) : "all"}
+        items={salesItems}
+        label="Sales a month"
+        onChange={(value) => onFilter({ sales: value === "all" ? 0 : Number(value) })}
+      />
+      {onClear && (
+        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onClear}>
+          Clear
+        </Button>
+      )}
+
+      <div className="ml-auto">
+        <SortMenu sort={sort} onSort={onSort} />
+      </div>
+    </div>
+  )
+}
+
+function FilterSelect({
+  value,
+  items,
+  label,
+  onChange,
+}: {
+  value: string
+  items: { value: string; label: string }[]
+  label: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <Select value={value} items={items} onValueChange={(next) => next && onChange(next)}>
+      <SelectTrigger size="sm" className={cn("max-w-48", value !== "all" && "border-brand/50 bg-brand/5")} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -151,24 +614,10 @@ type Filter = { key: string; label: string | null; matches: (visit: ShopVisit) =
 const ALL = "all"
 const UNLABELLED = "unlabelled"
 
-function useLabelFilter() {
-  const searchParams = useSearchParams()
-  const param = searchParams.get("label")
-  const filter = React.useMemo<Filter>(() => {
-    if (param === null) return { key: ALL, label: null, matches: () => true }
-    if (param === "") return { key: UNLABELLED, label: "", matches: (v) => !v.labels?.length }
-    return { key: `l:${param.toLowerCase()}`, label: param, matches: (v) => hasLabel(v, param) }
-  }, [param])
-
-  const setFilter = React.useCallback((label: string | null) => {
-    const params = new URLSearchParams(window.location.search)
-    if (label === null) params.delete("label")
-    else params.set("label", label)
-    const query = params.toString()
-    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)
-  }, [])
-
-  return [filter, setFilter] as const
+function labelFilter(param: string | null): Filter {
+  if (param === null) return { key: ALL, label: null, matches: () => true }
+  if (param === "") return { key: UNLABELLED, label: "", matches: (v) => !v.labels?.length }
+  return { key: `l:${param.toLowerCase()}`, label: param, matches: (v) => hasLabel(v, param) }
 }
 
 function LabelFilter({

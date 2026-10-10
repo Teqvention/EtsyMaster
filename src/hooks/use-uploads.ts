@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { posterKey } from "@/lib/uploads/groups"
 import type { DraftPatch, DraftView, UploadsState } from "@/lib/uploads/types"
 
 // The Uploads page's state: drafts, approved posters still without one, the
@@ -80,15 +81,39 @@ export async function patchDraft(id: string, patch: DraftPatch) {
   }
 }
 
+/** Deletes the draft's poster from the uploads: no longer approved, onto the deleted list. */
 export async function deleteDraft(id: string) {
+  const draft = state?.drafts.find((d) => d.id === id)
+  if (!draft) return call(`/api/uploads/${id}`, { method: "DELETE" })
+  await removePosters([posterKey(draft.generationId, draft.outputId)])
+}
+
+/** Deletes posters (by key) from the uploads; gone at once, back if the server says no. */
+export async function removePosters(keys: string[]) {
   const before = state
-  if (state) set({ ...state, drafts: state.drafts.filter((d) => d.id !== id) })
+  if (state) {
+    const gone = new Set(keys)
+    const kept = (generationId: string, outputId: string) => !gone.has(posterKey(generationId, outputId))
+    set({
+      ...state,
+      drafts: state.drafts.filter((d) => kept(d.generationId, d.outputId)),
+      waiting: state.waiting.filter((p) => kept(p.generationId, p.outputId)),
+      groups: state.groups
+        .map((g) => ({ ...g, posters: g.posters.filter((p) => kept(g.id, p.outputId)) }))
+        .filter((g) => g.posters.length > 0),
+    })
+  }
   try {
-    await call(`/api/uploads/${id}`, { method: "DELETE" })
+    await call("/api/uploads/removed", { method: "POST", body: JSON.stringify({ keys }) })
   } catch (error) {
     if (before) set(before)
     throw error
   }
+}
+
+/** Brings deleted posters back, approved and with their drafts. */
+export function restorePosters(keys: string[]) {
+  return call("/api/uploads/removed", { method: "DELETE", body: JSON.stringify({ keys }) })
 }
 
 /** Write the copy again, optionally steered ("more gift-focused"). */

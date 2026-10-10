@@ -1,10 +1,11 @@
-import { PagePlaceholder } from "@/components/page-placeholder"
+import { Suspense } from "react"
+
+import { SettingsView } from "@/components/settings/settings-view"
 
 export default function SettingsPage() {
   return (
-    <PagePlaceholder
-      title="Settings"
-      description="Shop details, API connection, and dashboard preferences."
-    />
+    <Suspense>
+      <SettingsView />
+    </Suspense>
   )
 }

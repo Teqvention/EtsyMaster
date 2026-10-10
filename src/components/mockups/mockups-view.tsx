@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { refreshCategories, useMockupCategories } from "@/hooks/use-mockup-categories"
+import { refreshCategories, useCategories } from "@/hooks/use-categories"
 import { download, fetchScene, fileUrl } from "@/lib/mockups/client"
 import { exportName, exportScene, renderThumb } from "@/lib/mockups/export"
 import type { SceneSummary } from "@/lib/mockups/types"
@@ -51,9 +51,15 @@ export function MockupsView() {
 
   React.useEffect(() => {
     fetch("/api/mockups", { cache: "no-store" })
-      .then((r) => r.json())
-      .then(setScenes)
-      .catch(() => toast.error("Couldn't load the mockups"))
+      .then(async (r) => {
+        const body = await r.json()
+        if (!r.ok) throw new Error(body?.error ?? r.statusText)
+        setScenes(body)
+      })
+      .catch((error) => {
+        setScenes([])
+        toast.error(`Couldn't load the mockups: ${error.message}`)
+      })
   }, [])
 
   // Scenes made on the server (from a reference) have no thumbnail until
@@ -293,9 +299,9 @@ function CategoryFilter({
   filter: Filter
   onChange: (category: string | null) => void
 }) {
-  const saved = useMockupCategories()
+  const saved = useCategories("mockups")
   React.useEffect(() => {
-    refreshCategories()
+    refreshCategories("mockups")
   }, [])
 
   // Counted here rather than taken from the list, so they follow deletions.

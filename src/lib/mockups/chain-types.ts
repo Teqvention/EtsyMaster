@@ -2,7 +2,7 @@
 // mockup scenes in listing order (the first is the thumbnail) and at most
 // one video, a clip of one of the scenes. Rendered with whichever poster is
 // being listed. One chain is the default the upload pipeline uses.
-// Stored as data/mockups/chains.json.
+// Stored as the document "mockups/chains".
 
 export const MAX_CHAIN_PHOTOS = 10
 

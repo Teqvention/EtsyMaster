@@ -1,7 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
-import path from "node:path"
-
+import { changeDoc, deleteDoc, readDoc, readDocs, writeDoc } from "@/lib/db/documents"
+import { instanceId, isLive } from "@/lib/db/workers"
 import { NotFoundError } from "@/lib/mockups/storage"
+import { deleteFile, deleteFiles, getFile, putFile } from "@/lib/storage/files"
 
 import {
   DEFAULT_OPTIONS,
@@ -12,39 +12,28 @@ import {
   type GenerationSet,
   type GenerationSource,
   type Output,
+  SENDING,
 } from "./types"
 
-// Sets live on disk as data/generations/<id>/set.json plus their images, and
-// in memory while the server runs: the Generation page polls every couple of
-// seconds while anything is in progress, and that shouldn't touch the disk.
-const ROOT = path.join(process.cwd(), "data", "generations")
+// A set is the document generations/<id>/set, its images files under
+// generations/<id>/. Every server reads them from memory (see db/documents.ts),
+// so the Generation page polling every couple of seconds costs nothing. The
+// server that queued a set runs it and stamps itself on it (`runner`): when
+// that server stops, the set reads as interrupted everywhere.
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.(png|jpg|jpeg|webp)$/i
 
-type Store = { sets: Map<string, GenerationSet>; writes: Map<string, Promise<void>> }
+const docKey = (id: string) => `generations/${id}/set`
 
-// On globalThis, so every route (and a dev reload) shares the one copy.
-const global = globalThis as typeof globalThis & { __generationStore?: Promise<Store> }
+type Stored = GenerationSet & { runner?: string }
 
-function store() {
-  global.__generationStore ??= load()
-  return global.__generationStore
-}
+const active = (set: GenerationSet) => set.status === "queued" || set.status === "running"
 
-async function load(): Promise<Store> {
-  await mkdir(ROOT, { recursive: true })
-  const sets = new Map<string, GenerationSet>()
-  for (const id of await readdir(ROOT)) {
-    if (!ID.test(id)) continue
-    try {
-      const raw = JSON.parse(await readFile(path.join(ROOT, id, "set.json"), "utf8"))
-      sets.set(id, interrupted(migrate(raw)))
-    } catch {
-      // A folder without a readable set is skipped, not fatal.
-    }
-  }
-  return { sets, writes: new Map() }
+/** The set as the app sees it: in today's shape, and failed if the server running it is gone. */
+async function view(raw: Stored & { steps?: LegacyStep[] }): Promise<GenerationSet> {
+  const set = migrate(raw)
+  return active(set) && !(await isLive(raw.runner)) ? interrupted(set) : set
 }
 
 /** A short id, sortable by time and unique within a batch. */
@@ -52,16 +41,18 @@ export const newId = () => `${Date.now().toString(36)}-${Math.random().toString(
 
 const pending = (): Asset => ({ status: "pending", file: null })
 
-// Work in progress when the server stopped never finishes; say so, so it can be retried.
+// Work in progress when its server stopped never finishes; say so, so it can be retried.
+// Outputs in a batch job go on at Vertex: the set stays running, for the batch poller.
+// Those still waiting to go out in one were that server's to send.
 function interrupted(set: GenerationSet): GenerationSet {
   if (set.status !== "queued" && set.status !== "running") return set
-  const stop = <T extends Asset>(a: T): T =>
-    a.status === "pending" || a.status === "running"
-      ? { ...a, status: "error", error: "Interrupted — the server restarted" }
+  const stop = <T extends Asset & { job?: string }>(a: T): T =>
+    (a.status === "pending" || a.status === "running") && (!a.job || a.job === SENDING)
+      ? { ...a, status: "error", error: "Interrupted — the server running it stopped" }
       : a
   return {
     ...set,
-    status: "error",
+    status: set.outputs.some((o) => o.job && o.job !== SENDING) ? "running" : "error",
     original: stop(set.original),
     extraction: set.extraction && stop(set.extraction),
     mockup: set.mockup && stop(set.mockup),
@@ -114,21 +105,26 @@ function migrate(raw: GenerationSet & { steps?: LegacyStep[] }): GenerationSet {
   }
 }
 
-export function filePath(id: string, file: string) {
+/** The storage key of one of the set's images. */
+export function fileKey(id: string, file: string) {
   if (!ID.test(id) || !FILE.test(file)) throw new NotFoundError("Unknown file")
-  return path.join(ROOT, id, file)
+  return `generations/${id}/${file}`
 }
+
+/** One of the set's images. */
+export const readSetFile = (id: string, file: string) => getFile(fileKey(id, file))
 
 /** Newest first. */
 export async function listSets() {
-  const { sets } = await store()
-  return [...sets.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const stored = await readDocs<Stored>("generations/", "/set")
+  const sets = await Promise.all([...stored.values()].map(view))
+  return sets.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
 export async function getSet(id: string) {
-  const set = (await store()).sets.get(id)
-  if (!set) throw new NotFoundError("Unknown generation")
-  return set
+  const stored = ID.test(id) ? await readDoc<Stored | null>(docKey(id), null) : null
+  if (!stored) throw new NotFoundError("Unknown generation")
+  return view(stored)
 }
 
 export async function createSet(
@@ -137,7 +133,6 @@ export async function createSet(
   source: GenerationSource,
   options: GenerateOptions = DEFAULT_OPTIONS
 ): Promise<GenerationSet> {
-  const { sets } = await store()
   const now = new Date().toISOString()
   const id = newId()
   const set: GenerationSet = {
@@ -158,21 +153,26 @@ export async function createSet(
         }
       : { mockup: pending(), batches: [] }),
   }
-  await mkdir(path.join(ROOT, id), { recursive: true })
-  sets.set(id, set)
-  await persist(set)
+  await writeDoc(docKey(id), { ...set, runner: instanceId })
   return set
 }
 
-/** Applies `change` to the set and writes it; throws NotFoundError once deleted. */
+/**
+ * Applies `change` to the set and writes it, after every other change to it
+ * on any server; throws NotFoundError once deleted. A set put in line (or
+ * set running) here is this server's to run, unless a running server has it.
+ */
 export async function updateSet(id: string, change: (set: GenerationSet) => GenerationSet) {
-  const { sets } = await store()
-  const current = sets.get(id)
-  if (!current) throw new NotFoundError("Unknown generation")
-  const next = { ...change(current), updatedAt: new Date().toISOString() }
-  sets.set(id, next)
-  await persist(next)
-  return next
+  const saved = await changeDoc<Stored>(docKey(id), async (stored) => {
+    const current = await view(stored)
+    const next: Stored = { ...change(current), updatedAt: new Date().toISOString() }
+    if (!active(next)) delete next.runner
+    else if (!active(stored) || !(await isLive(stored.runner))) next.runner = instanceId
+    else next.runner = stored.runner
+    return next
+  })
+  if (!saved) throw new NotFoundError("Unknown generation")
+  return view(saved)
 }
 
 export function updateOutput(id: string, outputId: string, patch: Partial<Output>) {
@@ -184,28 +184,15 @@ export function updateOutput(id: string, outputId: string, patch: Partial<Output
 
 export async function saveFile(id: string, file: string, data: Buffer) {
   await getSet(id)
-  await writeFile(filePath(id, file), data)
+  await putFile(fileKey(id, file), data)
 }
 
 export async function removeFile(id: string, file: string | null | undefined) {
-  if (file) await rm(filePath(id, file), { force: true })
+  if (file) await deleteFile(fileKey(id, file))
 }
 
 export async function deleteSet(id: string) {
-  const { sets, writes } = await store()
   await getSet(id)
-  sets.delete(id)
-  await writes.get(id)
-  await rm(path.join(ROOT, id), { recursive: true, force: true })
-}
-
-// Parts of one set finish in parallel; their writes go one after another so
-// the file never holds half of two versions.
-async function persist(set: GenerationSet) {
-  const { writes } = await store()
-  const write = (writes.get(set.id) ?? Promise.resolve())
-    .catch(() => {})
-    .then(() => writeFile(path.join(ROOT, set.id, "set.json"), JSON.stringify(set, null, 1)))
-  writes.set(set.id, write)
-  await write
+  await deleteDoc(docKey(id))
+  await deleteFiles(`generations/${id}/`)
 }

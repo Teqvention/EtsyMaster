@@ -19,9 +19,9 @@ const RULES = `Rules:
 // Variants keep the reference's art style, palette and rendering at every
 // level; only composition and layout move, further at each step.
 const VARIANT_LEVELS: Record<Creativity, string> = {
-  minimal: "minimal — almost identical to the reference: the same subject, elements, layout and framing, freshly redrawn; only tiny differences in shapes and small details, so at a glance it reads as the same poster.",
-  subtle: "subtle — very close to the reference: the same subject, elements and overall layout, with small changes to the arrangement (order, count or spacing of elements, a slightly different crop or angle) and a few new details.",
-  low: "low — the same subject and elements, recomposed: a clearly different arrangement, balance or framing, but the same kind of layout.",
+  minimal: "minimal — very close to the reference: the same subject, elements, layout and framing, freshly redrawn, but never a copy — make two or three subtle yet visible changes (a pose or expression, the shape or position of a small element, a slightly shifted crop, a swapped minor detail), so it reads as the same poster's sibling, not its duplicate.",
+  subtle: "subtle — close to the reference: the same subject, elements and overall layout, with a few small changes to the arrangement (order, count or spacing of elements, a slightly different crop or angle) and one or two new details; side by side it is clearly a different print of the same poster.",
+  low: "low — still close to the reference: the same subject, elements and kind of layout, gently recomposed — one noticeable change to the arrangement, balance or framing (e.g. the main subject moved or turned, elements regrouped, a tighter or wider crop) while everything else stays near the original.",
   medium: "medium — the same subject in a new composition and layout: a different viewpoint, scale, framing or grouping, with new supporting elements that fit the theme.",
   high: "high — the most inventive composition and layout: a bold, surprising arrangement or framing that reinterprets the subject playfully, while the art style and palette stay exactly the reference's.",
 }

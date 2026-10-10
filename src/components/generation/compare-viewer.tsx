@@ -52,7 +52,8 @@ import { cn } from "@/lib/utils"
 
 // One output large, next to what it was drawn from, for deciding fast:
 // A approves, X rejects (and moves on to the next one), arrows step through,
-// C turns the comparison off. "More like this" asks for new takes on it.
+// C turns the comparison off, holding Space puts a magnifying glass under the
+// pointer. "More like this" asks for new takes on it.
 
 export type ViewerItem = { set: string; output: string }
 export type Viewing = { items: ViewerItem[]; at: ViewerItem } | null
@@ -64,6 +65,10 @@ let autoAdvance = true
 let comparing = true
 
 type Against = "poster" | "photo" | "earlier"
+
+// The magnifying glass: its size across, and how much larger than on screen it shows the image.
+const LENS = 240
+const ZOOM = 3
 
 export function CompareViewer({ viewing, onChange }: { viewing: Viewing; onChange: (next: Viewing) => void }) {
   return (
@@ -86,6 +91,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
   const [advance, setAdvance] = React.useState(autoAdvance)
   const [against, setAgainst] = React.useState<Against>("poster")
   const [refining, setRefining] = React.useState(false)
+  const [magnifying, setMagnifying] = React.useState(false)
   const strip = React.useRef<HTMLDivElement>(null)
 
   // Only images that are there; one deleted meanwhile drops out.
@@ -151,6 +157,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
       else if (key === "x") decide("rejected")
       else if (key === "c") setCompare((c) => (comparing = !c))
       else if (key === "m") setRefining(true)
+      else if (event.key === " ") setMagnifying(true)
       else return
       event.preventDefault()
       event.stopPropagation()
@@ -158,6 +165,25 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
   }, [refining, prev, next, go, decide])
+
+  // Letting go of Space puts the glass away, and the release isn't left to click a focused button.
+  // Leaving the window puts it away too, as the release never arrives then.
+  React.useEffect(() => {
+    if (!magnifying) return
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.key !== " ") return
+      setMagnifying(false)
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    const putAway = () => setMagnifying(false)
+    window.addEventListener("keyup", onKeyUp, true)
+    window.addEventListener("blur", putAway)
+    return () => {
+      window.removeEventListener("keyup", onKeyUp, true)
+      window.removeEventListener("blur", putAway)
+    }
+  }, [magnifying])
 
   if (!current) return null
   const { set, output } = current
@@ -200,6 +226,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
       >
         {compare && (
           <Pane
+            magnify={magnifying}
             label={
               <ToggleGroup
                 size="sm"
@@ -235,6 +262,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
         )}
 
         <Pane
+          magnify={magnifying}
           label={
             <span className="flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow-xs backdrop-blur-sm">
               Ours
@@ -343,7 +371,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
         <div className="ml-auto flex items-center gap-1.5">
           <p className="mr-1 hidden items-center gap-1 text-[11px] text-muted-foreground lg:flex">
             <Kbd>←</Kbd>
-            <Kbd>→</Kbd> browse <Kbd>A</Kbd> approve <Kbd>X</Kbd> reject
+            <Kbd>→</Kbd> browse <Kbd>A</Kbd> approve <Kbd>X</Kbd> reject <Kbd>Space</Kbd> magnify
           </p>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
@@ -389,14 +417,69 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
 function Pane({
   label,
   review,
+  magnify,
   children,
 }: {
   label: React.ReactNode
   review?: Review | null
+  magnify: boolean
   children: React.ReactNode
 }) {
+  const box = React.useRef<HTMLDivElement>(null)
+  const lens = React.useRef<HTMLDivElement>(null)
+  const pointer = React.useRef<{ x: number; y: number } | null>(null)
+
+  // Moved by hand rather than through state, as it follows every pointer move.
+  // Only over the image; off it the glass hides.
+  const place = React.useCallback(() => {
+    const pane = box.current
+    const glass = lens.current
+    if (!pane || !glass) return
+    const image = pane.querySelector<HTMLImageElement>(":scope > img")
+    const rect = image?.getBoundingClientRect()
+    const at = pointer.current
+    if (!image || !rect?.width || !at || at.x < rect.left || at.x > rect.right || at.y < rect.top || at.y > rect.bottom) {
+      glass.style.display = "none"
+      return
+    }
+    const origin = pane.getBoundingClientRect()
+    Object.assign(glass.style, {
+      display: "",
+      left: `${at.x - origin.left - LENS / 2}px`,
+      top: `${at.y - origin.top - LENS / 2}px`,
+      backgroundImage: `url("${image.currentSrc}")`,
+      backgroundSize: `${rect.width * ZOOM}px ${rect.height * ZOOM}px`,
+      backgroundPosition: `${LENS / 2 - (at.x - rect.left) * ZOOM}px ${LENS / 2 - (at.y - rect.top) * ZOOM}px`,
+    })
+  }, [])
+
+  // Again after every render (browsing while held, comparison turned off) and once a new image is in.
+  React.useLayoutEffect(() => {
+    if (magnify) place()
+  })
+  React.useEffect(() => {
+    const pane = box.current
+    if (!magnify || !pane) return
+    pane.addEventListener("load", place, true)
+    return () => pane.removeEventListener("load", place, true)
+  }, [magnify, place])
+
   return (
-    <div className="relative grid min-h-[30svh] place-items-center overflow-hidden rounded-lg bg-muted/50 p-2 md:min-h-[min(70svh,44rem)] [&>img]:max-h-[calc(96svh-15rem)]">
+    <div
+      ref={box}
+      onPointerMove={(event) => {
+        pointer.current = { x: event.clientX, y: event.clientY }
+        if (magnify) place()
+      }}
+      onPointerLeave={() => {
+        pointer.current = null
+        if (magnify) place()
+      }}
+      className={cn(
+        "relative grid min-h-[30svh] place-items-center overflow-hidden rounded-lg bg-muted/50 p-2 md:min-h-[min(70svh,44rem)] [&>img]:max-h-[calc(96svh-15rem)]",
+        magnify && "[&>img]:cursor-none"
+      )}
+    >
       {children}
       <div className="absolute top-2 left-2 flex items-center gap-1.5">{label}</div>
       {review && (
@@ -408,6 +491,14 @@ function Pane({
         >
           {review === "approved" ? "Approved" : "Rejected"}
         </span>
+      )}
+      {magnify && (
+        <div
+          ref={lens}
+          aria-hidden
+          className="pointer-events-none absolute rounded-full border-2 border-background bg-muted bg-no-repeat bg-origin-border shadow-xl ring-1 ring-foreground/15"
+          style={{ width: LENS, height: LENS }}
+        />
       )}
     </div>
   )

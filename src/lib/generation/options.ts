@@ -35,6 +35,7 @@ export function parseOptions(value: unknown): GenerateOptions | null {
     ...(Array.isArray(v.inspiration) && {
       inspiration: [...new Set(v.inspiration.filter((i): i is string => typeof i === "string" && !!i))].slice(0, MAX_INSPIRATION),
     }),
+    ...(v.delivery === "batch" && { delivery: "batch" as const }),
   }
   // Inspired batches are ideas only, from at least one image.
   if (options.inspiration) {

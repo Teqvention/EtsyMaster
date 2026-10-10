@@ -4,7 +4,13 @@ import { decode } from "./renderer"
 // The design shown in every mockup. Kept for the whole browser session so
 // switching between the list and the editors doesn't ask for it again.
 
-export type Poster = { name: string; bitmap: ImageBitmap; test: boolean }
+export type Poster = {
+  name: string
+  bitmap: ImageBitmap
+  test: boolean
+  /** The generated image it is ("<set id>/<file>"). */
+  from?: string
+}
 
 let current: Poster | null = null
 let loading: Promise<void> | null = null
@@ -32,8 +38,8 @@ export function subscribePoster(listener: () => void) {
 
 export const getPoster = () => current
 
-export async function choosePoster(file: File) {
-  set({ name: file.name, bitmap: await decode(file), test: false })
+export async function choosePoster(file: File, from?: string) {
+  set({ name: file.name, bitmap: await decode(file), test: false, from })
 }
 
 export async function resetPoster() {

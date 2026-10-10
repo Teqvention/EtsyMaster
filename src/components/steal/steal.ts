@@ -2,12 +2,13 @@
 
 import { toast } from "sonner"
 
-import { refreshCategories } from "@/hooks/use-mockup-categories"
+import { refreshCategories } from "@/hooks/use-categories"
 import { fileInFolders, toSaveRequest } from "@/hooks/use-saved"
 import type { Listing } from "@/lib/etsy/types"
 
-// Stealing a listing files it into a category on the Saved page (the folders
-// are the mockup categories). Every steal says what happened and can be undone.
+// Stealing a listing files it into a category on the Saved page (its folders,
+// apart from the mockup categories). Every steal says what happened and can be
+// undone.
 
 type Navigate = (href: string) => void
 
@@ -28,7 +29,7 @@ export async function steal(groups: { folder: string; listings: Listing[] }[], n
   try {
     const undo = await fileInFolders(requests)
     // Categories new to the server came with the listings.
-    refreshCategories()
+    refreshCategories("saved")
     const folders = requests.map((g) => g.folder)
     const what = total === 1 ? "" : ` ${total} listings`
     toast.success(

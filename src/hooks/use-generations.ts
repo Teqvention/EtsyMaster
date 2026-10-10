@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import type {
+  Delivery,
   GenerateOptions,
   GenerationKind,
   GenerationSet,
@@ -84,9 +85,23 @@ export async function generate(
   return created
 }
 
-/** Runs everything that failed in the set again. */
-export async function retryGeneration(id: string) {
-  replace(await call<GenerationSet>(`/api/generations/${id}`, { method: "POST", body: "{}" }))
+/** Runs everything that failed in the set again; `delivery` says how its images are painted this time. */
+export async function retryGeneration(id: string, delivery?: Delivery) {
+  replace(await call<GenerationSet>(`/api/generations/${id}`, { method: "POST", body: JSON.stringify({ delivery }) }))
+}
+
+/** Stops every set that hasn't sent its images off yet; batch jobs already painting carry on. */
+export async function stopWaitingGenerations() {
+  const { stopped } = await call<{ stopped: number }>("/api/generations/stop", { method: "POST" })
+  await refreshGenerations()
+  return stopped
+}
+
+/** Everything open (running jobs and failed images) goes out again in one batch job. */
+export async function sendAllOpenGenerations() {
+  const result = await call<{ jobs: number; retried: number }>("/api/generations/batch", { method: "POST" })
+  await refreshGenerations()
+  return result
 }
 
 /** More images from the set's posters, or (with `options.from`) a redo of one output. */
@@ -117,6 +132,19 @@ export async function reviewOutputs(id: string, ids: string[], review: Review | 
         body: JSON.stringify({ ids, review }),
       })
     )
+  } catch (error) {
+    if (before) set(before)
+    throw error
+  }
+}
+
+/** Sets the set aside as done, or takes it back; shows at once, undone if the server says no. */
+export async function markDone(id: string, done: boolean) {
+  const before = sets
+  const doneAt = done ? new Date().toISOString() : undefined
+  set((sets ?? []).map((s) => (s.id === id ? { ...s, doneAt } : s)))
+  try {
+    replace(await call<GenerationSet>(`/api/generations/${id}`, { method: "PATCH", body: JSON.stringify({ done }) }))
   } catch (error) {
     if (before) set(before)
     throw error

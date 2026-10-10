@@ -1,8 +1,10 @@
 import {
-  CircleHelpIcon,
+  ChartNoAxesCombinedIcon,
+  LayoutListIcon,
   PaletteIcon,
   PackageCheckIcon,
   Settings2Icon,
+  TagIcon,
   TelescopeIcon,
 } from "lucide-react"
 
@@ -51,15 +53,12 @@ export const nav = {
       ],
     },
     { title: "Uploads", url: "/uploads", icon: <PackageCheckIcon /> },
+    { title: "Artikel", url: "/artikel", icon: <LayoutListIcon /> },
+    { title: "Performance", url: "/performance", icon: <ChartNoAxesCombinedIcon /> },
+    { title: "Prices", url: "/prices", icon: <TagIcon /> },
   ] satisfies NavEntry[],
   secondary: [
     { title: "Settings", url: "/settings", icon: <Settings2Icon /> },
-    {
-      title: "Seller Handbook",
-      url: "https://www.etsy.com/seller-handbook",
-      icon: <CircleHelpIcon />,
-      external: true,
-    },
   ],
 }
 

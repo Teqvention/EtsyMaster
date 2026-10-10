@@ -2,17 +2,25 @@ import { TAG_COUNT, TAG_MAX, TITLE_MAX } from "./types"
 
 // Etsy's rules for titles and tags, and how much of a source listing's
 // wording a new listing carries over. Shared by the copywriter (to repair
-// what the model writes) and the page (to warn while editing).
+// what the model writes) and the page (to warn while editing). Our shops
+// never write a hyphen or dash, in tags and titles neither.
 
 const STOPWORDS = new Set([
   "a", "an", "and", "art", "the", "for", "with", "of", "in", "on", "to", "by", "your", "you", "our", "this", "that", "from", "or", "at", "as",
 ])
 
-/** Lower case, single spaces, no characters Etsy rejects in tags. */
+/** Every kind of hyphen and dash, the minus sign included. */
+export const DASH = "-‐‑‒–—―−⁃﹘﹣－⸺⸻"
+
+const dashes = new RegExp(`[${DASH}]`, "g")
+
+/** Lower case, single spaces, no characters Etsy rejects in tags, no hyphens: "mid-century" → "mid century". */
 export function cleanTag(tag: string) {
   return tag
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}' -]+/gu, " ")
+    .replace(/[‘’ʼ´`]/g, "'")
+    .replace(/[^\p{L}\p{N}' ]+/gu, " ")
+    .replace(/(^|\s)'+|'+(?=\s|$)/g, "$1")
     .replace(/\s+/g, " ")
     .trim()
 }
@@ -39,48 +47,57 @@ export function cleanTags(tags: string[]) {
   return out
 }
 
-/** Keeps the first `char` and replaces the rest: Etsy allows %, : and & once each. */
+/** Keeps the first `char` and replaces the rest: Etsy allows %, :, & and + once each. */
 function once(text: string, char: string, instead: string) {
   let seen = false
   return text.replaceAll(char, () => (seen ? instead : ((seen = true), char)))
 }
 
+/** What a title's keyword phrases are joined with: " | " when it has one, else ", ". */
+const separatorOf = (title: string) => (title.includes("|") ? " | " : ", ")
+
 /**
- * A title Etsy accepts: one line, no doubled separators, %, : and & once
- * each, at most three words in capitals, ≤ 140 characters ending on a whole
- * phrase.
+ * A title Etsy accepts: one line, only the characters Etsy takes, no dashes
+ * (a spaced one becomes the title's separator, "Mid-Century" "Mid Century"),
+ * no doubled separators, %, :, & and + once each, at most three words in
+ * capitals, ≤ 140 characters ending on a whole phrase.
  */
 export function cleanTitle(title: string) {
+  const separator = separatorOf(title)
   let text = title
     .replace(/\s+/g, " ")
-    .split("|")
-    .map((phrase) => phrase.trim())
+    .replace(/[^\p{L}\p{Nd}\p{P}\p{Sm}\p{Zs}™©®]/gu, "")
+    .replace(new RegExp(`(\\d)\\s*[${DASH}]\\s*(\\d)`, "g"), "$1 to $2")
+    .replace(new RegExp(`\\s+[${DASH}]+\\s+`, "g"), separator)
+    .replace(dashes, " ")
+  text = (separator === " | " ? text.split("|") : text.split(/,(?!\d)/))
+    .map((phrase) => phrase.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .join(" | ")
-  text = once(once(once(text, "&", "and"), ":", ""), "%", "")
+    .join(separator)
+  text = once(once(once(once(text, "&", "and"), ":", ""), "%", ""), "+", "and")
   let caps = 0
   text = text.replace(/\b[A-Z]{2,}\b/g, (word) =>
     ++caps > 3 ? word[0] + word.slice(1).toLowerCase() : word
   )
-  text = text.replace(/\s+/g, " ").trim()
+  text = text.replace(/\s+/g, " ").replace(/\s+([,:])/g, "$1").trim()
   if (text.length <= TITLE_MAX) return text
-  const phrases = text.split(" | ")
+  const phrases = text.split(separator)
   text = ""
   for (const phrase of phrases) {
-    const next = text ? `${text} | ${phrase}` : phrase
+    const next = text ? `${text}${separator}${phrase}` : phrase
     if (next.length > TITLE_MAX) break
     text = next
   }
   return text || fit(phrases[0], TITLE_MAX)
 }
 
-/** Content words, lightly singularised so "posters" meets "poster". */
+/** Content words, lightly singularised so "posters" meets "poster" and "pigs" "pig". */
 export function words(text: string) {
   return text
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 2 && !STOPWORDS.has(w))
-    .map((w) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
 }
 
 /**

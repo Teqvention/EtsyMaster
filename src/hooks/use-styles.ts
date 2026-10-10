@@ -69,6 +69,7 @@ function remember(style: Style) {
     name: style.name,
     guide: style.guide,
     guideStatus: style.guideStatus,
+    incoming: style.incoming,
     createdAt: style.createdAt,
     updatedAt: style.updatedAt,
     count: style.images.length,
@@ -115,6 +116,22 @@ export async function addGeneratedImages(id: string, items: { generation: string
   return style
 }
 
+/**
+ * Puts the posters of saved listings on the moodboard: the server takes them
+ * out of the photos in the background, the style counting them as `incoming`.
+ */
+export async function addSavedListings(
+  id: string,
+  listings: { listingId: number; title: string; image: string }[]
+) {
+  const style = await api<Style>(`/api/styles/${id}/saved`, {
+    method: "POST",
+    body: JSON.stringify({ listings }),
+  })
+  remember(style)
+  return style
+}
+
 /** A suggested name for a style made of these generated posters. */
 export async function suggestStyleName(items: { generation: string; file: string }[]) {
   const { name } = await api<{ name: string }>("/api/styles/name", {
@@ -138,14 +155,15 @@ export async function readStyleNow(id: string) {
 
 // --- One style ---
 
-const POLL = 1500
+export const POLL = 1500
 // A read is scheduled a moment after the board changes; keep looking for it
 // this long after a change even before the server says it started.
-const EXPECT_READ = 6000
+export const EXPECT_READ = 6000
 
 /**
  * The full style, kept fresh: `set` takes an answer from the server, and
- * while the guide is (about to be) read the style is polled until it lands.
+ * while saved posters are coming in or the guide is (about to be) read, the
+ * style is polled until it lands.
  */
 export function useStyle(id: string) {
   const [state, setState] = React.useState<{ style: Style | null; error: string | null }>({
@@ -157,7 +175,8 @@ export function useStyle(id: string) {
   const apply = React.useCallback((style: Style, { expectRead = false } = {}) => {
     setState({ style, error: null })
     remember(style)
-    if (expectRead) setExpectUntil(Date.now() + EXPECT_READ)
+    // The read starts once the last saved poster is on the board.
+    if (expectRead || style.incoming) setExpectUntil(Date.now() + EXPECT_READ)
   }, [])
 
   const load = React.useCallback(async () => {
@@ -165,6 +184,7 @@ export function useStyle(id: string) {
       const style = await api<Style>(`/api/styles/${id}`, { cache: "no-store" })
       setState({ style, error: null })
       remember(style)
+      if (style.incoming) setExpectUntil(Date.now() + EXPECT_READ)
     } catch (error) {
       setState((s) => ({ style: s.style, error: (error as Error).message }))
     }
@@ -175,15 +195,15 @@ export function useStyle(id: string) {
     load()
   }, [load])
 
-  const reading = state.style?.guideStatus === "running"
+  const busy = state.style?.guideStatus === "running" || !!state.style?.incoming
   React.useEffect(() => {
-    if (!reading && expectUntil <= Date.now()) return
+    if (!busy && expectUntil <= Date.now()) return
     const timer = setInterval(() => {
       load()
-      if (!reading && Date.now() > expectUntil) setExpectUntil(0)
+      if (!busy && Date.now() > expectUntil) setExpectUntil(0)
     }, POLL)
     return () => clearInterval(timer)
-  }, [reading, expectUntil, load])
+  }, [busy, expectUntil, load])
 
   return { ...state, apply, reload: load }
 }

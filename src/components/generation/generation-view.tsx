@@ -13,16 +13,17 @@ import {
   FrameIcon,
   ImagesIcon,
   LoaderCircleIcon,
-  RotateCwIcon,
   SparklesIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CompareViewer, type Viewing } from "@/components/generation/compare-viewer"
 import { GenerateDialog } from "@/components/generation/generate-dialog"
+import { RetryButton } from "@/components/generation/retry-button"
 import {
   aspectOf,
   AssetImage,
+  batchSummary,
   DeleteButton,
   downloadOutputs,
   OutputTile,
@@ -48,7 +49,7 @@ import {
   generateMore,
   generationFileUrl,
   isActive,
-  retryGeneration,
+  markDone,
   useGenerations,
 } from "@/hooks/use-generations"
 import type { GenerationKind, GenerationSet, Output } from "@/lib/generation/types"
@@ -90,12 +91,29 @@ export function GenerationView() {
       ),
     [sets, filter.kind, filter.folder]
   )
-  const visible = filter.review ? inScope.filter((s) => toReview(s).length > 0) : inScope
-  const queue = React.useMemo(
-    () => inScope.flatMap((s) => toReview(s).map((o) => ({ set: s.id, output: o.id }))),
+  // Sets marked done drop out of Everything and To review until more images are made.
+  const openSets = React.useMemo(() => inScope.filter((s) => !s.doneAt), [inScope])
+  const done = React.useMemo(
+    () => inScope.filter((s) => s.doneAt).sort((a, b) => b.doneAt!.localeCompare(a.doneAt!)),
     [inScope]
   )
-  const running = sets?.filter((s) => s.status === "running").length ?? 0
+  const visible =
+    filter.show === "done" ? done : filter.show === "pending" ? openSets.filter((s) => toReview(s).length > 0) : openSets
+  const queue = React.useMemo(
+    () => openSets.flatMap((s) => toReview(s).map((o) => ({ set: s.id, output: o.id }))),
+    [openSets]
+  )
+  // Sets whose only open work is a batch job at Vertex count apart: they take a while.
+  const inBatch = (s: GenerationSet) =>
+    s.status === "running" && s.outputs.some((o) => o.job) && !s.outputs.some((o) => o.status === "pending" || (o.status === "running" && !o.job))
+  const batched = sets?.filter(inBatch).length ?? 0
+  const running = (sets?.filter((s) => s.status === "running").length ?? 0) - batched
+  // Every set in view with something failed and nothing going on, for Retry all.
+  const retryable = React.useMemo(
+    () => visible.filter((s) => !isActive(s)).map((s) => ({ id: s.id, failed: progress(s).failed })).filter((s) => s.failed > 0),
+    [visible]
+  )
+  const failedCount = retryable.reduce((n, s) => n + s.failed, 0)
   const waiting = sets?.filter((s) => s.status === "queued").length ?? 0
 
   const folderItems = [
@@ -146,8 +164,8 @@ export function GenerationView() {
           variant="outline"
           size="sm"
           spacing={0}
-          value={[filter.review ? "pending" : "all"]}
-          onValueChange={(value) => value[0] && setFilter({ review: value[0] === "pending" })}
+          value={[filter.show]}
+          onValueChange={(value) => value[0] && setFilter({ show: value[0] as Show })}
           aria-label="Show"
         >
           <ToggleGroupItem value="all">Everything</ToggleGroupItem>
@@ -159,6 +177,10 @@ export function GenerationView() {
               </span>
             )}
           </ToggleGroupItem>
+          <ToggleGroupItem value="done" className="gap-1.5">
+            Done
+            {done.length > 0 && <span className="text-muted-foreground tabular-nums">{done.length}</span>}
+          </ToggleGroupItem>
         </ToggleGroup>
 
         <div className="ml-auto flex items-center gap-3">
@@ -168,6 +190,19 @@ export function GenerationView() {
               {running} generating
               {waiting > 0 && <span>· {waiting} waiting</span>}
             </p>
+          )}
+          {batched > 0 && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+              <ClockIcon className="size-3.5" />
+              {batched} in batch
+            </p>
+          )}
+          {retryable.length > 0 && (
+            <RetryButton
+              sets={retryable.map((s) => s.id)}
+              count={failedCount}
+              label={`Retry all · ${failedCount}`}
+            />
           )}
           {queue.length > 0 && (
             <Button
@@ -202,12 +237,20 @@ export function GenerationView() {
       ) : visible.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
-            <EmptyMedia variant="icon">{filter.review ? <CheckIcon /> : <SparklesIcon />}</EmptyMedia>
+            <EmptyMedia variant="icon">{filter.show !== "all" ? <CheckIcon /> : <SparklesIcon />}</EmptyMedia>
             <EmptyTitle>
-              {filter.review ? "All reviewed" : sets.length ? "Nothing here" : "Nothing generated yet"}
+              {filter.show === "done"
+                ? "Nothing done yet"
+                : filter.show === "pending"
+                  ? "All reviewed"
+                  : sets.length
+                    ? "Nothing here"
+                    : "Nothing generated yet"}
             </EmptyTitle>
             <EmptyDescription>
-              {filter.review
+              {filter.show === "done"
+                ? "Tick a set as done to move it here, out of Everything and To review. Making more images from it brings it back."
+                : filter.show === "pending"
                 ? "Every finished image has been approved or rejected. Approved ones are ready for uploads."
                 : sets.length
                   ? "No sets match these filters."
@@ -215,7 +258,7 @@ export function GenerationView() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            {filter.review ? (
+            {filter.show === "done" ? null : filter.show === "pending" ? (
               <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/uploads" />}>
                 Go to uploads
                 <ArrowRightIcon data-icon="inline-end" />
@@ -253,16 +296,23 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
   const [generating, setGenerating] = React.useState(false)
   const active = isActive(set)
   const { failed, stage, review, approved, made } = progress(set)
+  const batch = batchSummary(set)
   const href = `/generation/${set.id}`
   const many = set.posters.length > 1
   const shown = set.outputs.length > INLINE ? set.outputs.slice(0, INLINE - 1) : set.outputs
   const hidden = set.outputs.length - shown.length
 
-  async function retry() {
+  async function toggleDone() {
+    const done = !set.doneAt
     try {
-      await retryGeneration(set.id)
+      await markDone(set.id, done)
+      if (done)
+        toast.success("Moved to Done", {
+          description: shortTitle(set.source.title),
+          action: { label: "Undo", onClick: () => markDone(set.id, false).catch(() => {}) },
+        })
     } catch (error) {
-      toast.error(`Couldn't retry: ${(error as Error).message}`)
+      toast.error(`Couldn't update: ${(error as Error).message}`)
     }
   }
 
@@ -330,8 +380,31 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
             </>
           )}
         </p>
+        {batch && (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums [&_svg]:size-3.5",
+              batch.failed && "text-destructive"
+            )}
+            title={batch.title}
+          >
+            <ClockIcon className={cn(batch.running && "animate-pulse")} />
+            {batch.text}
+          </p>
+        )}
 
         <div className="mt-1 flex flex-wrap items-center gap-1">
+          <Button
+            variant={set.doneAt ? "secondary" : "outline"}
+            size="icon-xs"
+            aria-pressed={!!set.doneAt}
+            aria-label={set.doneAt ? "Back to Everything" : "Mark as done"}
+            title={set.doneAt ? "Done — click to bring it back" : "Mark as done: out of Everything and To review"}
+            disabled={active}
+            onClick={toggleDone}
+          >
+            <CheckIcon className={cn(set.doneAt && "text-emerald-600 dark:text-emerald-500")} />
+          </Button>
           {set.kind === "poster" && (
             <>
               <Button variant="outline" size="xs" nativeButton={false} render={<Link href={href} />}>
@@ -350,12 +423,7 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
               </Button>
             </>
           )}
-          {failed > 0 && !active && (
-            <Button variant="outline" size="xs" onClick={retry}>
-              <RotateCwIcon />
-              Retry failed
-            </Button>
-          )}
+          {failed > 0 && !active && <RetryButton sets={[set.id]} count={failed} label="Retry failed" size="xs" />}
           {set.sceneId && (
             <Button variant="outline" size="xs" nativeButton={false} render={<Link href={`/mockups/${set.sceneId}`} />}>
               <FrameIcon />
@@ -573,23 +641,26 @@ function Flow() {
   )
 }
 
-// --- Filters in the URL (`?kind=`, `?folder=`, `?review=pending`) ---
+// --- Filters in the URL (`?kind=`, `?folder=`, `?review=pending|done`) ---
+
+type Show = "all" | "pending" | "done"
 
 function useFilter() {
   const searchParams = useSearchParams()
   const kindParam = searchParams.get("kind")
   const folder = searchParams.get("folder")
-  const review = searchParams.get("review") === "pending"
+  const reviewParam = searchParams.get("review")
+  const show: Show = reviewParam === "pending" || reviewParam === "done" ? reviewParam : "all"
   const filter = React.useMemo(
     () => ({
       kind: (kindParam === "poster" || kindParam === "mockup" ? kindParam : "all") as KindFilter,
       folder: folder || null,
-      review,
+      show,
     }),
-    [kindParam, folder, review]
+    [kindParam, folder, show]
   )
   const setFilter = React.useCallback(
-    (next: Partial<{ kind: KindFilter; folder: string | null; review: boolean }>) => {
+    (next: Partial<{ kind: KindFilter; folder: string | null; show: Show }>) => {
       const params = new URLSearchParams(window.location.search)
       if (next.kind !== undefined) {
         if (next.kind === "all") params.delete("kind")
@@ -599,9 +670,9 @@ function useFilter() {
         if (next.folder === null) params.delete("folder")
         else params.set("folder", next.folder)
       }
-      if (next.review !== undefined) {
-        if (next.review) params.set("review", "pending")
-        else params.delete("review")
+      if (next.show !== undefined) {
+        if (next.show === "all") params.delete("review")
+        else params.set("review", next.show)
       }
       const query = params.toString()
       window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)

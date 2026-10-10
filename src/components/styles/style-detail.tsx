@@ -7,6 +7,7 @@ import {
   ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  FolderOpenIcon,
   ImagePlusIcon,
   ImagesIcon,
   LoaderCircleIcon,
@@ -20,6 +21,7 @@ import { toast } from "sonner"
 
 import { GuidePanel, isStale } from "@/components/styles/style-guide"
 import { SourcePicker } from "@/components/styles/source-picker"
+import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -94,11 +96,12 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
   const fileInput = React.useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = React.useState(0)
   const [picking, setPicking] = React.useState(false)
+  const [fromSaved, setFromSaved] = React.useState(false)
   const [confirm, setConfirm] = React.useState<"delete" | "reread" | null>(null)
   const [deleting, setDeleting] = React.useState(false)
 
   const running = style.guideStatus === "running"
-  const room = MAX_IMAGES - style.images.length
+  const room = MAX_IMAGES - style.images.length - (style.incoming ?? 0)
 
   async function upload(list: FileList | File[]) {
     const all = Array.from(list).filter((f) => f.type.startsWith("image/"))
@@ -168,6 +171,10 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
           <ImagesIcon />
           From Generation…
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setFromSaved(true)}>
+          <FolderOpenIcon />
+          From Saved…
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -191,7 +198,7 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
           <Button
             size="sm"
             variant="outline"
-            disabled={running || style.images.length === 0}
+            disabled={running || style.images.length === 0 || !!style.incoming}
             onClick={() => (style.guideEdited ? setConfirm("reread") : read())}
             className="active:scale-[0.97]"
           >
@@ -229,6 +236,7 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
           onFiles={upload}
           onUpload={() => fileInput.current?.click()}
           onPick={() => setPicking(true)}
+          onSaved={() => setFromSaved(true)}
         />
         <GuidePanel
           style={style}
@@ -243,6 +251,12 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
         onOpenChange={setPicking}
         style={style}
         onAdded={(next) => apply(next, { expectRead: true })}
+      />
+      <StyleFromSavedDialog
+        open={fromSaved}
+        onOpenChange={setFromSaved}
+        style={style}
+        onDone={(next) => apply(next)}
       />
 
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
@@ -289,6 +303,14 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
 }
 
 function StatusBadge({ style }: { style: Style }) {
+  if (style.incoming) {
+    return (
+      <Badge variant="secondary">
+        <LoaderCircleIcon className="animate-spin" />
+        Adding posters
+      </Badge>
+    )
+  }
   if (style.guideStatus === "running") {
     return (
       <Badge variant="secondary">
@@ -358,6 +380,7 @@ function Moodboard({
   onFiles,
   onUpload,
   onPick,
+  onSaved,
 }: {
   style: Style
   apply: Apply
@@ -365,6 +388,7 @@ function Moodboard({
   onFiles: (files: FileList) => void
   onUpload: () => void
   onPick: () => void
+  onSaved: () => void
 }) {
   // While dragging (and until the new order is saved) the board shows `order`.
   const [order, setOrder] = React.useState<string[] | null>(null)
@@ -464,7 +488,9 @@ function Moodboard({
   }
 
   const count = files.length
-  const empty = count === 0 && uploading === 0
+  // Saved listings still being taken out of their photos hold a place too.
+  const coming = uploading + (style.incoming ?? 0)
+  const empty = count === 0 && coming === 0
 
   return (
     <section aria-label="Moodboard" className="relative flex min-w-0 flex-col gap-3" {...dropProps}>
@@ -484,6 +510,7 @@ function Moodboard({
               3–12 posters that share a look read best: same medium, palette and feel, different
               subjects.
             </p>
+            {style.importError && <p className="max-w-sm text-xs text-destructive">{style.importError}</p>}
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={onUpload}>
@@ -493,6 +520,10 @@ function Moodboard({
             <Button size="sm" variant="outline" onClick={onPick}>
               <ImagesIcon />
               From Generation
+            </Button>
+            <Button size="sm" variant="outline" onClick={onSaved}>
+              <FolderOpenIcon />
+              From Saved
             </Button>
           </div>
         </div>
@@ -579,12 +610,12 @@ function Moodboard({
                 </li>
               )
             })}
-            {Array.from({ length: uploading }, (_, i) => (
+            {Array.from({ length: coming }, (_, i) => (
               <li key={`uploading-${i}`} className="relative aspect-[3/4] overflow-hidden rounded-lg bg-muted">
                 <span className="absolute inset-0 animate-shimmer bg-linear-to-r from-transparent via-foreground/6 to-transparent motion-reduce:animate-none" />
               </li>
             ))}
-            {count + uploading < MAX_IMAGES && (
+            {count + coming < MAX_IMAGES && (
               <li className="aspect-[3/4]">
                 <button
                   type="button"
@@ -597,7 +628,7 @@ function Moodboard({
               </li>
             )}
           </ul>
-          <BoardHint count={count} />
+          <BoardHint count={count} style={style} />
         </>
       )}
 
@@ -624,7 +655,16 @@ function Moodboard({
   )
 }
 
-function BoardHint({ count }: { count: number }) {
+function BoardHint({ count, style }: { count: number; style: Style }) {
+  if (style.incoming) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Taking the posters out of {style.incoming === 1 ? "1 saved photo" : `${style.incoming} saved photos`} —
+        the board is read once they&apos;re in.
+      </p>
+    )
+  }
+  if (style.importError) return <p className="text-xs text-destructive">{style.importError}</p>
   let text: string
   if (count < 3) text = `Add ${3 - count} more for a reliable read — 3 to 12 posters work best.`
   else if (count > READ_IMAGES)

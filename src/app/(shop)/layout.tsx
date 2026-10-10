@@ -19,11 +19,7 @@ export default async function ShopLayout({ children }: LayoutProps<"/">) {
         } as React.CSSProperties
       }
     >
-      <AppSidebar
-        variant="inset"
-        shopName={shop.name}
-        user={{ name: shop.ownerName, email: shop.ownerEmail }}
-      />
+      <AppSidebar variant="inset" shopName={shop.name} />
       <SidebarInset className="min-h-0 overflow-hidden">
         <SiteHeader />
         {/* The fade stays shallower than the 24px inset of sticky panels

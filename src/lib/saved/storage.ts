@@ -1,47 +1,37 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import path from "node:path"
-
-import { addCategory } from "@/lib/mockups/storage"
+import { addName, listNames } from "@/lib/categories"
+import { readDoc, updateDoc } from "@/lib/db/documents"
 
 import type { SavedListing, SaveRequest } from "./types"
 
-// Saved listings in one file next to the app, newest first. A listing sits in
+// Saved listings in one document ("saved"), newest first. A listing sits in
 // one folder at a time: saving it again moves it.
-const FILE = path.join(process.cwd(), "data", "saved.json")
-
-// Read-modify-write one at a time, shared by every route.
-const global = globalThis as typeof globalThis & { __savedWrite?: Promise<unknown> }
+const FILE = "saved"
+// The folders' names, empty ones too (the mockup categories are apart).
+const FOLDERS = "saved/folders"
 
 export async function listSaved(): Promise<SavedListing[]> {
-  try {
-    const list = JSON.parse(await readFile(FILE, "utf8"))
-    return Array.isArray(list) ? list : []
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
-    throw error
-  }
+  const list = await readDoc<unknown>(FILE, [])
+  return Array.isArray(list) ? list : []
 }
 
+/** Every folder, A–Z, with how many listings are in it. */
+export async function listFolders() {
+  return listNames(FOLDERS, (await listSaved()).map((s) => s.folder))
+}
+
+/** Adds a folder unless one by that name exists; returns the name as stored. */
+export const addFolder = (name: string) => addName(FOLDERS, name)
+
+/** Changes the list, after every other change to it on any server. */
 function change(update: (list: SavedListing[]) => Promise<SavedListing[]> | SavedListing[]) {
-  const next = (global.__savedWrite ?? Promise.resolve())
-    .catch(() => {})
-    .then(async () => {
-      const list = await update(await listSaved())
-      await mkdir(path.dirname(FILE), { recursive: true })
-      // Replaced whole, so a read meanwhile never sees half a file.
-      const temp = `${FILE}.${process.pid}-${Date.now()}.tmp`
-      await writeFile(temp, JSON.stringify(list, null, 1))
-      await rename(temp, FILE)
-      return list
-    })
-  global.__savedWrite = next
-  return next
+  return updateDoc<unknown>(FILE, [], (list) => update(Array.isArray(list) ? list : [])) as Promise<SavedListing[]>
 }
 
 /** Files the listings into `folder` (created if new), moving any saved elsewhere. */
-export function saveListings(folder: string, listings: SaveRequest[]) {
-  return change(async (list) => {
-    const name = await addCategory(folder)
+export async function saveListings(folder: string, listings: SaveRequest[]) {
+  // Outside the change: it holds another document's row.
+  const name = await addFolder(folder)
+  return change((list) => {
     const ids = new Set(listings.map((l) => l.listingId))
     const savedAt = new Date().toISOString()
     const added = listings.map((l) => ({ ...l, folder: name, savedAt }))

@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises"
-
-import { filePath } from "@/lib/generation/storage"
+import { readSetFile } from "@/lib/generation/storage"
 import { NotFoundError } from "@/lib/mockups/storage"
 
 type Context = RouteContext<"/api/generations/[id]/files/[file]">
@@ -10,8 +8,8 @@ type Context = RouteContext<"/api/generations/[id]/files/[file]">
 export async function GET(_request: Request, { params }: Context) {
   const { id, file } = await params
   try {
-    const data = await readFile(filePath(id, file))
-    return new Response(data, {
+    const data = await readSetFile(id, file)
+    return new Response(new Uint8Array(data), {
       headers: {
         "Content-Type": file.endsWith(".png") ? "image/png" : file.endsWith(".webp") ? "image/webp" : "image/jpeg",
         "Cache-Control": "private, max-age=31536000, immutable",

@@ -18,7 +18,7 @@ type Key = { client_email: string; private_key: string; project_id: string; toke
 
 let token: { value: string; expires: number; key: Key } | null = null
 
-async function auth() {
+export async function auth() {
   if (token && token.expires > Date.now() + 60_000) return token
   const file = process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (!file) throw new Error("Set GOOGLE_APPLICATION_CREDENTIALS in .env.local")
@@ -46,16 +46,26 @@ async function auth() {
   return token
 }
 
-type Part = { text?: string; inlineData?: { mimeType: string; data: string } }
+export type Part = {
+  text?: string
+  inlineData?: { mimeType: string; data: string }
+  /** A file in Cloud Storage (batch jobs only). */
+  fileData?: { fileUri: string; mimeType: string }
+}
 
 // Vertex's shared quota answers 429 ("Resource has been exhausted") when
-// busy. Every model's calls go through a gate: a few at a time, and when one
-// is told to back off, they all pause — longer while it keeps happening —
-// and fewer go at once until calls succeed again.
-const MAX_PARALLEL = 4
-const ATTEMPTS = 8
+// busy — for the image models on our project most of the time: only a call
+// or two a minute gets through, and a 429 comes back at once and costs
+// nothing. Every model's calls go through a gate: a few at a time, and when
+// one is told to back off, half as many may go and they all pause a few
+// seconds — longer while it keeps happening, but never so long that a free
+// slot goes unused for long — and one more may go with each success. A call
+// keeps trying that way (and through dropped connections) for PATIENCE.
+const MAX_PARALLEL = 20
+const PATIENCE = 20 * 60_000
+const MAX_PAUSE = 20_000
 
-type Gate = { limit: number; active: number; waiting: (() => void)[]; until: number; strikes: number; streak: number }
+type Gate = { limit: number; active: number; waiting: (() => void)[]; until: number; strikes: number }
 
 // On globalThis, so every route (and a dev reload) shares the one gate per model.
 const global = globalThis as typeof globalThis & { __geminiGates?: Map<string, Gate> }
@@ -65,7 +75,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function gateFor(model: string) {
   let gate = gates.get(model)
-  if (!gate) gates.set(model, (gate = { limit: MAX_PARALLEL, active: 0, waiting: [], until: 0, strikes: 0, streak: 0 }))
+  if (!gate) gates.set(model, (gate = { limit: MAX_PARALLEL, active: 0, waiting: [], until: 0, strikes: 0 }))
   return gate
 }
 
@@ -82,22 +92,22 @@ function leave(gate: Gate) {
 
 async function generate(model: string, parts: Part[], generationConfig: object) {
   const gate = gateFor(model)
+  const start = Date.now()
   for (let attempt = 1; ; attempt++) {
     await enter(gate)
     try {
       const result = await generateOnce(model, parts, generationConfig)
       gate.strikes = 0
-      if (++gate.streak >= 3 && gate.limit < MAX_PARALLEL) {
-        gate.limit++
-        gate.streak = 0
-      }
+      if (gate.limit < MAX_PARALLEL) gate.limit++
       return result
     } catch (error) {
-      if (!(error instanceof BusyError) || attempt >= ATTEMPTS) throw error
-      gate.streak = 0
-      gate.strikes++
-      gate.limit = Math.max(1, gate.limit - 1)
-      const wait = Math.min(60_000, 5_000 * 2 ** Math.min(gate.strikes - 1, 4))
+      const busy = error instanceof BusyError
+      if (!(busy || dropped(error)) || Date.now() - start > PATIENCE) throw error
+      if (busy) {
+        gate.strikes++
+        gate.limit = Math.max(1, Math.floor(gate.limit / 2))
+      }
+      const wait = Math.min(MAX_PAUSE, 2_000 * 2 ** Math.min(Math.max(gate.strikes, attempt) - 1, 4))
       gate.until = Math.max(gate.until, Date.now() + wait * (0.75 + Math.random() * 0.5))
     } finally {
       leave(gate)
@@ -106,6 +116,9 @@ async function generate(model: string, parts: Part[], generationConfig: object) 
 }
 
 class BusyError extends Error {}
+
+/** The connection failed (the laptop slept, Wi-Fi dropped): worth trying again. */
+const dropped = (error: unknown) => error instanceof TypeError && error.message === "fetch failed"
 
 async function generateOnce(model: string, parts: Part[], generationConfig: object) {
   const { value, key } = await auth()
@@ -130,14 +143,17 @@ async function generateOnce(model: string, parts: Part[], generationConfig: obje
 }
 
 /** JPEG of at most 2048 px on the long edge — plenty for the models, cheap to send. */
-async function inline(image: Buffer): Promise<Part> {
-  const jpeg = await sharp(image)
+export function modelJpeg(image: Buffer) {
+  return sharp(image)
     .rotate()
     .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
     .removeAlpha()
     .jpeg({ quality: 92 })
     .toBuffer()
-  return { inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }
+}
+
+async function inline(image: Buffer): Promise<Part> {
+  return { inlineData: { mimeType: "image/jpeg", data: (await modelJpeg(image)).toString("base64") } }
 }
 
 const RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]
@@ -191,17 +207,29 @@ async function redraw(image: Buffer, prompt: string) {
  * `aspect` (width / height) is given.
  */
 export async function paint(prompt: string, images: Buffer[], aspect?: number) {
-  const first = images[0] ? await sharp(images[0]).rotate().metadata() : null
-  const ratio = aspect ?? (first ? first.width! / first.height! : 1)
   const parts = await generate(
     IMAGE_MODEL,
     [...(await Promise.all(images.map(inline))), { text: prompt }],
-    {
-      responseModalities: ["IMAGE"],
-      imageConfig: { aspectRatio: nearestRatio(ratio, 1), imageSize: "2K" },
-    }
+    await paintConfig(images, aspect)
   )
-  const result = parts.find((p) => p.inlineData)?.inlineData
+  return imageOf(parts)
+}
+
+export const PAINT_MODEL = IMAGE_MODEL
+
+/** How Nano Banana is asked to paint: at `aspect`, else the first image's. */
+export async function paintConfig(images: Buffer[], aspect?: number) {
+  const first = images[0] ? await sharp(images[0]).rotate().metadata() : null
+  const ratio = aspect ?? (first ? first.width! / first.height! : 1)
+  return {
+    responseModalities: ["IMAGE"],
+    imageConfig: { aspectRatio: nearestRatio(ratio, 1), imageSize: "2K" },
+  }
+}
+
+/** The image in a Nano Banana answer. */
+export function imageOf(parts: Part[] | undefined) {
+  const result = parts?.find((p) => p.inlineData)?.inlineData
   if (!result) throw new Error("Nano Banana returned no image")
   return Buffer.from(result.data, "base64")
 }

@@ -15,7 +15,8 @@ import {
 
 import { ListingGrid } from "@/components/listings/listing-grid"
 import { SplitView } from "@/components/listings/split-view"
-import { bySales, ListingGallery } from "@/components/shops/listing-gallery"
+import { gallerySort, ListingGallery, type GallerySort } from "@/components/shops/listing-gallery"
+import { ImportShops } from "@/components/shops/import-shops"
 import { LibraryButton } from "@/components/shops/library-button"
 import { RecentShops } from "@/components/shops/recent-shops"
 import { ScopePanel } from "@/components/shops/scope-panel"
@@ -148,7 +149,8 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
 
   const recentReviews = React.useMemo(() => (reviews ? countByListing(reviews) : null), [reviews])
   const insights = React.useMemo(() => analyse(listings, currency), [listings, currency])
-  const bestSelling = React.useMemo(() => bySales(listings), [listings])
+  const [gallerySortKey, setGallerySortKey] = React.useState<GallerySort>("sales")
+  const bestSelling = React.useMemo(() => gallerySort(listings, gallerySortKey), [listings, gallerySortKey])
 
   const settled = run !== null && run.status !== "running" && run.status !== "idle"
 
@@ -221,7 +223,12 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
               />
             </TabsContent>
             <TabsContent value="listings">
-              <ListingGallery listings={bestSelling} loading={run?.status === "running"} />
+              <ListingGallery
+                listings={bestSelling}
+                loading={run?.status === "running"}
+                sort={gallerySortKey}
+                onSortChange={setGallerySortKey}
+              />
             </TabsContent>
           </Tabs>
         )}
@@ -318,6 +325,7 @@ function ShopSearch({ query, onSubmit }: { query: string; onSubmit: (query: stri
       <Button type="submit" disabled={!draft.trim()}>
         Look up
       </Button>
+      <ImportShops />
     </form>
   )
 }

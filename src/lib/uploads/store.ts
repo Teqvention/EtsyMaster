@@ -1,69 +1,43 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import path from "node:path"
-
-import { getListing } from "@/lib/etsy/listings"
-import { filePath, getSet, listSets } from "@/lib/generation/storage"
+import { readDoc, updateDoc, watchDoc } from "@/lib/db/documents"
+import { isLeader, whenLeader } from "@/lib/db/workers"
+import { getSet, listSets, updateSet } from "@/lib/generation/storage"
 import type { GenerationSet, Output } from "@/lib/generation/types"
-import { keywordContext, libraryInsights, libraryStats } from "@/lib/keywords/library"
+import { keywordContext, libraryStats } from "@/lib/keywords/library"
 import { getDefaultChain, listChains } from "@/lib/mockups/chains"
 import { NotFoundError } from "@/lib/mockups/storage"
 
-import { writeListing } from "./copy"
+import { draftCopy, sourceDetails } from "./copy"
+import { buildGroups, posterKey, thumbUrl } from "./groups"
 import { cleanTag, cleanTags, cleanTitle, words } from "./text"
-import type { Draft, DraftPatch, DraftView, UploadsState, WaitingPoster } from "./types"
+import type { Draft, DraftPatch, DraftView, RemovedPoster, UploadsState, WaitingPoster } from "./types"
 
-// Upload drafts on disk (data/uploads/drafts.json) and in memory, and the
-// queue that writes their listing copy in the background, two at a time.
-// Drafts still waiting for copy when the server stopped are picked up again
-// the next time the list is read.
+// Upload drafts in one document ("uploads/drafts"), and the queue that
+// writes their listing copy in the background, two at a time, on the server
+// doing the background work (see db/workers.ts): it hears of every draft
+// queued, whichever server queued it. Drafts it finds "writing" without
+// writing them were cut off (a restart, a server that stopped) and go again.
 
-const ROOT = path.join(process.cwd(), "data", "uploads")
-const FILE = path.join(ROOT, "drafts.json")
+const FILE = "uploads/drafts"
 const PARALLEL = 2
 
-type Store = {
-  drafts: Draft[]
-  write: Promise<void>
-  queue: string[]
-  running: Set<string>
+/** Drafts whose copy this server is writing now. */
+const global = globalThis as typeof globalThis & { __uploadsWriting?: Set<string> }
+const running = (global.__uploadsWriting ??= new Set())
+
+whenLeader(() => {
+  watchDoc(FILE, () => void pump())
+  void pump()
+})
+
+/** Every draft, newest first. Shared: never change what this answers. */
+async function readDrafts(): Promise<Draft[]> {
+  const drafts = await readDoc<unknown>(FILE, [])
+  return Array.isArray(drafts) ? drafts : []
 }
 
-const global = globalThis as typeof globalThis & { __uploads?: Promise<Store> }
-
-function store() {
-  global.__uploads ??= load()
-  return global.__uploads
-}
-
-async function load(): Promise<Store> {
-  let drafts: Draft[] = []
-  try {
-    const parsed = JSON.parse(await readFile(FILE, "utf8"))
-    if (Array.isArray(parsed)) drafts = parsed
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-  }
-  const unfinished = drafts.filter((d) => d.copy === "queued" || d.copy === "writing").map((d) => d.id)
-  drafts = drafts.map((d) => (unfinished.includes(d.id) ? { ...d, copy: "queued" } : d))
-  const loaded: Store = { drafts, write: Promise.resolve(), queue: unfinished, running: new Set() }
-  setTimeout(pump, 0)
-  return loaded
-}
-
-/** Applies `change` to the list and writes it; writes queue one after another. */
-async function update(change: (drafts: Draft[]) => Draft[]) {
-  const current = await store()
-  current.drafts = change(current.drafts)
-  const snapshot = JSON.stringify(current.drafts, null, 1)
-  const run = current.write.catch(() => {}).then(async () => {
-    await mkdir(ROOT, { recursive: true })
-    const temporary = `${FILE}.${process.pid}-${Date.now()}.tmp`
-    await writeFile(temporary, snapshot)
-    await rename(temporary, FILE)
-  })
-  current.write = run
-  await run
-  return current.drafts
+/** Applies `change` to the list and writes it, after every other change on any server. */
+function update(change: (drafts: Draft[]) => Draft[]) {
+  return updateDoc<Draft[]>(FILE, [], (drafts) => change(Array.isArray(drafts) ? drafts : []))
 }
 
 function patchDraft(id: string, patch: Partial<Draft>) {
@@ -73,7 +47,7 @@ function patchDraft(id: string, patch: Partial<Draft>) {
 }
 
 export async function getDraft(id: string) {
-  const draft = (await store()).drafts.find((d) => d.id === id)
+  const draft = (await readDrafts()).find((d) => d.id === id)
   if (!draft) throw new NotFoundError("Unknown draft")
   return draft
 }
@@ -124,7 +98,7 @@ function newDraft(set: GenerationSet, output: Output, chainId: string | null): D
 export async function createDrafts(
   request: { generationId: string; outputId: string } | { all: true }
 ) {
-  const { drafts } = await store()
+  const drafts = await readDrafts()
   const have = new Set(drafts.map((d) => `${d.generationId}/${d.outputId}`))
   const chainId = (await getDefaultChain())?.id ?? null
 
@@ -144,11 +118,17 @@ export async function createDrafts(
   }
   if (!made.length) return []
 
-  // Oldest steals first, so the queue works through them in order.
+  // Newest first, like the list; the queue works through them oldest first.
   made.reverse()
-  await update((list) => [...made, ...list])
-  enqueue(made.map((d) => d.id))
-  return made
+  let added: Draft[] = []
+  await update((list) => {
+    // Made meanwhile on another server: not twice.
+    const now = new Set(list.map((d) => `${d.generationId}/${d.outputId}`))
+    added = made.filter((d) => !now.has(`${d.generationId}/${d.outputId}`))
+    return [...added, ...list]
+  })
+  void pump()
+  return added
 }
 
 export async function updateDraft(id: string, patch: DraftPatch) {
@@ -160,11 +140,129 @@ export async function updateDraft(id: string, patch: DraftPatch) {
   await patchDraft(id, clean)
 }
 
+/** Deletes the draft's poster from the uploads (see `removePosters`). */
 export async function deleteDraft(id: string) {
-  await getDraft(id)
-  const current = await store()
-  current.queue = current.queue.filter((q) => q !== id)
-  await update((drafts) => drafts.filter((d) => d.id !== id))
+  const draft = await getDraft(id)
+  await removePosters([posterKey(draft.generationId, draft.outputId)])
+}
+
+// --- Deleted posters ---
+
+const REMOVED = "uploads/removed"
+/** The deleted list keeps this many, newest first. */
+const KEEP = 300
+
+const readRemoved = async () => {
+  const list = await readDoc<unknown>(REMOVED, [])
+  return (Array.isArray(list) ? list : []) as RemovedPoster[]
+}
+
+/** Poster keys ("<set id>/<output id>") by set. */
+function bySet(keys: Iterable<string>) {
+  const sets = new Map<string, Set<string>>()
+  for (const key of keys) {
+    const [setId, outputId] = key.split("/")
+    if (!setId || !outputId) continue
+    sets.set(setId, (sets.get(setId) ?? new Set()).add(outputId))
+  }
+  return sets
+}
+
+/** Changes a set's outputs; null when the set is gone. */
+function changeOutputs(setId: string, change: (output: Output) => Output) {
+  return updateSet(setId, (set) => ({ ...set, outputs: set.outputs.map(change) })).catch((error) => {
+    if (error instanceof NotFoundError) return null
+    throw error
+  })
+}
+
+/**
+ * Takes posters (by key) out of the uploads: no longer approved on
+ * Generation, their drafts deleted, and each put on the deleted list with
+ * its draft.
+ */
+export async function removePosters(keys: string[]) {
+  const wanted = new Set(keys)
+  const removedAt = new Date().toISOString()
+  const entries = new Map<string, RemovedPoster>()
+  // The approval goes first: a draft deleted while its poster is still
+  // approved would be written again by the next "Write listings".
+  for (const [setId, ids] of bySet(wanted)) {
+    const approved = new Set<string>()
+    const set = await changeOutputs(setId, (o) => {
+      if (!ids.has(o.id) || o.review !== "approved") return o
+      approved.add(o.id)
+      return { ...o, review: null, reviewedAt: removedAt }
+    })
+    if (!set) continue
+    for (const output of set.outputs) {
+      if (!ids.has(output.id) || !output.file) continue
+      entries.set(posterKey(set.id, output.id), {
+        generationId: set.id,
+        outputId: output.id,
+        thumb: thumbUrl(set.id, output.file),
+        posterWidth: output.width,
+        posterHeight: output.height,
+        title: output.title || set.source.title,
+        folder: set.folder,
+        approved: approved.has(output.id),
+        removedAt,
+      })
+    }
+  }
+
+  let taken: Draft[] = []
+  await update((drafts) => {
+    taken = drafts.filter((d) => wanted.has(posterKey(d.generationId, d.outputId)))
+    return drafts.filter((d) => !wanted.has(posterKey(d.generationId, d.outputId)))
+  })
+  for (const draft of taken) {
+    const entry = entries.get(posterKey(draft.generationId, draft.outputId))
+    if (!entry) continue
+    entry.draft = draft
+    if (draft.title) entry.title = draft.title
+  }
+
+  if (!entries.size) return
+  await updateDoc<RemovedPoster[]>(REMOVED, [], (list) => {
+    const before = (Array.isArray(list) ? list : []).filter((e) => !entries.has(posterKey(e.generationId, e.outputId)))
+    return [...entries.values(), ...before].slice(0, KEEP)
+  })
+}
+
+/** Brings deleted posters back: approved again, with the draft they had (unless one was made meanwhile). */
+export async function restorePosters(keys: string[]) {
+  const wanted = new Set(keys)
+  const entries = (await readRemoved()).filter((e) => wanted.has(posterKey(e.generationId, e.outputId)))
+  if (!entries.length) throw new NotFoundError("Not on the deleted list")
+
+  const reviewedAt = new Date().toISOString()
+  const toApprove = new Set(entries.filter((e) => e.approved).map((e) => posterKey(e.generationId, e.outputId)))
+  // Posters whose image is still there: only they get their drafts back.
+  const alive = new Set<string>()
+  for (const [setId, ids] of bySet(wanted)) {
+    const set = await changeOutputs(setId, (o) =>
+      toApprove.has(posterKey(setId, o.id)) && o.status === "done" && o.file ? { ...o, review: "approved", reviewedAt } : o
+    )
+    for (const o of set?.outputs ?? []) if (ids.has(o.id) && o.file) alive.add(posterKey(setId, o.id))
+  }
+
+  await update((drafts) => {
+    const have = new Set(drafts.map((d) => posterKey(d.generationId, d.outputId)))
+    const back = entries.flatMap((e) => {
+      const key = posterKey(e.generationId, e.outputId)
+      if (!e.draft || !alive.has(key) || have.has(key)) return []
+      // Cut off mid-write: written again.
+      return [{ ...e.draft, copy: e.draft.copy === "writing" ? ("queued" as const) : e.draft.copy }]
+    })
+    if (!back.length) return drafts
+    // Back in their place: the list is newest first.
+    return [...back, ...drafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  })
+  await updateDoc<RemovedPoster[]>(REMOVED, [], (list) =>
+    (Array.isArray(list) ? list : []).filter((e) => !wanted.has(posterKey(e.generationId, e.outputId)))
+  )
+  void pump()
 }
 
 /** Writes the copy again, optionally steered (e.g. "more gift-focused"). */
@@ -172,26 +270,22 @@ export async function rewriteDraft(id: string, hint?: string) {
   const draft = await getDraft(id)
   if (draft.copy === "queued" || draft.copy === "writing") return
   await patchDraft(id, { copy: "queued", hint: hint?.trim() || undefined, error: undefined })
-  enqueue([id])
+  void pump()
 }
 
 // --- Queue ---
 
-function enqueue(ids: string[]) {
-  store().then((current) => {
-    for (const id of ids) if (!current.queue.includes(id)) current.queue.push(id)
-    pump()
-  })
-}
-
+/** Starts writing the oldest drafts waiting for copy, up to PARALLEL at once; only on the server leading. */
 async function pump() {
-  const current = await store()
-  while (current.running.size < PARALLEL && current.queue.length) {
-    const id = current.queue.shift()!
-    current.running.add(id)
-    write(id).finally(() => {
-      current.running.delete(id)
-      pump()
+  if (!(await isLeader())) return
+  for (const draft of (await readDrafts()).toReversed()) {
+    if (running.size >= PARALLEL) return
+    // "writing" here but not by this server: cut off, so again.
+    if (running.has(draft.id) || (draft.copy !== "queued" && draft.copy !== "writing")) continue
+    running.add(draft.id)
+    write(draft.id).finally(() => {
+      running.delete(draft.id)
+      void pump()
     })
   }
 }
@@ -202,34 +296,15 @@ async function write(id: string) {
     if (!draft) return
     await patchDraft(id, { copy: "writing" })
 
-    const set = await getSet(draft.generationId)
-    const output = set.outputs.find((o) => o.id === draft.outputId)
-    const analysis = set.posters.find((p) => p.index === output?.poster)?.analysis
-    const image = output?.file ? await readFile(filePath(set.id, output.file)).catch(() => undefined) : undefined
-
     const source = await withSourceTags(draft)
-    const query = {
-      title: [source.title, draft.design.title, analysis?.subject].filter(Boolean).join(" | "),
-      tags: source.tags,
-    }
-    const [keywords, insights] = await Promise.all([keywordContext(query, 40), libraryInsights()])
-    const recent = (await store()).drafts
+    // The latest listings, to keep this one's title, tags and story apart from.
+    const recent = (await readDrafts())
       .filter((d) => d.id !== id && d.title)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 15)
-      .map((d) => ({ title: d.title!, strategy: d.strategy }))
+      .slice(0, 20)
+      .map((d) => ({ title: d.title!, tags: d.tags, strategy: d.strategy, form: d.form, description: d.description }))
 
-    const copy = await writeListing({
-      source,
-      design: draft.design,
-      analysis,
-      folder: draft.folder,
-      image,
-      keywords,
-      insights,
-      recent,
-      hint: draft.hint,
-    })
+    const copy = await draftCopy({ ...draft, source }, recent)
     await patchDraft(id, { ...copy, copy: "done", error: undefined })
   } catch (error) {
     console.error(`Upload draft ${id}:`, error)
@@ -241,19 +316,28 @@ async function write(id: string) {
 }
 
 /**
- * The source listing with its tags. Steals from before tags were kept only
- * have the title; their tags are looked up on Etsy once and kept.
+ * The source listing with its tags and description. Steals from before tags
+ * were kept only have the title, and none has the description: what's
+ * missing is read from Etsy once (or taken from a draft of the same steal
+ * that has it) and kept.
  */
 async function withSourceTags(draft: Draft) {
-  if (draft.source.tags.length) return draft.source
+  if (draft.source.tags.length && draft.source.description !== undefined) return draft.source
+  const sibling = (await readDrafts()).find(
+    (d) => d.source.listingId === draft.source.listingId && d.source.description !== undefined && d.source.tags.length
+  )
   try {
-    const listing = await getListing(draft.source.listingId)
-    if (!listing?.tags.length) return draft.source
-    const source = { ...draft.source, tags: listing.tags }
+    const details = sibling?.source ?? (await sourceDetails(draft.source.listingId))
+    // Etsy's tags when it has more: a steal may have kept only some.
+    const source = {
+      ...draft.source,
+      tags: details.tags.length > draft.source.tags.length ? details.tags : draft.source.tags,
+      description: details.description,
+    }
     await patchDraft(draft.id, { source })
     return source
   } catch (error) {
-    console.warn(`Upload draft ${draft.id}: no source tags`, error)
+    console.warn(`Upload draft ${draft.id}: no source details`, error)
     return draft.source
   }
 }
@@ -289,11 +373,12 @@ async function withKeywords(draft: Draft): Promise<DraftView> {
 
 /** Everything the Uploads page shows. */
 export async function uploadsState(): Promise<UploadsState> {
-  const [{ drafts }, sets, chains, library] = await Promise.all([
-    store(),
+  const [drafts, sets, chains, library, removedList] = await Promise.all([
+    readDrafts(),
     listSets(),
     listChains().catch(() => []),
     libraryStats().catch(() => ({ shops: 0, listings: 0, keywords: 0 })),
+    readRemoved(),
   ])
 
   const have = new Set(drafts.map((d) => `${d.generationId}/${d.outputId}`))
@@ -320,5 +405,19 @@ export async function uploadsState(): Promise<UploadsState> {
   const views = await Promise.all(
     drafts.map((d) => withKeywords(d.chainId && !chainIds.has(d.chainId) ? { ...d, chainId: fallback } : d))
   )
-  return { drafts: views, waiting, chains, library }
+  // Only what could come back: its image still there, and not back in the
+  // uploads some other way (approved again on Generation).
+  const outputs = new Map(sets.flatMap((set) => (set.outputs ?? []).map((o) => [posterKey(set.id, o.id), o] as const)))
+  const removed = removedList
+    .filter((e) => {
+      const key = posterKey(e.generationId, e.outputId)
+      const output = outputs.get(key)
+      return !!output?.file && !have.has(key) && !isApproved(output)
+    })
+    .map(({ draft, ...entry }) => {
+      void draft
+      return entry
+    })
+
+  return { drafts: views, waiting, chains, library, groups: buildGroups(sets, drafts), removed }
 }

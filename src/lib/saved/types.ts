@@ -1,7 +1,7 @@
 // A listing filed into a folder from a shop's gallery: enough of it to show
 // the poster, link back to Etsy and run generations, without the Etsy API.
-// Folders are the mockup categories, so a folder's mockups land in the
-// category of the same name.
+// Folders are the Saved page's own; mockups go in a mockup category picked
+// for them.
 
 export type SavedListing = {
   listingId: number

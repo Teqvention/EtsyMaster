@@ -3,12 +3,13 @@
 import * as React from "react"
 import { CheckIcon, FolderIcon, PlusIcon, SearchIcon } from "lucide-react"
 
-import { refreshCategories, useMockupCategories } from "@/hooks/use-mockup-categories"
+import { refreshCategories, useCategories } from "@/hooks/use-categories"
 import { cn } from "@/lib/utils"
 
-// Categories as big targets: one click files everything into one. Typing
-// filters, and names a new category when nothing matches; ↑/↓ (and ←/→ with
-// an empty field) move through them and Enter takes the highlighted one.
+// The Saved page's folders as big targets: one click files everything into
+// one. Typing filters, and names a new category when nothing matches; ↑/↓
+// (and ←/→ with an empty field) move through them and Enter takes the
+// highlighted one.
 
 const COLUMNS = 2
 
@@ -26,13 +27,13 @@ export function CategoryGrid({
   /** For the dialog to focus first. */
   inputRef?: React.Ref<HTMLInputElement>
 }) {
-  const categories = useMockupCategories()
+  const categories = useCategories("saved")
   const [query, setQuery] = React.useState("")
   const [highlight, setHighlight] = React.useState(0)
   const list = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
-    refreshCategories()
+    refreshCategories("saved")
   }, [])
 
   const name = query.trim().replace(/\s+/g, " ")

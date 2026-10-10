@@ -1,47 +1,30 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises"
-import path from "node:path"
+import { docKeys, readDoc, updateDoc } from "@/lib/db/documents"
 
 import { MAX_CHAIN_PHOTOS, type ChainPatch, type ChainVideo, type MockupChain } from "./chain-types"
 import { NotFoundError } from "./storage"
 
-// Mockup chains on disk, next to the scenes they list. Every change answers
-// with the whole list, since making one chain the default changes the others.
+// Mockup chains, the document "mockups/chains", next to the scenes they
+// list. Every change answers with the whole list, since making one chain the
+// default changes the others.
 
-const ROOT = path.join(process.cwd(), "data", "mockups")
-const CHAINS = path.join(ROOT, "chains.json")
+const CHAINS = "mockups/chains"
 const SCENE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
-// Changes go one after another, so two quick edits never write over each other.
-const global = globalThis as typeof globalThis & { __chainWrites?: Promise<unknown> }
-
-function serial<T>(work: () => Promise<T>): Promise<T> {
-  const next = (global.__chainWrites ?? Promise.resolve()).catch(() => {}).then(work)
-  global.__chainWrites = next
-  return next
-}
+const valid = (list: unknown) => (Array.isArray(list) ? list.filter(isChain) : [])
 
 async function readChains(): Promise<MockupChain[]> {
-  try {
-    const list = JSON.parse(await readFile(CHAINS, "utf8"))
-    return Array.isArray(list) ? list.filter(isChain) : []
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
-    throw error
-  }
+  return valid(await readDoc<unknown>(CHAINS, []))
 }
 
-async function writeChains(list: MockupChain[]) {
-  await mkdir(ROOT, { recursive: true })
-  // Replaced whole, so a read meanwhile never sees half a file.
-  const temp = `${CHAINS}.${process.pid}-${Date.now()}.tmp`
-  await writeFile(temp, JSON.stringify(list, null, 1))
-  await rename(temp, CHAINS)
+/** Changes the chains, after every other change to them on any server; answers the list as `listChains` does. */
+async function changeChains(change: (list: MockupChain[]) => MockupChain[]) {
+  await updateDoc<unknown>(CHAINS, [], async (stored) => change(await present(valid(stored))))
+  return listChains()
 }
 
-/** Every chain, oldest first, without scenes deleted since they were added. */
-export async function listChains(): Promise<MockupChain[]> {
-  const [list, folders] = await Promise.all([readChains(), readdir(ROOT).catch(() => [] as string[])])
-  const scenes = new Set(folders)
+/** The chains without scenes deleted since they were added. */
+async function present(list: MockupChain[]) {
+  const scenes = new Set((await docKeys("mockups/")).filter((k) => k.endsWith("/scene")).map((k) => k.split("/")[1]))
   return withDefault(
     list.map((chain) => ({
       ...chain,
@@ -49,6 +32,11 @@ export async function listChains(): Promise<MockupChain[]> {
       video: chain.video && scenes.has(chain.video.sceneId) ? chain.video : null,
     }))
   )
+}
+
+/** Every chain, oldest first, without scenes deleted since they were added. */
+export async function listChains(): Promise<MockupChain[]> {
+  return present(await readChains())
 }
 
 export async function getChain(id: string) {
@@ -63,8 +51,7 @@ export async function getDefaultChain() {
 }
 
 export function addChain(init: ChainPatch & { name: string }) {
-  return serial(async () => {
-    const list = await listChains()
+  return changeChains((list) => {
     const now = new Date().toISOString()
     const chain: MockupChain = {
       id: `c-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
@@ -77,14 +64,12 @@ export function addChain(init: ChainPatch & { name: string }) {
       updatedAt: now,
     }
     const next = chain.isDefault ? list.map((c) => ({ ...c, isDefault: false })) : list
-    await writeChains([...next, chain])
-    return listChains()
+    return [...next, chain]
   })
 }
 
 export function updateChain(id: string, patch: ChainPatch) {
-  return serial(async () => {
-    const list = await listChains()
+  return changeChains((list) => {
     const current = list.find((c) => c.id === id)
     if (!current) throw new NotFoundError("Unknown chain")
     const changed: MockupChain = {
@@ -94,22 +79,17 @@ export function updateChain(id: string, patch: ChainPatch) {
       ...(patch.video !== undefined && { video: cleanVideo(patch.video) }),
       updatedAt: new Date().toISOString(),
     }
-    const next = list.map((c) => {
+    return list.map((c) => {
       if (c.id === id) return { ...changed, isDefault: patch.isDefault ?? c.isDefault }
       return patch.isDefault ? { ...c, isDefault: false } : c
     })
-    await writeChains(next)
-    return listChains()
   })
 }
 
 export function deleteChain(id: string) {
-  return serial(async () => {
-    const list = await listChains()
+  return changeChains((list) => {
     if (!list.some((c) => c.id === id)) throw new NotFoundError("Unknown chain")
-    const next = withDefault(list.filter((c) => c.id !== id))
-    await writeChains(next)
-    return next
+    return withDefault(list.filter((c) => c.id !== id))
   })
 }
 

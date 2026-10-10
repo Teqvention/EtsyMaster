@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises"
-
 import sharp from "sharp"
 
 import { NotFoundError } from "@/lib/mockups/storage"
+import { getFile } from "@/lib/storage/files"
 
-// Images for the browser. Files never change once written, so every answer
-// may be cached for good; `?w=` asks for a smaller copy for grids and pickers.
+// Images for the browser, by storage key. Files never change once written,
+// so every answer may be cached for good; `?w=` asks for a smaller copy for
+// grids and pickers.
 
 const WIDTHS = [160, 320, 480, 960]
 
@@ -15,13 +15,14 @@ export async function serveImage(request: Request, locate: () => string) {
     const asked = Number(new URL(request.url).searchParams.get("w"))
     // Only a few sizes, so the cache doesn't fill with near-duplicates.
     const width = WIDTHS.find((w) => w >= asked)
+    const original = await getFile(file)
     const data =
       asked && width
-        ? await sharp(file)
+        ? await sharp(original)
             .resize(width, width * 2, { fit: "inside", withoutEnlargement: true })
             .jpeg({ quality: 82 })
             .toBuffer()
-        : await readFile(file)
+        : original
     return new Response(new Uint8Array(data), {
       headers: {
         "Content-Type": asked && width ? "image/jpeg" : contentType(file),

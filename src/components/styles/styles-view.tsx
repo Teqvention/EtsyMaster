@@ -3,10 +3,11 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { AlertCircleIcon, LoaderCircleIcon, PaletteIcon, PlusIcon } from "lucide-react"
+import { AlertCircleIcon, FolderOpenIcon, LoaderCircleIcon, PaletteIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { StyleCover, Swatches } from "@/components/styles/style-cover"
+import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,20 +27,41 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createStyle, refreshStyles, useStyles } from "@/hooks/use-styles"
+import { createStyle, EXPECT_READ, POLL, refreshStyles, useStyles } from "@/hooks/use-styles"
 import type { StyleSummary } from "@/lib/styles/types"
 
 // Every style as a card: its moodboard's first images and the palette read
 // from them. A new style starts empty and opens straight away, so its images
-// can be added where they're shown.
+// can be added where they're shown; one from a Saved folder opens with its
+// posters on their way in.
 
 export function StylesView() {
   const styles = useStyles()
   const [creating, setCreating] = React.useState(false)
+  const [fromSaved, setFromSaved] = React.useState(false)
 
   React.useEffect(() => {
     refreshStyles()
   }, [])
+
+  // While posters come in or a guide is read, and once more after: a read
+  // starts a moment after the last poster lands.
+  const busy = styles?.some((s) => s.guideStatus === "running" || s.incoming) ?? false
+  React.useEffect(() => {
+    if (!busy) return
+    const timer = setInterval(refreshStyles, POLL)
+    return () => {
+      clearInterval(timer)
+      for (const wait of [EXPECT_READ / 2, EXPECT_READ]) setTimeout(refreshStyles, wait)
+    }
+  }, [busy])
+
+  const fromSavedButton = (
+    <Button size="sm" variant="outline" onClick={() => setFromSaved(true)} className="active:scale-[0.97]">
+      <FolderOpenIcon />
+      From Saved
+    </Button>
+  )
 
   return (
     <div className="flex flex-col gap-4 px-4 lg:px-6">
@@ -48,6 +70,7 @@ export function StylesView() {
           Moodboards of posters that share a look. Gemini reads each board once and writes a style
           guide; steals generated in a style follow it.
         </p>
+        {fromSavedButton}
         <Button size="sm" onClick={() => setCreating(true)} className="active:scale-[0.97]">
           <PlusIcon />
           New style
@@ -68,11 +91,12 @@ export function StylesView() {
             </EmptyMedia>
             <EmptyTitle>Make your first style</EmptyTitle>
             <EmptyDescription>
-              Collect 3–12 posters with the look you want — uploads or extracted steals from
-              Generation. Then generate steals in that look.
+              Collect 3–12 posters with the look you want — a Saved folder, uploads or extracted
+              steals from Generation. Then generate steals in that look.
             </EmptyDescription>
           </EmptyHeader>
-          <EmptyContent>
+          <EmptyContent className="flex-row justify-center">
+            {fromSavedButton}
             <Button size="sm" onClick={() => setCreating(true)}>
               <PlusIcon />
               New style
@@ -100,6 +124,7 @@ export function StylesView() {
       )}
 
       <CreateStyleDialog open={creating} onOpenChange={setCreating} />
+      <StyleFromSavedDialog open={fromSaved} onOpenChange={setFromSaved} navigate />
     </div>
   )
 }
@@ -123,7 +148,19 @@ function StyleCard({ style }: { style: StyleSummary }) {
 }
 
 /** Whether the style has been read: its palette, or what's happening instead. */
-export function StyleState({ style }: { style: Pick<StyleSummary, "guide" | "guideStatus" | "count"> }) {
+export function StyleState({
+  style,
+}: {
+  style: Pick<StyleSummary, "guide" | "guideStatus" | "count" | "incoming">
+}) {
+  if (style.incoming) {
+    return (
+      <span className="ml-auto flex items-center gap-1">
+        <LoaderCircleIcon className="size-3 animate-spin" />
+        Adding {style.incoming}
+      </span>
+    )
+  }
   if (style.guideStatus === "running") {
     return (
       <span className="ml-auto flex items-center gap-1">

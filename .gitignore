@@ -45,3 +45,20 @@ corded-skill-*.json
 
 # raw mockup kit downloads (converted into data/mockups)
 mockups-*.zip
+
+# API keys and OAuth tokens of the Etsy and Gelato accounts
+/data/secrets/
+
+# rendered print files and listing media, sales and fee data
+/data/pipeline/
+/data/sync/
+/data/usage/
+
+# caches of live prices, exchange rates and Etsy search counts
+/data/pricing/costs/
+/data/pricing/fx.json
+/data/pricing/market.json
+/data/keywords/demand.json
+
+# copies of stored images and videos, downloaded from the bucket
+/.cache/

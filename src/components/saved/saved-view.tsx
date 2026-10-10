@@ -13,7 +13,9 @@ import {
   FolderOpenIcon,
   FrameIcon,
   HeartIcon,
+  LayersIcon,
   LoaderCircleIcon,
+  PaletteIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PlusIcon,
@@ -26,6 +28,7 @@ import { GenerateDialog } from "@/components/generation/generate-dialog"
 import { LikedView } from "@/components/listings/liked-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
 import { SelectionBar, SelectMark } from "@/components/selection"
+import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -58,25 +61,28 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { generate, isActive, retryGeneration, useGenerations } from "@/hooks/use-generations"
 import { useLikes } from "@/hooks/use-likes"
-import { createCategory, refreshCategories, useMockupCategories } from "@/hooks/use-mockup-categories"
+import { createCategory, refreshCategories, useCategories } from "@/hooks/use-categories"
 import { removeFromSaved, saveToFolder, useSaved } from "@/hooks/use-saved"
 import { useSelection } from "@/hooks/use-selection"
 import { formatCurrency } from "@/lib/etsy/format"
 import type { GenerateOptions, GenerationKind, GenerationSet } from "@/lib/generation/types"
 import type { SavedListing } from "@/lib/saved/types"
+import { MAX_IMAGES } from "@/lib/styles/types"
 import { cn } from "@/lib/utils"
 
 // Saved: liked listings, and the folders listings are filed into from a
 // shop's gallery. A folder's posters are where generation starts: its
-// mockups (a blank mockup scene per photo, in the mockup category of the same
-// name) and its posters (taken out of the photo and redrawn as new designs).
-// The open folder lives in the URL (`?folder=`), none being Liked.
+// mockups (a blank mockup scene per photo, in a mockup category picked for
+// them: folders aren't mockup categories), its posters (taken out of the photo and redrawn as new designs) and
+// a style (their look, read off a moodboard of them).
+// What's open lives in the URL: `?folder=` a folder, `?liked` the likes,
+// neither every folder at once ("All", where Generate all starts from).
 
 type Folder = { name: string; count: number; busy: boolean }
 
 export function SavedView({ currency }: { currency: string }) {
   const saved = useSaved()
-  const categories = useMockupCategories()
+  const categories = useCategories("saved")
   const likes = useLikes()
   const sets = useGenerations()
   const [param, open] = useOpenFolder()
@@ -90,7 +96,7 @@ export function SavedView({ currency }: { currency: string }) {
   }
 
   React.useEffect(() => {
-    refreshCategories()
+    refreshCategories("saved")
   }, [])
 
   const folders = React.useMemo(() => {
@@ -100,17 +106,28 @@ export function SavedView({ currency }: { currency: string }) {
       const entry = byKey.get(folder.toLowerCase()) ?? { name: folder, count: 0, busy: false }
       byKey.set(folder.toLowerCase(), { ...entry, count: entry.count + 1 })
     }
+    // Busy by where the listing is saved: a mockup set's folder is its mockup category.
+    const folderOf = new Map((saved ?? []).map((s) => [s.listingId, s.folder]))
     for (const set of sets ?? []) {
-      const entry = byKey.get(set.folder.toLowerCase())
+      const entry = byKey.get((folderOf.get(set.source.listingId) ?? set.folder).toLowerCase())
       if (entry && isActive(set)) entry.busy = true
     }
     return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [categories, saved, sets])
   const counts = React.useMemo(() => new Map(folders.map((f) => [f.name.toLowerCase(), f.count])), [folders])
 
-  const current = param === null ? null : (folders.find((f) => f.name.toLowerCase() === param.toLowerCase())?.name ?? param)
+  const current =
+    param === LIKED || param === null
+      ? param
+      : (folders.find((f) => f.name.toLowerCase() === param.toLowerCase())?.name ?? param)
   const items = React.useMemo(
-    () => (current ? (saved ?? []).filter((s) => s.folder.toLowerCase() === current.toLowerCase()) : []),
+    () =>
+      current === LIKED
+        ? []
+        : current === null
+          ? // Folder by folder, as All shows them (and Shift-click runs over them).
+            (saved ?? []).toSorted((a, b) => a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" }))
+          : (saved ?? []).filter((s) => s.folder.toLowerCase() === current.toLowerCase()),
     [saved, current]
   )
 
@@ -124,6 +141,7 @@ export function SavedView({ currency }: { currency: string }) {
     <div className="flex items-start">
       <FolderBar
         folders={folders}
+        total={saved?.length ?? 0}
         liked={Object.keys(likes).length}
         current={current}
         onOpen={open}
@@ -133,7 +151,7 @@ export function SavedView({ currency }: { currency: string }) {
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {current === null ? (
+        {current === LIKED ? (
           <>
             <PaneHeader icon={<HeartIcon />} title="Liked" before={expand} />
             <LikedView currency={currency} />
@@ -148,7 +166,7 @@ export function SavedView({ currency }: { currency: string }) {
             </div>
           </div>
         ) : (
-          <FolderView key={current} folder={current} items={items} sets={sets} counts={counts} expand={expand} />
+          <FolderView key={current ?? ALL_KEY} folder={current} items={items} sets={sets} counts={counts} expand={expand} />
         )}
       </div>
     </div>
@@ -185,6 +203,7 @@ function PaneHeader({
 
 function FolderBar({
   folders,
+  total,
   liked,
   current,
   onOpen,
@@ -193,7 +212,10 @@ function FolderBar({
   onCollapse,
 }: {
   folders: Folder[]
+  /** Listings saved in any folder. */
+  total: number
   liked: number
+  /** A folder, all of them (null) or `LIKED`. */
   current: string | null
   onOpen: (folder: string | null) => void
   collapsed: boolean
@@ -222,11 +244,19 @@ function FolderBar({
           </Button>
         </div>
         <FolderButton
+          icon={<LayersIcon />}
+          name="All"
+          count={total}
+          busy={folders.some((f) => f.busy)}
+          current={current === null}
+          onClick={() => onOpen(null)}
+        />
+        <FolderButton
           icon={<HeartIcon />}
           name="Liked"
           count={liked}
-          current={current === null}
-          onClick={() => onOpen(null)}
+          current={current === LIKED}
+          onClick={() => onOpen(LIKED)}
         />
 
         <div className="mt-2 flex items-center justify-between py-0.5 pr-0.5 pl-2">
@@ -304,7 +334,7 @@ function NewFolder({ onDone }: { onDone: (name: string | null) => void }) {
       onSubmit={(event) => {
         event.preventDefault()
         const clean = name.trim()
-        onDone(clean ? createCategory(clean) : null)
+        onDone(clean ? createCategory("saved", clean) : null)
       }}
       className="px-0.5 py-0.5"
     >
@@ -331,6 +361,21 @@ const NOUNS: Record<GenerationKind, [string, string]> = {
 }
 const noun = (kind: GenerationKind, n: number) => NOUNS[kind][n === 1 ? 0 : 1]
 
+const sourceOf = (i: SavedListing) => ({
+  listingId: i.listingId,
+  title: i.title,
+  image: i.image,
+  url: i.url,
+  shop: i.shop,
+  tags: i.tags,
+})
+
+/** The folder every one of `listings` is in, if they share one. */
+function sharedFolder(listings: SavedListing[]) {
+  const folders = new Set(listings.map((l) => l.folder))
+  return folders.size === 1 ? [...folders][0] : null
+}
+
 /** Listings to start sets for, and failed sets to run again. */
 type Work = { fresh: SavedListing[]; again: GenerationSet[] }
 
@@ -341,7 +386,8 @@ function FolderView({
   counts,
   expand,
 }: {
-  folder: string
+  /** Null for every folder at once. */
+  folder: string | null
   items: SavedListing[]
   sets: GenerationSet[] | null
   /** Listings per folder (lower-cased), for moving. */
@@ -356,6 +402,8 @@ function FolderView({
   const pending = React.useRef<number[]>([])
   // Posters ask what to make first; this is what they'll run on.
   const [asking, setAsking] = React.useState<Work | null>(null)
+  // A style asks which posters go on its board: these picked to start, or all of them.
+  const [styling, setStyling] = React.useState<number[] | null>(null)
 
   // The newest set of each kind per listing (sets come newest first).
   const latest = React.useMemo(() => {
@@ -368,6 +416,18 @@ function FolderView({
   }, [sets])
 
   const byId = React.useMemo(() => new Map(items.map((i) => [i.listingId, i])), [items])
+  // All shows each folder under a small heading; a folder is one untitled group.
+  const groups = React.useMemo(() => {
+    if (folder) return [{ name: null as string | null, items }]
+    const byFolder = new Map<string, { name: string | null; items: SavedListing[] }>()
+    for (const item of items) {
+      const key = item.folder.toLowerCase()
+      const group = byFolder.get(key) ?? { name: item.folder, items: [] }
+      group.items.push(item)
+      byFolder.set(key, group)
+    }
+    return [...byFolder.values()]
+  }, [folder, items])
   const pick = (ids: Iterable<number>) => [...ids].flatMap((id) => byId.get(id) ?? [])
 
   /**
@@ -386,23 +446,18 @@ function FolderView({
     return { fresh, again }
   }
 
-  async function run(kind: GenerationKind, { fresh, again }: Work, options?: GenerateOptions) {
+  /** Mockups go `into` the mockup category picked for them. */
+  async function run(kind: GenerationKind, { fresh, again }: Work, options?: GenerateOptions, into?: string) {
     const n = fresh.length + again.length
     if (!n) return
     // New posters ask what to make; failed sets just run again as asked before.
     if (kind === "poster" && !options && fresh.length) return setAsking({ fresh, again })
     selection.clear()
-    const sources = fresh.map((i) => ({
-      listingId: i.listingId,
-      title: i.title,
-      image: i.image,
-      url: i.url,
-      shop: i.shop,
-      tags: i.tags,
-    }))
+    // Posters go in each listing's own folder, mockups in their mockup category.
+    const byFolder = Map.groupBy(fresh, (i) => into ?? i.folder)
     try {
       await Promise.all([
-        ...(sources.length ? [generate(kind, folder, sources, options)] : []),
+        ...[...byFolder].map(([to, listings]) => generate(kind, to, listings.map(sourceOf), options)),
         ...again.map((set) => retryGeneration(set.id)),
       ])
       const per = options ? options.variants.count + options.ideas.count : 0
@@ -412,10 +467,19 @@ function FolderView({
             ? per
               ? `Each poster is taken out of its photo, then ${per} new ${per === 1 ? "one is" : "ones are"} drawn from it.`
               : "What failed before runs again."
-            : `Each photo becomes a blank mockup in the ${folder} category.`,
+            : into
+              ? `Each photo becomes a blank mockup in the ${into} category.`
+              : "What failed before runs again.",
         action: {
           label: "View",
-          onClick: () => router.push(`/generation?folder=${encodeURIComponent(folder)}`),
+          onClick: () =>
+            router.push(
+              into
+                ? `/generation?kind=mockup&folder=${encodeURIComponent(into)}`
+                : folder
+                  ? `/generation?folder=${encodeURIComponent(folder)}`
+                  : "/generation"
+            ),
         },
       })
     } catch (error) {
@@ -423,8 +487,9 @@ function FolderView({
     }
   }
 
-  async function move(to: string, listings: SavedListing[]) {
-    if (to.toLowerCase() === folder.toLowerCase()) return
+  async function move(to: string, all: SavedListing[]) {
+    const listings = all.filter((l) => l.folder.toLowerCase() !== to.toLowerCase())
+    if (!listings.length) return
     selection.clear()
     try {
       // Saving again files them under the new folder (and date).
@@ -441,8 +506,11 @@ function FolderView({
     selection.clear()
     try {
       await removeFromSaved(listings.map((l) => l.listingId))
-      toast(`Removed ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} from ${folder}`, {
-        action: { label: "Undo", onClick: () => saveToFolder(listings, folder) },
+      toast(`Removed ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} from ${folder ?? "Saved"}`, {
+        action: {
+          label: "Undo",
+          onClick: () => Map.groupBy(listings, (l) => l.folder).forEach((back, to) => saveToFolder(back, to)),
+        },
       })
     } catch (error) {
       toast.error(`Couldn't remove: ${(error as Error).message}`)
@@ -464,18 +532,52 @@ function FolderView({
 
   return (
     <>
-      <PaneHeader icon={<FolderOpenIcon />} title={folder} count={items.length} before={expand}>
-        <GenerateButton
-          kind="mockup"
-          icon={<FrameIcon />}
-          variant="outline"
-          count={mockups.fresh.length + mockups.again.length}
-          picked={selection.count > 0}
-          disabled={!items.length}
-          onClick={() => run("mockup", mockups)}
-        />
+      <PaneHeader
+        icon={folder ? <FolderOpenIcon /> : <LayersIcon />}
+        title={folder ?? "All"}
+        count={items.length}
+        before={expand}
+      >
+        {folder && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!items.length}
+            onClick={() => setStyling([...selection.selected])}
+            title={
+              selection.count
+                ? `A style from the ${selection.count} selected`
+                : "A style from the posters in this folder"
+            }
+          >
+            <PaletteIcon />
+            Generate style
+            <Count value={Math.min(selection.count || items.length, MAX_IMAGES)} variant="outline" />
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <GenerateButton
+                kind="mockup"
+                icon={<FrameIcon />}
+                variant="outline"
+                count={mockups.fresh.length + mockups.again.length}
+                picked={selection.count > 0}
+                disabled={!items.length}
+              />
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64 p-0">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="px-2.5 pt-2 pb-1">Into mockup category</DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <CategoryPicker of="mockups" onPick={(into) => run("mockup", mockups, undefined, into)} />
+          </DropdownMenuContent>
+        </DropdownMenu>
         <GenerateButton
           kind="poster"
+          label={folder ? undefined : "Generate all"}
           icon={<SparklesIcon />}
           variant="default"
           count={posters.fresh.length + posters.again.length}
@@ -492,9 +594,9 @@ function FolderView({
               <EmptyMedia variant="icon">
                 <FolderOpenIcon />
               </EmptyMedia>
-              <EmptyTitle>Nothing in {folder} yet</EmptyTitle>
+              <EmptyTitle>{folder ? `Nothing in ${folder} yet` : "Nothing saved yet"}</EmptyTitle>
               <EmptyDescription>
-                In a shop&apos;s Listings, select posters and right-click to save them here.
+                In a shop&apos;s Listings, select posters and right-click to save them {folder ? "here" : "into a folder"}.
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
@@ -511,21 +613,38 @@ function FolderView({
               setMenuOpen(open)
             }}
           >
-            <ContextMenuTrigger
-              onContextMenu={aimMenu}
-              render={<ol className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-x-4 gap-y-5" />}
-            >
-              {items.map((item) => (
-                <li key={item.listingId}>
-                  <SavedTile
-                    item={item}
-                    mockup={latest.get(`mockup:${item.listingId}`)}
-                    poster={latest.get(`poster:${item.listingId}`)}
-                    selected={selection.has(item.listingId)}
-                    selecting={selection.count > 0}
-                    onToggle={(range) => selection.toggle(item.listingId, { range })}
-                  />
-                </li>
+            <ContextMenuTrigger onContextMenu={aimMenu} render={<div className="flex flex-col gap-8" />}>
+              {groups.map((group) => (
+                <section key={group.name} aria-label={group.name ?? undefined} className="flex flex-col gap-3">
+                  {group.name !== null && (
+                    <h3 className="sticky top-0 z-10 -mx-1 flex items-baseline gap-2 bg-background/85 px-1 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+                      <button
+                        type="button"
+                        onClick={() => router.replace(`/liked?folder=${encodeURIComponent(group.name!)}`)}
+                        className="flex items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5"
+                        title={`Open ${group.name}`}
+                      >
+                        <FolderIcon />
+                        {group.name}
+                      </button>
+                      <span className="font-normal tabular-nums">{group.items.length}</span>
+                    </h3>
+                  )}
+                  <ol className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-x-4 gap-y-5">
+                    {group.items.map((item) => (
+                      <li key={item.listingId}>
+                        <SavedTile
+                          item={item}
+                          mockup={latest.get(`mockup:${item.listingId}`)}
+                          poster={latest.get(`poster:${item.listingId}`)}
+                          selected={selection.has(item.listingId)}
+                          selecting={selection.count > 0}
+                          onToggle={(range) => selection.toggle(item.listingId, { range })}
+                        />
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               ))}
             </ContextMenuTrigger>
             <ContextMenuContent className="w-56">
@@ -534,14 +653,31 @@ function FolderView({
                   {targeted.length === 1 ? targeted[0].title : `${targeted.length} listings`}
                 </ContextMenuLabel>
               </ContextMenuGroup>
-              <ContextMenuItem onClick={() => run("mockup", { fresh: targeted, again: [] })}>
-                <FrameIcon />
-                Generate {noun("mockup", targeted.length)}
-              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <FrameIcon />
+                  Generate {noun("mockup", targeted.length)}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-64 p-0">
+                  <ContextMenuGroup>
+                    <ContextMenuLabel className="px-2.5 pt-2 pb-1">Into mockup category</ContextMenuLabel>
+                  </ContextMenuGroup>
+                  <CategoryPicker
+                    of="mockups"
+                    onPick={(into) => run("mockup", { fresh: targeted, again: [] }, undefined, into)}
+                  />
+                </ContextMenuSubContent>
+              </ContextMenuSub>
               <ContextMenuItem onClick={() => run("poster", { fresh: targeted, again: [] })}>
                 <SparklesIcon />
                 Generate {noun("poster", targeted.length)}
               </ContextMenuItem>
+              {folder && (
+                <ContextMenuItem onClick={() => setStyling(target)}>
+                  <PaletteIcon />
+                  Generate style
+                </ContextMenuItem>
+              )}
               <ContextMenuSeparator />
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
@@ -549,7 +685,7 @@ function FolderView({
                   Move to
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-64 p-0">
-                  <CategoryPicker onPick={(to) => move(to, targeted)} counts={counts} current={folder} />
+                  <CategoryPicker of="saved" onPick={(to) => move(to, targeted)} counts={counts} current={folder ?? sharedFolder(targeted)} />
                 </ContextMenuSubContent>
               </ContextMenuSub>
               {targeted.length === 1 && (
@@ -570,7 +706,7 @@ function FolderView({
         <GenerateDialog
           open={asking !== null}
           onOpenChange={(open) => !open && setAsking(null)}
-          title={`Generate posters · ${folder}`}
+          title={`Generate posters · ${folder ?? "All folders"}`}
           description={
             asking &&
             [
@@ -584,6 +720,16 @@ function FolderView({
           references={{ count: asking?.fresh.length ?? 1, noun: "steal" }}
           onSubmit={(options) => (asking ? run("poster", asking, options) : undefined)}
         />
+
+        {folder && (
+          <StyleFromSavedDialog
+            open={styling !== null}
+            onOpenChange={(open) => !open && setStyling(null)}
+            folder={folder}
+            picked={styling ?? undefined}
+            onDone={() => selection.clear()}
+          />
+        )}
 
         <SelectionBar
           count={selection.count}
@@ -606,7 +752,12 @@ function FolderView({
                   Move {selection.count === 1 ? "listing" : `${selection.count} listings`} to
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
-              <CategoryPicker onPick={(to) => move(to, pick(selection.selected))} counts={counts} current={folder} />
+              <CategoryPicker
+                of="saved"
+                onPick={(to) => move(to, pick(selection.selected))}
+                counts={counts}
+                current={folder ?? sharedFolder(pick(selection.selected))}
+              />
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="sm" onClick={() => remove(pick(selection.selected))}>
@@ -621,29 +772,29 @@ function FolderView({
 
 function GenerateButton({
   kind,
+  label = kind === "mockup" ? "Generate mockups" : "Generate posters",
   icon,
   variant,
   count,
   picked,
   disabled,
-  onClick,
+  ...props
 }: {
   kind: GenerationKind
+  label?: string
   icon: React.ReactNode
   variant: "default" | "outline"
   count: number
   picked: boolean
   disabled: boolean
-  onClick: () => void
-}) {
-  const label = kind === "mockup" ? "Generate mockups" : "Generate posters"
+} & Omit<React.ComponentProps<typeof Button>, "variant" | "disabled">) {
   const done = !picked && count === 0
   return (
     <Button
+      {...props}
       variant={variant}
       size="sm"
       disabled={disabled || done}
-      onClick={onClick}
       title={
         done
           ? `Every listing here has ${kind === "mockup" ? "a mockup" : "its posters"} — select some to run them again`
@@ -654,17 +805,22 @@ function GenerateButton({
     >
       {icon}
       {label}
-      {!done && (
-        <span
-          className={cn(
-            "-mr-0.5 rounded-full px-1.5 text-[11px] leading-4 font-medium tabular-nums",
-            variant === "default" ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground"
-          )}
-        >
-          {count}
-        </span>
-      )}
+      {!done && <Count value={count} variant={variant} />}
     </Button>
+  )
+}
+
+/** How many listings a header button runs on. */
+function Count({ value, variant }: { value: number; variant: "default" | "outline" }) {
+  return (
+    <span
+      className={cn(
+        "-mr-0.5 rounded-full px-1.5 text-[11px] leading-4 font-medium tabular-nums",
+        variant === "default" ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground"
+      )}
+    >
+      {value}
+    </span>
   )
 }
 
@@ -751,13 +907,20 @@ function SetChip({ set, label }: { set: GenerationSet; label: string }) {
 
 // --- State ---
 
+/** Stands for Liked where a folder name goes; no folder can be called this. */
+const LIKED = "\0liked"
+const ALL_KEY = "\0all"
+
+/** The open folder, null for All, or `LIKED`. */
 function useOpenFolder() {
   const searchParams = useSearchParams()
-  const folder = searchParams.get("folder")
+  const folder = searchParams.has("liked") ? LIKED : searchParams.get("folder")
   const open = React.useCallback((next: string | null) => {
     const params = new URLSearchParams(window.location.search)
-    if (next === null) params.delete("folder")
-    else params.set("folder", next)
+    params.delete("folder")
+    params.delete("liked")
+    if (next === LIKED) params.set("liked", "")
+    else if (next !== null) params.set("folder", next)
     // A listing open in Liked belongs to Liked.
     params.delete("listing")
     const query = params.toString()

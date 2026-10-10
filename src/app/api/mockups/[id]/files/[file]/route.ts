@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises"
-
 import { respond } from "@/lib/mockups/respond"
-import { filePath, NotFoundError, saveFile } from "@/lib/mockups/storage"
+import { NotFoundError, readSceneFile, saveFile } from "@/lib/mockups/storage"
 
 type Context = RouteContext<"/api/mockups/[id]/files/[file]">
 
@@ -19,7 +17,7 @@ const TYPES: Record<string, string> = {
 export async function GET(request: Request, { params }: Context) {
   const { id, file } = await params
   try {
-    const data = await readFile(filePath(id, file))
+    const data = await readSceneFile(id, file)
     const headers = {
       "Content-Type": TYPES[file.split(".").pop()!.toLowerCase()],
       "Cache-Control": "no-cache",
@@ -33,12 +31,12 @@ export async function GET(request: Request, { params }: Context) {
       if (start > end || start >= size) {
         return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } })
       }
-      return new Response(data.subarray(start, end + 1), {
+      return new Response(new Uint8Array(data.subarray(start, end + 1)), {
         status: 206,
         headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${size}` },
       })
     }
-    return new Response(data, { headers })
+    return new Response(new Uint8Array(data), { headers })
   } catch (error) {
     const missing =
       error instanceof NotFoundError ||

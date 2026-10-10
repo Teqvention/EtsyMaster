@@ -1,51 +1,53 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
-import path from "node:path"
-
 import sharp from "sharp"
 
+import { changeDoc, deleteDoc, readDoc, readDocs, writeDoc } from "@/lib/db/documents"
+import { instanceId, isLive } from "@/lib/db/workers"
+import { fileKey as generationKey, readSetFile } from "@/lib/generation/storage"
 import { NotFoundError } from "@/lib/mockups/storage"
+import { deleteFile, deleteFiles, getFile, putFile } from "@/lib/storage/files"
 
 import { MAX_IMAGES, type Style, type StyleGuide, type StyleImage, type StyleSource, type StyleSummary } from "./types"
 
-// Styles on disk: data/styles/<id>/style.json plus the moodboard images,
-// copied in (never pointing at a generation's files, which can be deleted).
-const ROOT = path.join(process.cwd(), "data", "styles")
-const GENERATIONS = path.join(process.cwd(), "data", "generations")
+// A style is the document styles/<id>/style plus its moodboard images, files
+// under styles/<id>/, copied in (never pointing at a generation's files,
+// which can be deleted). A guide being written is stamped with the server
+// writing it: one stored as "running" by a server that has since stopped
+// isn't running any more. Saved listings on their way onto the board are
+// stamped the same way.
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.(png|jpg|jpeg|webp)$/i
 
-// Writes to one style go one after another, so two quick changes (an upload
-// and a reorder) never interleave reading and writing style.json. Guides
-// being written are tracked here too: a style stored as "running" by a
-// server that has since stopped isn't running any more.
-const global = globalThis as typeof globalThis & {
-  __styleWrites?: Map<string, Promise<unknown>>
-  __styleReading?: Set<string>
-}
-const writes = (global.__styleWrites ??= new Map())
+/** Guides this server is writing now. */
+const global = globalThis as typeof globalThis & { __styleReading?: Set<string> }
 export const reading = (global.__styleReading ??= new Set())
 
-function folder(id: string) {
+type Stored = Style & { runner?: string; importer?: string }
+
+function docKey(id: string) {
   if (!ID.test(id)) throw new NotFoundError("Unknown style")
-  return path.join(ROOT, id)
+  return `styles/${id}/style`
 }
 
-export function filePath(id: string, file: string) {
-  if (!FILE.test(file)) throw new NotFoundError("Unknown file")
-  return path.join(folder(id), file)
+/** The storage key of one of the style's images. */
+export function fileKey(id: string, file: string) {
+  if (!ID.test(id) || !FILE.test(file)) throw new NotFoundError("Unknown file")
+  return `styles/${id}/${file}`
 }
 
 export const fileUrl = (id: string, file: string) => `/api/styles/${id}/files/${file}`
 
+async function view(style: Stored): Promise<Style> {
+  const stopped = style.guideStatus === "running" && !reading.has(style.id) && !(await isLive(style.runner))
+  const dropped = !!style.incoming && !(await isLive(style.importer))
+  if (!stopped && !dropped) return style
+  return { ...style, ...(stopped && { guideStatus: "idle" as const }), ...(dropped && { incoming: undefined }) }
+}
+
 async function read(id: string): Promise<Style> {
-  try {
-    const style: Style = JSON.parse(await readFile(path.join(folder(id), "style.json"), "utf8"))
-    return style.guideStatus === "running" && !reading.has(id) ? { ...style, guideStatus: "idle" } : style
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new NotFoundError("Unknown style")
-    throw error
-  }
+  const style = await readDoc<Stored | null>(docKey(id), null)
+  if (!style) throw new NotFoundError("Unknown style")
+  return view(style)
 }
 
 export async function getStyle(id: string): Promise<Style> {
@@ -53,14 +55,8 @@ export async function getStyle(id: string): Promise<Style> {
 }
 
 export async function listStyles(): Promise<StyleSummary[]> {
-  await mkdir(ROOT, { recursive: true })
-  const styles = await Promise.all(
-    (await readdir(ROOT)).filter((id) => ID.test(id)).map((id) => read(id).catch(() => null))
-  )
-  return styles
-    .filter((s): s is Style => s !== null)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .map(summary)
+  const styles = await Promise.all([...(await readDocs<Stored>("styles/", "/style")).values()].map(view))
+  return styles.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(summary)
 }
 
 export function summary(style: Style): StyleSummary {
@@ -69,6 +65,7 @@ export function summary(style: Style): StyleSummary {
     name: style.name,
     guide: style.guide,
     guideStatus: style.guideStatus,
+    incoming: style.incoming,
     createdAt: style.createdAt,
     updatedAt: style.updatedAt,
     count: style.images.length,
@@ -95,28 +92,28 @@ export async function createStyle(name: string): Promise<Style> {
     createdAt: now,
     updatedAt: now,
   }
-  await mkdir(folder(id), { recursive: true })
-  await writeFile(path.join(folder(id), "style.json"), JSON.stringify(style, null, 1))
+  await writeDoc(docKey(id), style)
   return style
 }
 
-/** Applies `change` to the stored style and writes it, one change at a time per style. */
-export function updateStyle(id: string, change: (style: Style) => Style | Promise<Style>): Promise<Style> {
-  const run = (writes.get(id) ?? Promise.resolve())
-    .catch(() => {})
-    .then(async () => {
-      const next = { ...(await change(await read(id))), updatedAt: new Date().toISOString() }
-      await writeFile(path.join(folder(id), "style.json"), JSON.stringify(next, null, 1))
-      return next
-    })
-  writes.set(id, run)
-  return run
+/** Applies `change` to the stored style and writes it, after every other change to it on any server. */
+export async function updateStyle(id: string, change: (style: Style) => Style | Promise<Style>): Promise<Style> {
+  const saved = await changeDoc<Stored>(docKey(id), async (stored) => {
+    const next: Stored = { ...(await change(await view(stored))), updatedAt: new Date().toISOString() }
+    if (next.guideStatus !== "running") delete next.runner
+    else if (stored.guideStatus !== "running" || !(await isLive(stored.runner))) next.runner = instanceId
+    if (!next.incoming) delete next.importer
+    else if (!stored.incoming || !(await isLive(stored.importer))) next.importer = instanceId
+    return next
+  })
+  if (!saved) throw new NotFoundError("Unknown style")
+  return view(saved)
 }
 
 export async function deleteStyle(id: string) {
   await read(id)
-  await writes.get(id)?.catch(() => {})
-  await rm(folder(id), { recursive: true, force: true })
+  await deleteDoc(docKey(id))
+  await deleteFiles(`styles/${id}/`)
 }
 
 // --- Images ---
@@ -135,44 +132,44 @@ async function normalize(data: Buffer) {
   }
 }
 
-/** Adds images to the end of the board; ones already copied from the same generation file are skipped. */
-export async function addImages(id: string, items: { data: Buffer; from?: string }[]) {
+/**
+ * Adds images to the end of the board; ones already copied from the same
+ * source are skipped. More than fit is refused, or with `trim` cut short.
+ */
+export async function addImages(id: string, items: { data: Buffer; from?: string }[], { trim = false } = {}) {
   const prepared = await Promise.all(
     items.map(async ({ data, from }) => ({ ...(await normalize(data)), from }))
   )
   return updateStyle(id, async (style) => {
     const known = new Set(style.images.map((i) => i.from).filter(Boolean))
-    const fresh = prepared.filter((p) => !p.from || !known.has(p.from))
+    let fresh = prepared.filter((p) => !p.from || !known.has(p.from))
     if (style.images.length + fresh.length > MAX_IMAGES) {
-      throw new Error(`A style holds up to ${MAX_IMAGES} images`)
+      if (!trim) throw new Error(`A style holds up to ${MAX_IMAGES} images`)
+      fresh = fresh.slice(0, Math.max(0, MAX_IMAGES - style.images.length))
     }
     const now = new Date().toISOString()
     const added: StyleImage[] = []
     for (const { data, info, from } of fresh) {
       const file = `img-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.jpg`
-      await writeFile(filePath(id, file), data)
+      await putFile(fileKey(id, file), data)
       added.push({ file, width: info.width, height: info.height, addedAt: now, ...(from && { from }) })
     }
-    return { ...style, images: [...style.images, ...added] }
+    // Whatever didn't make it last time, the board has moved on.
+    return { ...style, images: [...style.images, ...added], importError: undefined }
   })
 }
 
 /** The image of a generation set, as a moodboard source. */
-export async function readGenerationFile(generation: string, file: string) {
-  return readFile(generationPath(generation, file))
-}
+export const readGenerationFile = readSetFile
 
-export function generationPath(generation: string, file: string) {
-  if (!ID.test(generation) || !FILE.test(file)) throw new NotFoundError("Unknown file")
-  return path.join(GENERATIONS, generation, file)
-}
+export { generationKey }
 
 export async function removeImage(id: string, file: string) {
   const style = await updateStyle(id, (s) => {
     if (!s.images.some((i) => i.file === file)) throw new NotFoundError("Unknown image")
     return { ...s, images: s.images.filter((i) => i.file !== file) }
   })
-  await rm(filePath(id, file), { force: true })
+  await deleteFile(fileKey(id, file))
   return style
 }
 
@@ -192,10 +189,12 @@ export async function styleImages(id: string, limit = 6): Promise<Buffer[]> {
   const style = await read(id)
   return Promise.all(
     pick(style.images, limit).map((image) =>
-      sharp(filePath(id, image.file))
-        .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: 88 })
-        .toBuffer()
+      getFile(fileKey(id, image.file)).then((data) =>
+        sharp(data)
+          .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 88 })
+          .toBuffer()
+      )
     )
   )
 }
@@ -279,24 +278,10 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 /**
  * Posters on the Generation page, newest set first: every extracted poster and
  * every result that wasn't turned down (approved ones first). Read straight
- * from the sets' files, so it works whatever the Generation page is doing.
+ * from the sets' documents, so it works whatever the Generation page is doing.
  */
 export async function listSources(): Promise<StyleSource[]> {
-  let ids: string[] = []
-  try {
-    ids = (await readdir(GENERATIONS)).filter((id) => ID.test(id))
-  } catch {
-    return []
-  }
-  const sets = await Promise.all(
-    ids.map(async (id) => {
-      try {
-        return JSON.parse(await readFile(path.join(GENERATIONS, id, "set.json"), "utf8")) as StoredSet
-      } catch {
-        return null
-      }
-    })
-  )
+  const sets = [...(await readDocs<StoredSet>("generations/", "/set")).values()]
 
   const sources: StyleSource[] = []
   for (const set of sets) {

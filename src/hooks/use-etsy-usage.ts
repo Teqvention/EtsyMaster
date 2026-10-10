@@ -2,72 +2,111 @@
 
 import * as React from "react"
 
-import type { EtsyUsage } from "@/lib/etsy/usage"
+import type { UsageState } from "@/lib/accounts/usage"
 
-// Reads the server's latest Etsy quota reading. It refreshes whenever the app
-// finishes an Etsy-backed request (see `notifyEtsyRequest`), on focus, and on a
-// slow poll for quota that trickles back as the 24-hour window rolls.
+// The server's latest Etsy quota reading per account, shared by everyone
+// looking. It refreshes whenever the app finishes an Etsy-backed request (see
+// `notifyEtsyRequest`), on focus, and on a slow poll for quota that trickles
+// back as the 24-hour window rolls; every few seconds while uploads run, so
+// their progress moves.
 
 const EVENT = "etsy:request"
 const POLL_MS = 60_000
+const UPLOAD_POLL_MS = 4_000
 
 /** Call after an `/api/*` request that may have spent Etsy quota. */
 export function notifyEtsyRequest() {
   window.dispatchEvent(new Event(EVENT))
 }
 
-export function useEtsyUsage() {
-  const [usage, setUsage] = React.useState<EtsyUsage | null>(null)
-  const [refreshing, setRefreshing] = React.useState(false)
+const listeners = new Set<() => void>()
+let state: UsageState | null = null
+let refreshing = false
+let timer: ReturnType<typeof setTimeout> | undefined
+let poll: ReturnType<typeof setTimeout> | undefined
 
-  // Asks Etsy for a fresh reading now, whatever its age (costs one request).
-  const refresh = React.useCallback(async () => {
-    setRefreshing(true)
-    try {
-      const res = await fetch("/api/usage?refresh")
-      if (res.ok) setUsage((await res.json()) as EtsyUsage)
-    } catch {
-      // Keep the last reading.
-    } finally {
-      setRefreshing(false)
+function emit() {
+  listeners.forEach((notify) => notify())
+}
+
+const uploading = () => !!state?.accounts.some((a) => a.progress?.active)
+
+async function load(refresh = false) {
+  try {
+    const res = await fetch(refresh ? "/api/usage?refresh" : "/api/usage", { cache: "no-store" })
+    if (res.ok) {
+      state = (await res.json()) as UsageState
+      emit()
     }
-  }, [])
+  } catch {
+    // Keep the last reading; the next trigger retries.
+  }
+  schedulePoll()
+}
 
-  React.useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
+function schedulePoll() {
+  clearTimeout(poll)
+  if (!listeners.size) return
+  poll = setTimeout(() => {
+    if (document.visibilityState === "visible") load()
+    else schedulePoll()
+  }, uploading() ? UPLOAD_POLL_MS : POLL_MS)
+}
 
-    async function load() {
-      try {
-        const res = await fetch("/api/usage")
-        if (res.ok && !cancelled) setUsage((await res.json()) as EtsyUsage)
-      } catch {
-        // Keep the last reading; the next trigger retries.
-      }
-    }
+// Coalesce bursts (a page of results plus the open listing and its shop).
+function schedule() {
+  clearTimeout(timer)
+  timer = setTimeout(() => load(), 300)
+}
 
-    // Coalesce bursts (a page of results plus the open listing and its shop).
-    function schedule() {
-      clearTimeout(timer)
-      timer = setTimeout(load, 300)
-    }
+function onVisible() {
+  if (document.visibilityState === "visible") schedule()
+}
 
-    function onVisible() {
-      if (document.visibilityState === "visible") schedule()
-    }
-
-    load()
-    const poll = setInterval(onVisible, POLL_MS)
+function subscribe(notify: () => void) {
+  listeners.add(notify)
+  if (listeners.size === 1) {
     window.addEventListener(EVENT, schedule)
     document.addEventListener("visibilitychange", onVisible)
-    return () => {
-      cancelled = true
+    load()
+  }
+  return () => {
+    listeners.delete(notify)
+    if (!listeners.size) {
       clearTimeout(timer)
-      clearInterval(poll)
+      clearTimeout(poll)
       window.removeEventListener(EVENT, schedule)
       document.removeEventListener("visibilitychange", onVisible)
     }
-  }, [])
+  }
+}
 
-  return { usage, refresh, refreshing }
+const snapshot = () => state
+const refreshingSnapshot = () => refreshing
+
+/** Asks Etsy for a fresh reading on every key now (one request each). */
+async function refresh() {
+  refreshing = true
+  emit()
+  try {
+    await load(true)
+  } finally {
+    refreshing = false
+    emit()
+  }
+}
+
+/** Reads uploads progress again right away, e.g. after starting a job. */
+export const refreshUsage = () => load()
+
+export function useEtsyUsage() {
+  const current = React.useSyncExternalStore(subscribe, snapshot, () => null)
+  const busy = React.useSyncExternalStore(subscribe, refreshingSnapshot, () => false)
+  return {
+    state: current,
+    /** Both analysis keys together: what research can still spend. */
+    usage: current?.analysis ?? null,
+    refresh,
+    refreshing: busy,
+  }
 }

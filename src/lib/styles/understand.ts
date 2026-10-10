@@ -2,8 +2,9 @@ import sharp from "sharp"
 
 import { askJson } from "@/lib/mockups/gemini"
 import { NotFoundError } from "@/lib/mockups/storage"
+import { getFile } from "@/lib/storage/files"
 
-import { filePath, generationPath, getStyle, pick, reading, toGuide, updateStyle } from "./storage"
+import { fileKey, generationKey, getStyle, pick, reading, toGuide, updateStyle } from "./storage"
 import { READ_IMAGES, type Style } from "./types"
 
 // Gemini reads the whole moodboard once and writes the style guide every
@@ -61,10 +62,9 @@ async function readStyle(id: string) {
     // Small enough that ten of them make a light request; plenty to see a style.
     const images = await Promise.all(
       chosen.map((image) =>
-        sharp(filePath(id, image.file))
-          .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
-          .jpeg({ quality: 85 })
-          .toBuffer()
+        getFile(fileKey(id, image.file)).then((data) =>
+          sharp(data).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer()
+        )
       )
     )
     const answer = await askJson<unknown>(prompt(style.name, images.length), images, {
@@ -182,10 +182,9 @@ const SCHEMA = {
 export async function suggestName(items: { generation: string; file: string }[], taken: string[]) {
   const images = await Promise.all(
     pick(items, 6).map(({ generation, file }) =>
-      sharp(generationPath(generation, file))
-        .resize(512, 512, { fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer()
+      getFile(generationKey(generation, file)).then((data) =>
+        sharp(data).resize(512, 512, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer()
+      )
     )
   )
   const answer = await askJson<{ name?: unknown }>(namePrompt(images.length, taken), images, {

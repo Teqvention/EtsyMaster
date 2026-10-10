@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { FolderIcon, FolderInputIcon, LayoutGridIcon } from "lucide-react"
+import { ArrowDownToLineIcon, FolderIcon, FolderInputIcon, LayoutGridIcon } from "lucide-react"
 
 import { useListingSelection } from "@/components/listings/split-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
@@ -23,10 +23,11 @@ import {
 } from "@/components/ui/context-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { scrollParent } from "@/hooks/use-infinite-listings"
-import { refreshCategories } from "@/hooks/use-mockup-categories"
+import { refreshCategories } from "@/hooks/use-categories"
 import { useSaved, useSavedFolder } from "@/hooks/use-saved"
 import { useSelection } from "@/hooks/use-selection"
-import { formatCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { formatCompact, formatCompactCurrency, formatCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
 import type { Listing } from "@/lib/etsy/types"
 import { cn } from "@/lib/utils"
 
@@ -35,12 +36,64 @@ import { cn } from "@/lib/utils"
 // files them into categories on the Saved page; right-click files them into
 // one straight away. Double-click opens the details.
 
-/** Best sellers first: estimated sales a month, then revenue a month. */
-export function bySales(listings: Listing[]) {
+export type GallerySort = "sales" | "revenue" | "lifetime" | "favorites" | "views"
+
+/** Ways to rank the whole shop, best first; `value` is what a tile shows. */
+const SORTS: {
+  value: GallerySort
+  label: string
+  by: (l: Listing) => number
+  show: (l: Listing) => React.ReactNode
+}[] = [
+  {
+    value: "sales",
+    label: "Sales / mo",
+    by: (l) => l.estimate.salesPerMonth,
+    show: (l) => <Metric value={formatRate(l.estimate.salesPerMonth, true)} unit="/ mo" />,
+  },
+  {
+    value: "revenue",
+    label: "Revenue / mo",
+    by: (l) => l.estimate.revenuePerMonthCents,
+    show: (l) => <Metric value={formatCompactCurrency(l.estimate.revenuePerMonthCents, l.currency)} unit="/ mo" />,
+  },
+  {
+    value: "lifetime",
+    label: "Sales, all time",
+    by: (l) => l.estimate.sales,
+    show: (l) => <Metric value={formatRate(l.estimate.sales, true)} unit="sold" />,
+  },
+  {
+    value: "favorites",
+    label: "Favorites",
+    by: (l) => l.favorites,
+    show: (l) => <Metric value={formatCompact(l.favorites)} unit="favs" />,
+  },
+  {
+    value: "views",
+    label: "Views",
+    by: (l) => l.views,
+    show: (l) => <Metric value={formatCompact(l.views)} unit="views" />,
+  },
+]
+
+/** Every listing ranked by `sort`, best first; ties go to estimated sales a month, then revenue. */
+export function gallerySort(listings: Listing[], sort: GallerySort) {
+  const { by } = SORTS.find((s) => s.value === sort)!
   return listings.toSorted(
     (a, b) =>
+      by(b) - by(a) ||
       b.estimate.salesPerMonth - a.estimate.salesPerMonth ||
       b.estimate.revenuePerMonthCents - a.estimate.revenuePerMonthCents
+  )
+}
+
+function Metric({ value, unit }: { value: string; unit: string }) {
+  return (
+    <span className="font-medium">
+      {value}
+      <span className="font-normal text-muted-foreground"> {unit}</span>
+    </span>
   )
 }
 
@@ -53,10 +106,14 @@ const PRELOAD_MARGIN = "0px 0px 1200px 0px"
 export function ListingGallery({
   listings: all,
   loading,
+  sort,
+  onSortChange,
 }: {
-  /** In gallery order, see `bySales`. */
+  /** Every analysed listing in gallery order, see `gallerySort`. */
   listings: Listing[]
   loading: boolean
+  sort: GallerySort
+  onSortChange: (sort: GallerySort) => void
 }) {
   const router = useRouter()
   const { select: openDetails } = useListingSelection()
@@ -78,6 +135,7 @@ export function ListingGallery({
   // The steal dialog, mounted afresh for each opening with what it steals.
   const [stealing, setStealing] = React.useState({ open: false, key: 0, listings: [] as Listing[] })
 
+  const metric = SORTS.find((s) => s.value === sort)!.show
   const ranked = React.useMemo(
     () => listings.map((listing) => ({ listing, rank: ranks.get(listing.id) ?? 0 })),
     [listings, ranks]
@@ -85,21 +143,24 @@ export function ListingGallery({
 
   // Categories load ahead, so the first search is as instant as the next.
   React.useEffect(() => {
-    refreshCategories()
+    refreshCategories("saved")
   }, [])
 
   const more = shown < ranked.length
+  // A fresh observer per step reports at once if the sentinel is still in
+  // reach (one step can be shorter than the preload margin on wide screens),
+  // so the grid keeps filling without waiting for another scroll.
   const sentinel = React.useCallback(
     (node: HTMLElement | null) => {
       if (!node || !more) return
       const observer = new IntersectionObserver(
-        ([entry]) => entry.isIntersecting && setShown((n) => n + STEP),
+        ([entry]) => entry.isIntersecting && setShown((n) => Math.max(n, shown + STEP)),
         { root: scrollParent(node), rootMargin: PRELOAD_MARGIN }
       )
       observer.observe(node)
       return () => observer.disconnect()
     },
-    [more]
+    [more, shown]
   )
 
   // Listings saved per folder (lower-cased) for the folder picker, and where each is.
@@ -112,6 +173,25 @@ export function ListingGallery({
     }
     return { counts, folderOf }
   }, [saved])
+
+  // The lowest-ranked listing already filed, to carry on searching from there.
+  const lastFiled = React.useMemo(
+    () => ranked.findLastIndex((r) => folderOf.has(r.listing.id)),
+    [ranked, folderOf]
+  )
+  const [jump, setJump] = React.useState<{ id: number } | null>(null)
+  function jumpToLastFiled() {
+    if (lastFiled < 0) return
+    setShown((n) => Math.max(n, lastFiled + STEP))
+    setJump({ id: ranked[lastFiled].listing.id })
+  }
+  // Runs once the tile is revealed (same render as `shown` grows).
+  React.useEffect(() => {
+    if (!jump) return
+    const tile = document.querySelector<HTMLElement>(`[data-listing-id="${jump.id}"]`)
+    tile?.scrollIntoView({ block: "center", behavior: "smooth" })
+    tile?.focus({ preventScroll: true })
+  }, [jump])
 
   /** The folder every one of `ids` is in, if they share one. */
   function sharedFolder(ids: Iterable<number>) {
@@ -172,25 +252,60 @@ export function ListingGallery({
             setShown(STEP)
           }}
         />
-        {keywords.length > 0 && (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatNumber(listings.length)} of {formatNumber(all.length)} listings
-          </span>
-        )}
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {keywords.length > 0
+            ? `${formatNumber(listings.length)} of ${formatNumber(all.length)} listings`
+            : `${formatNumber(all.length)} listings`}
+        </span>
+        <Select
+          value={sort}
+          items={SORTS}
+          onValueChange={(value) => {
+            if (!value) return
+            onSortChange(value as GallerySort)
+            setShown(STEP)
+          }}
+        >
+          <SelectTrigger size="sm" className="ml-auto w-40" aria-label="Rank by">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORTS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex min-h-7 items-center justify-between gap-2 text-xs text-muted-foreground">
         <p className={cn("transition-opacity duration-150", selection.count > 0 && "opacity-0")}>
           Click to select, then steal them into categories. Right-click to steal in one go
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground"
-          disabled={!ids.length}
-          onClick={allSelected ? selection.clear : selection.selectAll}
-        >
-          {allSelected ? "Deselect all" : "Select all"}
-        </Button>
+        <div className="flex items-center gap-1">
+          {lastFiled >= 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={jumpToLastFiled}
+              title={`Jump to the last listing filed into a category (${folderOf.get(ranked[lastFiled].listing.id)})`}
+            >
+              <ArrowDownToLineIcon />
+              Last filed
+              <span className="tabular-nums">#{ranked[lastFiled].rank}</span>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={!ids.length}
+            onClick={allSelected ? selection.clear : selection.selectAll}
+          >
+            {allSelected ? "Deselect all" : "Select all"}
+          </Button>
+        </div>
       </div>
 
       <ContextMenu
@@ -209,6 +324,7 @@ export function ListingGallery({
             <li key={item.listing.id}>
               <GalleryTile
                 item={item}
+                metric={metric(item.listing)}
                 selected={selection.has(item.listing.id)}
                 selecting={selection.count > 0}
                 onToggle={(range) => selection.toggle(item.listing.id, { range })}
@@ -231,6 +347,7 @@ export function ListingGallery({
             </ContextMenuLabel>
           </ContextMenuGroup>
           <CategoryPicker
+            of="saved"
             onPick={(folder) => quickSteal(folder, target)}
             counts={counts}
             current={sharedFolder(target)}
@@ -279,12 +396,15 @@ export function ListingGallery({
 
 function GalleryTile({
   item: { listing, rank },
+  metric,
   selected,
   selecting,
   onToggle,
   onOpen,
 }: {
   item: Ranked
+  /** The ranking's number for this listing. */
+  metric: React.ReactNode
   selected: boolean
   selecting: boolean
   onToggle: (range: boolean) => void
@@ -300,7 +420,7 @@ function GalleryTile({
       type="button"
       data-listing-id={listing.id}
       aria-pressed={selected}
-      aria-label={`${listing.title}, number ${rank} by sales`}
+      aria-label={`${listing.title}, number ${rank}`}
       onClick={(event) => onToggle(event.shiftKey)}
       onDoubleClick={onOpen}
       className="group/tile flex w-full flex-col gap-2 rounded-xl text-left outline-none select-none"
@@ -347,10 +467,7 @@ function GalleryTile({
 
       <span className="flex items-baseline gap-2 px-0.5 text-sm tabular-nums">
         <span className="w-6 shrink-0 text-xs text-muted-foreground">{rank}</span>
-        <span className="font-medium">
-          {formatRate(listing.estimate.salesPerMonth, true)}
-          <span className="font-normal text-muted-foreground"> / mo</span>
-        </span>
+        {metric}
         <span className="ml-auto text-muted-foreground">
           {formatCurrency(listing.priceCents, listing.currency)}
         </span>

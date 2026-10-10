@@ -1,40 +1,44 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
-import path from "node:path"
-
 import sharp from "sharp"
+
+import { addName, listNames } from "@/lib/categories"
+import { changeDoc, deleteDoc, readDoc, readDocs, updateDoc, writeDoc } from "@/lib/db/documents"
+import { deleteFile, deleteFiles, fileInfo, getFile, listFiles, putFile } from "@/lib/storage/files"
 
 import { isTemplate } from "./motion"
 import type { CategorySummary, Scene, SceneSummary, Template } from "./types"
 
-// Scenes live on disk next to the app: data/mockups/<id>/scene.json plus one
-// image per layer. This is a local tool, so the file system is the database.
-const ROOT = path.join(process.cwd(), "data", "mockups")
+// A scene is the document mockups/<id>/scene plus one image per layer, files
+// under mockups/<id>/ (see storage/files.ts), shared by every server.
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.(png|jpg|jpeg|webp|mp4)$/i
 
 export class NotFoundError extends Error {}
 
-function folder(id: string) {
+function docKey(id: string) {
   if (!ID.test(id)) throw new NotFoundError("Unknown scene")
-  return path.join(ROOT, id)
+  return `mockups/${id}/scene`
 }
 
-export function filePath(id: string, file: string) {
+/** The storage key of one of the scene's files. */
+export function fileKey(id: string, file: string) {
+  if (!ID.test(id)) throw new NotFoundError("Unknown scene")
   if (!FILE.test(file)) throw new NotFoundError("Unknown file")
-  return path.join(folder(id), file)
+  return `mockups/${id}/${file}`
 }
+
+/** One of the scene's files. */
+export const readSceneFile = (id: string, file: string) => getFile(fileKey(id, file))
 
 export async function listScenes(): Promise<SceneSummary[]> {
-  await mkdir(ROOT, { recursive: true })
-  const ids = (await readdir(ROOT)).filter((id) => ID.test(id))
+  const stored = await readDocs<Scene>("mockups/", "/scene")
   const scenes = await Promise.all(
-    ids.map(async (id) => {
+    [...stored.values()].map(async (scene) => {
       try {
-        const scene = await getScene(id)
+        const id = scene.id
         // Written with the poster by the editor's save, or by the grid when missing.
-        const thumb = await stat(filePath(id, "thumb.jpg"))
-          .then((s) => `thumb.jpg?v=${s.mtimeMs | 0}`)
+        const thumb = await fileInfo(fileKey(id, "thumb.jpg"))
+          .then((f) => (f ? `thumb.jpg?v=${f.hash.slice(0, 8)}` : null))
           .catch(() => null)
         return {
           id,
@@ -63,22 +67,13 @@ export async function listScenes(): Promise<SceneSummary[]> {
 }
 
 export async function getScene(id: string): Promise<Scene> {
-  try {
-    return JSON.parse(await readFile(path.join(folder(id), "scene.json"), "utf8"))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new NotFoundError("Unknown scene")
-    }
-    throw error
-  }
+  const scene = await readDoc<Scene | null>(docKey(id), null)
+  if (!scene) throw new NotFoundError("Unknown scene")
+  return scene
 }
 
 export async function saveScene(scene: Scene) {
-  await getScene(scene.id)
-  await writeFile(
-    path.join(folder(scene.id), "scene.json"),
-    JSON.stringify(scene, null, 1)
-  )
+  if (!(await changeDoc(docKey(scene.id), () => scene))) throw new NotFoundError("Unknown scene")
   // Images no layer points at any more (replaced by edits) go too, and
   // previews of clips that changed or went.
   const used = new Set(["thumb.jpg"])
@@ -87,22 +82,22 @@ export async function saveScene(scene: Scene) {
     else for (const child of layer.children) used.add(child.src)
   }
   for (const clip of scene.clips ?? []) if (clip.preview) used.add(clip.preview)
-  const files = await readdir(folder(scene.id))
+  const prefix = `mockups/${scene.id}/`
+  const files = (await listFiles(prefix)).map((f) => f.key.slice(prefix.length))
   await Promise.all(
-    files
-      .filter((f) => FILE.test(f) && !used.has(f))
-      .map((f) => rm(path.join(folder(scene.id), f)))
+    files.filter((f) => FILE.test(f) && !used.has(f)).map((f) => deleteFile(fileKey(scene.id, f)))
   )
 }
 
 export async function saveFile(id: string, file: string, data: Buffer) {
   await getScene(id)
-  await writeFile(filePath(id, file), data)
+  await putFile(fileKey(id, file), data)
 }
 
 export async function deleteScene(id: string) {
   await getScene(id)
-  await rm(folder(id), { recursive: true })
+  await deleteDoc(docKey(id))
+  await deleteFiles(`mockups/${id}/`)
 }
 
 function slug(name: string) {
@@ -129,8 +124,7 @@ export async function createScene(
   image: Buffer,
   about: Pick<Scene, "category" | "source"> = {}
 ): Promise<Scene> {
-  await mkdir(ROOT, { recursive: true })
-  const existing = new Set(await readdir(ROOT))
+  const existing = new Set([...(await readDocs<Scene>("mockups/", "/scene")).values()].map((s) => s.id))
   // Taken by the export, reference, templates, categories and chains routes.
   existing.add("export").add("reference").add("templates").add("categories").add("chains")
   const category = about.category ? await addCategory(about.category) : undefined
@@ -148,13 +142,13 @@ export async function createScene(
   const width = Math.round(meta.width * scale)
   const height = Math.round(meta.height * scale)
 
-  await mkdir(path.join(ROOT, id))
-  await sharp(image)
+  const background = await sharp(image)
     .rotate()
     .resize(width, height, { kernel: "lanczos3" })
     .removeAlpha()
     .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
-    .toFile(path.join(ROOT, id, "background.jpg"))
+    .toBuffer()
+  await putFile(fileKey(id, "background.jpg"), background)
 
   const ph = height * 0.5
   const pw = ph / 1.4
@@ -207,7 +201,7 @@ export async function createScene(
       },
     ],
   }
-  await writeFile(path.join(ROOT, id, "scene.json"), JSON.stringify(scene, null, 1))
+  await writeDoc(docKey(id), scene)
   return scene
 }
 
@@ -226,82 +220,37 @@ export async function toListingJpeg(
     .toBuffer()
 }
 
-// Categories mockups are filed under. One exists from the moment it's named,
-// before any scene is in it (a mockup from a reference takes a minute), so
-// the names are kept here as well as on the scenes.
-const CATEGORIES = path.join(ROOT, "categories.json")
-
-async function savedCategories(): Promise<string[]> {
-  try {
-    const list = JSON.parse(await readFile(CATEGORIES, "utf8"))
-    return Array.isArray(list) ? list.filter((c) => typeof c === "string") : []
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
-    throw error
-  }
-}
+// Categories mockups are filed under (the Saved page's folders are a list of
+// their own).
+const CATEGORIES = "mockups/categories"
 
 /** Every category, A–Z, with how many scenes are in it. */
 export async function listCategories(): Promise<CategorySummary[]> {
-  const [saved, scenes] = await Promise.all([savedCategories(), listScenes()])
-  const names = new Map<string, string>()
-  const counts = new Map<string, number>()
-  for (const name of saved) names.set(name.toLowerCase(), name)
-  for (const { category } of scenes) {
-    if (!category) continue
-    const key = category.toLowerCase()
-    if (!names.has(key)) names.set(key, category)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  return [...names]
-    .map(([key, name]) => ({ name, count: counts.get(key) ?? 0 }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return listNames(CATEGORIES, (await listScenes()).map((s) => s.category))
 }
-
-// Adds go one after another (two at once would each drop the other's name),
-// and the file is replaced whole, so a read never sees half of it.
-const global = globalThis as typeof globalThis & { __categoryWrites?: Promise<unknown> }
 
 /** Adds a category unless one by that name exists; returns the name as stored. */
-export function addCategory(name: string) {
-  const clean = name.trim().replace(/\s+/g, " ").slice(0, 40)
-  if (!clean) return Promise.reject(new Error("Category name is empty"))
-  const add = (global.__categoryWrites ?? Promise.resolve())
-    .catch(() => {})
-    .then(async () => {
-      const saved = await savedCategories()
-      const existing = saved.find((c) => c.toLowerCase() === clean.toLowerCase())
-      if (existing) return existing
-      await mkdir(ROOT, { recursive: true })
-      const temp = `${CATEGORIES}.${process.pid}-${Date.now()}.tmp`
-      await writeFile(temp, JSON.stringify([...saved, clean], null, 1))
-      await rename(temp, CATEGORIES)
-      return clean
-    })
-  global.__categoryWrites = add
-  return add
-}
+export const addCategory = (name: string) => addName(CATEGORIES, name)
 
 // Animation templates the user saved; the built-in ones live in code.
-const TEMPLATES = path.join(ROOT, "templates.json")
+const TEMPLATES = "mockups/templates"
 
 export async function listTemplates(): Promise<Template[]> {
-  try {
-    const list = JSON.parse(await readFile(TEMPLATES, "utf8"))
-    return Array.isArray(list) ? list.filter(isTemplate) : []
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
-    throw error
-  }
+  const list = await readDoc<unknown>(TEMPLATES, [])
+  return Array.isArray(list) ? list.filter(isTemplate) : []
 }
 
-async function writeTemplates(list: Template[]) {
-  await mkdir(ROOT, { recursive: true })
-  await writeFile(TEMPLATES, JSON.stringify(list, null, 1))
+/** Changes the saved templates, after every other change to them on any server. */
+function changeTemplates<T>(change: (list: Template[]) => { list: Template[]; result: T }) {
+  let result: T
+  return updateDoc<unknown>(TEMPLATES, [], (stored) => {
+    const done = change(Array.isArray(stored) ? stored.filter(isTemplate) : [])
+    result = done.result
+    return done.list
+  }).then(() => result)
 }
 
-export async function addTemplate(template: Template) {
-  const list = await listTemplates()
+export function addTemplate(template: Template) {
   const saved: Template = {
     id: `t-${Date.now().toString(36)}`,
     name: template.name.trim().slice(0, 80) || "Untitled",
@@ -309,23 +258,23 @@ export async function addTemplate(template: Template) {
     shake: template.shake ?? 0,
     keys: template.keys,
   }
-  await writeTemplates([...list, saved])
-  return saved
+  return changeTemplates((list) => ({ list: [...list, saved], result: saved }))
 }
 
-export async function updateTemplate(id: string, patch: Partial<Template>) {
-  const list = await listTemplates()
-  const i = list.findIndex((t) => t.id === id)
-  if (i < 0) throw new NotFoundError("Unknown template")
-  const next = { ...list[i], ...patch, id, builtIn: undefined }
-  if (!isTemplate(next)) throw new Error("Invalid template")
-  list[i] = next
-  await writeTemplates(list)
-  return next
+export function updateTemplate(id: string, patch: Partial<Template>) {
+  return changeTemplates((list) => {
+    const i = list.findIndex((t) => t.id === id)
+    if (i < 0) throw new NotFoundError("Unknown template")
+    const next = { ...list[i], ...patch, id, builtIn: undefined }
+    if (!isTemplate(next)) throw new Error("Invalid template")
+    list[i] = next
+    return { list, result: next }
+  })
 }
 
 export async function deleteTemplate(id: string) {
-  const list = await listTemplates()
-  if (!list.some((t) => t.id === id)) throw new NotFoundError("Unknown template")
-  await writeTemplates(list.filter((t) => t.id !== id))
+  await changeTemplates((list) => {
+    if (!list.some((t) => t.id === id)) throw new NotFoundError("Unknown template")
+    return { list: list.filter((t) => t.id !== id), result: undefined }
+  })
 }

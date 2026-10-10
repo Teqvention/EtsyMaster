@@ -14,6 +14,42 @@ pnpm dev
 
 Open http://localhost:3000 — it redirects to `/dashboard`.
 
+## Shared data
+
+Everyone runs their own `pnpm dev` and works on the same data: a Postgres on
+Dokploy (reached over Tailscale; its port isn't open to the internet) and a
+Hetzner bucket for images and videos. `.env` needs:
+
+```bash
+ETSY_KEY_STRING=…
+ETSY_SECRET=…
+DATABASE_URL=postgres://postgres:<password>@<the database's Tailscale IP>:5432/postgres
+S3_ENDPOINT=https://nbg1.your-objectstorage.com
+S3_BUCKET=etsy-master
+HETZNER_S3_ACCESS_KEY=…
+HETZNER_S3_SECRET_KEY=…
+```
+
+plus `GOOGLE_APPLICATION_CREDENTIALS` in `.env.local` for Gemini. Your
+machine has to be on the tailnet with the database server shared to it.
+
+- **JSON data** (accounts, jobs, generations, scenes, sync, …) is in the
+  `documents` table, keyed like the files it once was (`pricing/fx`,
+  `generations/<id>/set`). Each server keeps what it read in memory; Postgres
+  tells every server about each change, so they all stay current.
+- **Images and videos** are private objects under `data/` in the bucket,
+  indexed in the `files` table. Each one read is kept in `.cache/files/`, so
+  it's downloaded once per machine.
+- **Background work** (upload pipeline, daily sync, Artikel's bulk actions,
+  the copywriter) runs on one dev server at a time, whichever holds the
+  leader lock; when it stops, another takes over within seconds. Generation
+  runs on the server that started it.
+
+`pnpm data:push` copies a local `data/` folder into the database and bucket
+(only what isn't there yet; `--dry` to see what it would do, `--overwrite`
+to replace what differs). Run it after `scripts/import-mockups.py`, which
+still writes to `data/mockups/`.
+
 ## Project layout
 
 | Path | What it is |

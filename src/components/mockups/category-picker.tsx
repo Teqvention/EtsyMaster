@@ -4,40 +4,39 @@ import * as React from "react"
 import { CheckIcon, FolderIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import {
-  createCategory,
-  refreshCategories,
-  useMockupCategories,
-} from "@/hooks/use-mockup-categories"
+import { createCategory, refreshCategories, useCategories, type Categories } from "@/hooks/use-categories"
 import { cn } from "@/lib/utils"
 
-// Search-or-create for mockup categories (the Saved page's folders), inside
+// Search-or-create for mockup categories or the Saved page's folders, inside
 // any menu, dropdown or context. Typing filters (from anywhere in the list,
 // not just the field); Enter takes the top match, or creates the category
 // when nothing matches. Arrow keys move through the list as in any menu.
 export function CategoryPicker({
+  of,
   onPick,
   counts,
   current,
 }: {
+  /** Which list: mockup categories, or the folders steals go in. */
+  of: Categories
   onPick: (category: string) => void
-  /** What to count per category (lower-cased name), instead of its mockups. */
+  /** What to count per category (lower-cased name), instead of what's in it. */
   counts?: ReadonlyMap<string, number>
   /** Checked in the list. */
   current?: string | null
 }) {
-  const categories = useMockupCategories()
+  const categories = useCategories(of)
   const [query, setQuery] = React.useState("")
   const [typing, setTyping] = React.useState(false)
   const input = React.useRef<HTMLInputElement>(null)
   const list = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
-    refreshCategories()
+    refreshCategories(of)
     // After the menu has placed its own focus.
     const frame = requestAnimationFrame(() => input.current?.focus({ preventScroll: true }))
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [of])
 
   const name = query.trim().replace(/\s+/g, " ")
   const needle = name.toLowerCase()
@@ -104,7 +103,7 @@ export function CategoryPicker({
             <DropdownMenuItem
               key={category.name}
               data-default={(typing && category.name === top) || undefined}
-              onClick={() => onPick(createCategory(category.name))}
+              onClick={() => onPick(createCategory(of, category.name))}
               className="data-default:bg-accent data-default:text-accent-foreground"
             >
               <FolderIcon className="text-muted-foreground" />
@@ -120,7 +119,7 @@ export function CategoryPicker({
         {name && !exact && (
           <DropdownMenuItem
             data-default={(typing && top === null) || undefined}
-            onClick={() => onPick(createCategory(name))}
+            onClick={() => onPick(createCategory(of, name))}
             className={cn(
               "data-default:bg-accent data-default:text-accent-foreground",
               matches.length > 0 && "mt-1"

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
 import { Progress } from "@/components/ui/progress"
-import { createCategory, useMockupCategories } from "@/hooks/use-mockup-categories"
+import { createCategory, useCategories } from "@/hooks/use-categories"
 import { formatRate } from "@/lib/etsy/format"
 import type { Listing } from "@/lib/etsy/types"
 import { cn } from "@/lib/utils"
@@ -59,7 +59,7 @@ export function SortView({
   onBack: () => void
   onDone: () => void
 }) {
-  const categories = useMockupCategories()
+  const categories = useCategories("saved")
   // Numbers stay put while sorting: categories made meanwhile go to the end.
   const [order] = React.useState(() => categories.map((c) => c.name))
   const rail = React.useMemo(() => {
@@ -388,7 +388,7 @@ export function SortView({
     event.preventDefault()
     const input = newCategory.current
     if (!input?.value.trim()) return
-    setChosen(createCategory(input.value))
+    setChosen(createCategory("saved", input.value))
     input.value = ""
     scroller.current?.focus({ preventScroll: true })
   }

@@ -13,12 +13,14 @@ import {
   SparklesIcon,
   StoreIcon,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { AdoptionBadge } from "@/components/uploads/adoption"
 import { exportPackage } from "@/components/uploads/export-package"
 import { TagEditor } from "@/components/uploads/tag-editor"
+import { UploadBadge } from "@/components/uploads/upload-status"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -29,14 +31,16 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { deleteDraft, isWriting, patchDraft, rewriteDraft } from "@/hooks/use-uploads"
+import { deleteDraft, isWriting, patchDraft, restorePosters, rewriteDraft } from "@/hooks/use-uploads"
 import type { MockupChain } from "@/lib/mockups/chain-types"
+import { posterKey, type PosterStatus, type PosterUpload } from "@/lib/uploads/groups"
 import { TITLE_MAX, type DraftStatus, type DraftView } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
 
 // One draft on the Uploads page: the poster on the left; its listing copy
 // (title, tags, description), editable in place, on the right; and below,
-// the mockup chain, the package export and where the draft stands.
+// the mockup chain, the package export, where the draft stands and its
+// upload to Etsy.
 
 export const STATUS_LABELS: Record<DraftStatus, string> = { draft: "Draft", ready: "Ready", uploaded: "Uploaded" }
 
@@ -51,7 +55,24 @@ const HINTS = [
   "Shorter, punchier title",
 ]
 
-export function DraftRow({ draft, chains }: { draft: DraftView; chains: MockupChain[] }) {
+/** The draft's poster against the upload pipeline. */
+export type DraftUpload = {
+  /** Its newest real upload. */
+  upload?: PosterUpload
+  uploadStatus?: PosterStatus
+  /** May go into a new upload. */
+  uploadable?: boolean
+  onUpload?: () => void
+}
+
+export function DraftRow({
+  draft,
+  chains,
+  upload,
+  uploadStatus,
+  uploadable = false,
+  onUpload,
+}: { draft: DraftView; chains: MockupChain[] } & DraftUpload) {
   const writing = isWriting(draft)
   const hasCopy = !!draft.title
   const locked = writing || draft.status === "uploaded"
@@ -65,7 +86,7 @@ export function DraftRow({ draft, chains }: { draft: DraftView; chains: MockupCh
       <Poster draft={draft} />
 
       <div className="flex min-w-0 flex-col gap-3">
-        <Meta draft={draft} />
+        <Meta draft={draft} upload={upload} uploadStatus={uploadStatus} />
 
         {!hasCopy && writing ? (
           <WritingSkeleton />
@@ -80,7 +101,14 @@ export function DraftRow({ draft, chains }: { draft: DraftView; chains: MockupCh
           </div>
         )}
 
-        <Actions draft={draft} chains={chains} writing={writing} onSave={save} />
+        <Actions
+          draft={draft}
+          chains={chains}
+          writing={writing}
+          onSave={save}
+          uploadable={uploadable}
+          onUpload={onUpload}
+        />
       </div>
     </article>
   )
@@ -112,7 +140,11 @@ function Poster({ draft }: { draft: DraftView }) {
   )
 }
 
-function Meta({ draft }: { draft: DraftView }) {
+function Meta({
+  draft,
+  upload,
+  uploadStatus,
+}: { draft: DraftView } & Pick<DraftUpload, "upload" | "uploadStatus">) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <div className="flex min-w-0 flex-1 basis-72 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
@@ -137,6 +169,7 @@ function Meta({ draft }: { draft: DraftView }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        <UploadBadge status={uploadStatus} upload={upload} />
         {draft.strategy && (
           <Tooltip>
             <TooltipTrigger render={<Badge variant="secondary" className="cursor-default" />}>
@@ -297,11 +330,15 @@ function Actions({
   chains,
   writing,
   onSave,
+  uploadable,
+  onUpload,
 }: {
   draft: DraftView
   chains: MockupChain[]
   writing: boolean
   onSave: (patch: Parameters<typeof patchDraft>[1]) => void
+  uploadable: boolean
+  onUpload?: () => void
 }) {
   const [progress, setProgress] = React.useState<string | null>(null)
   const chain = chains.find((c) => c.id === draft.chainId) ?? null
@@ -333,9 +370,16 @@ function Actions({
   }
 
   async function remove() {
+    const key = posterKey(draft.generationId, draft.outputId)
     try {
       await deleteDraft(draft.id)
-      toast("Draft deleted", { description: "Its poster waits for a listing again." })
+      toast("Poster deleted", {
+        description: "Out of the uploads and no longer approved.",
+        action: {
+          label: "Undo",
+          onClick: () => restorePosters([key]).catch((error) => toast.error(`Couldn't bring it back: ${error.message}`)),
+        },
+      })
     } catch (error) {
       toast.error(`Couldn't delete it: ${(error as Error).message}`)
     }
@@ -398,21 +442,36 @@ function Actions({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <Tooltip>
-          <TooltipTrigger render={<span tabIndex={0} className="rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50" />}>
-            <Button size="sm" disabled tabIndex={-1}>
-              Publish to Etsy
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Needs Etsy OAuth — coming next</TooltipContent>
-        </Tooltip>
+        {onUpload && (uploadable || draft.status !== "uploaded") && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span tabIndex={uploadable ? -1 : 0} className="rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50" />
+              }
+            >
+              <Button
+                size="sm"
+                disabled={!uploadable}
+                tabIndex={uploadable ? 0 : -1}
+                onClick={onUpload}
+                className="transition-transform duration-150 ease-out-strong active:scale-[0.97] motion-reduce:transition-none"
+              >
+                <UploadIcon />
+                Upload…
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {uploadable ? "Choose the shop and send it to Etsy" : "On Etsy already, or its upload is under way"}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
-            render={<Button variant="ghost" size="icon-sm" aria-label="Delete draft" onClick={remove} />}
+            render={<Button variant="ghost" size="icon-sm" aria-label="Delete poster" onClick={remove} />}
           >
             <Trash2Icon />
           </TooltipTrigger>
-          <TooltipContent>Delete draft</TooltipContent>
+          <TooltipContent>Delete: out of the uploads and no longer approved</TooltipContent>
         </Tooltip>
       </div>
     </div>

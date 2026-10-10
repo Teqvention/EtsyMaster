@@ -1,6 +1,6 @@
 // A mockup scene: one room photo split into layers, bottom to top, with a
 // poster slot somewhere in the stack. Coordinates are scene pixels, origin
-// top left. Stored as data/mockups/<id>/scene.json next to its layer images.
+// top left. Stored as the document mockups/<id>/scene next to its layer images.
 
 export type Point = [number, number]
 

@@ -4,7 +4,7 @@ import type { Listing } from "@/lib/etsy/types"
 // what its keywords say — title, tags and how well it sells. Aggregated into
 // tag and title-phrase statistics on the Keywords page, and handed to the
 // upload pipeline so our own titles and tags learn from what sells.
-// Stored as data/keywords/library.json.
+// Stored as the document "keywords/library".
 
 export type LibraryListing = {
   id: number
@@ -19,6 +19,8 @@ export type LibraryListing = {
   thumb: string | null
   /** In the top fifth of its shop by sales per month. */
   top: boolean
+  /** ISO 8601, first published; missing on listings added before it was kept. */
+  createdAt?: string
 }
 
 export type LibraryShop = {
@@ -55,6 +57,27 @@ export type KeywordInsight = {
   topShare: number
   /** 0–100, relative to the best keyword of its kind. */
   score: number
+  /** How much better than their shop's average its listings sell (1 = average), evened out for small counts. */
+  lift?: number
+  /**
+   * Over 1 when its listings of the last year become top sellers more often
+   * than its older ones did (each against listings of their age), under 1
+   * when less often; evened out for small counts.
+   */
+  trend?: number
+}
+
+/** A search phrase as Etsy's live search sees it: how many listings compete, and how the best placed sell. */
+export type KeywordDemand = {
+  phrase: string
+  /** Active listings matching it: the competition. */
+  results: number
+  /** Estimated sales per month of the five best sellers among its 25 most relevant listings, on average. */
+  salesPerMonth: number
+  /** Demand weighed against competition; only comparable between phrases. */
+  score: number
+  /** ISO 8601 */
+  checkedAt: string
 }
 
 /** What Gemini read out of the library. */
@@ -120,6 +143,7 @@ export function toLibraryRequest(
       priceCents: l.priceCents,
       url: l.url,
       thumb: l.images[0]?.medium ?? l.images[0]?.thumb ?? null,
+      createdAt: l.createdAt,
     })),
   }
 }

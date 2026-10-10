@@ -1,12 +1,10 @@
-import { readFile, writeFile } from "node:fs/promises"
-
 import sharp from "sharp"
 
 import { freshFile } from "./edit"
 import { blankReplica, guessSheets } from "./gemini"
 import { refineSheet } from "./locate"
 import { extractSheet, type Pixels } from "./sheet"
-import { createScene, filePath, saveScene } from "./storage"
+import { createScene, readSceneFile, saveFile, saveScene } from "./storage"
 import type { PosterLayer, Quad, Scene } from "./types"
 
 // A scene from someone else's finished mockup: Nano Banana redraws it with
@@ -40,7 +38,7 @@ export async function fetchReference(url: string) {
 
 /** Replaces the scene's placeholder poster with one poster per sheet found. */
 export async function placeSheets(scene: Scene): Promise<Scene> {
-  const background = await readFile(filePath(scene.id, "background.jpg"))
+  const background = await readSceneFile(scene.id, "background.jpg")
   const { data, info } = await sharp(background).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   const room = { data: new Uint8ClampedArray(data), width: info.width, height: info.height }
   const quads = (await guessSheets(background)).map((q) => refineSheet(room, q))
@@ -67,8 +65,8 @@ async function sheetPoster(id: string, room: Pixels, quad: Quad, template: Poste
   const suffix = n ? `-${n}` : ""
   const lightSrc = freshFile(`light${suffix}`)
   const shineSrc = freshFile(`shine${suffix}`)
-  await writeFile(filePath(id, lightSrc), await png(light))
-  await writeFile(filePath(id, shineSrc), await png(shine))
+  await saveFile(id, lightSrc, await png(light))
+  await saveFile(id, shineSrc, await png(shine))
   const poster: PosterLayer = {
     ...template,
     id: `poster${suffix}`,

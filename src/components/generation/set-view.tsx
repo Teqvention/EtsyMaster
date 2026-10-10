@@ -16,7 +16,6 @@ import {
   LoaderCircleIcon,
   PaletteIcon,
   RepeatIcon,
-  RotateCwIcon,
   SparklesIcon,
   Trash2Icon,
   XIcon,
@@ -52,6 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { RetryButton } from "@/components/generation/retry-button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   deleteGeneration,
@@ -59,7 +59,6 @@ import {
   generateMore,
   generationFileUrl,
   isActive,
-  retryGeneration,
   reviewOutputs,
   useGenerations,
 } from "@/hooks/use-generations"
@@ -286,18 +285,7 @@ function Loaded({ set }: { set: GenerationSet }) {
           )}
 
           <div className="ml-auto flex items-center gap-1.5">
-            {failed > 0 && !active && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  retryGeneration(set.id).catch((error: Error) => toast.error(`Couldn't retry: ${error.message}`))
-                }
-              >
-                <RotateCwIcon />
-                Retry {failed} failed
-              </Button>
-            )}
+            {failed > 0 && !active && <RetryButton sets={[set.id]} count={failed} label={`Retry ${failed} failed`} />}
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More" />}>
                 <EllipsisIcon />
