@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.870Z",
- "updatedAt": "2026-10-09T15:17:12.208Z",
+ "updatedAt": "2026-10-09T20:58:41.873Z",
  "original": {
   "status": "done",
   "file": "source-mv10uw0h.jpg",
@@ -106,12 +106,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.870Z",
    "title": "Pomegranate and Lemon Scallop",
    "brief": "A vibrant flat-lay painting of halved pomegranates and whole lemons arranged on a scalloped-edge pink ceramic plate. The pomegranates are split to show clusters of ruby-red seeds, while the lemons provide a bright yellow contrast with visible zest texture. Small sprigs of white jasmine flowers are tucked between the fruits. The style features thick, visible gouache brushstrokes and an impasto effect on the highlights. The palette includes ruby, canary yellow, pastel pink, and emerald green, framed tightly with a thin gold border around the plate.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:37.358Z"
   },
   {
    "status": "done",
@@ -121,12 +122,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.870Z",
    "title": "Sunlit Brunch with Blood Oranges",
    "brief": "A three-quarter perspective view of a breakfast scene on a blue-and-white checkered tablecloth. A central turquoise plate holds sliced blood oranges and a wedge of honeycomb, with a silver spoon resting nearby. Soft morning light creates long, warm shadows across the table. The rendering is painterly and expressive, using broad strokes to define the juicy fruit segments and the reflective surface of the spoon. The palette shifts to cobalt blue, deep crimson, honey gold, and cream, providing a fresh, high-contrast mood for a kitchen wall.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:39.551Z"
   },
   {
    "status": "done",
@@ -136,12 +138,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.870Z",
    "title": "Aperitivo Hour at the Coast",
    "brief": "A contemporary, graphic-style painting of two tall spritz glasses and a small bowl of green olives on a terracotta-colored table. The composition uses a dynamic, asymmetric layout with stylized, flattened shapes and a sandy, grainy texture overlay. One glass features a floating orange slice while the other has a green olive garnish. The palette is modern and sophisticated, featuring teal, terracotta, peach, and olive green. The lighting is flat and bright, evoking a mid-century Mediterranean summer vibe that appeals to 'dopamine decor' enthusiasts.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:41.873Z"
   }
  ],
  "layout": "single",

@@ -1,0 +1,210 @@
+{
+ "id": "mv18xaml-a7jc3",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4390817805,
+  "title": "Japanese Owl Art Print, Vintage Woodblock Style, Rustic Nature Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/594df8/7357745323/il_fullxfull.7357745323_ghb7.jpg",
+  "url": "https://www.etsy.com/listing/4390817805/japanese-owl-art-print-vintage-woodblock",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "owl wall art",
+   "bird print",
+   "woodblock style",
+   "japanese art",
+   "animal poster",
+   "mid century art",
+   "minimalist decor",
+   "nature artwork",
+   "vintage print",
+   "modern wall art",
+   "scandi decor",
+   "rustic poster",
+   "asian art print"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.053Z",
+ "updatedAt": "2026-10-09T21:06:49.459Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv18xaww.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv18xgwl.jpg",
+   "width": 1246,
+   "height": 1661,
+   "label": "Japanese owl woodblock print",
+   "analysis": {
+    "summary": "A minimalist, stylized owl rendered in the textured Sōsaku-hanga woodblock tradition with earthy tones and traditional seal stamps.",
+    "subject": "A stylized owl with large circular eyes and a patterned chest.",
+    "setting": "A minimalist, textured background standing on a simple brown horizontal plane.",
+    "action": "Standing still and staring forward with a serene expression.",
+    "style": "Japanese woodblock print, Sōsaku-hanga style, flat graphic shapes, visible wood grain and washi paper texture, bold minimalist outlines.",
+    "palette": [
+     "#a8b8b8",
+     "#2f3e3e",
+     "#e6dec9",
+     "#7b5544",
+     "#b22222",
+     "#1a1a1a"
+    ],
+    "composition": "Centered vertical portrait, full-body subject, significant negative space, balanced by red hanko stamps in the corners.",
+    "typography": "Japanese kanji calligraphy in black ink and red square seal stamps (hanko) in the upper corners.",
+    "mood": "Serene, wise, rustic, and timelessly minimalist.",
+    "audience": "Interior designers, fans of Japanese aesthetics, nature enthusiasts, and homeowners looking for sophisticated nursery or study decor.",
+    "hook": "The perfect blend of traditional folk art and modern graphic minimalism; it feels both ancient and contemporary.",
+    "swaps": {
+     "subjects": [
+      "A plump, curious tanuki",
+      "A graceful red-crowned crane",
+      "A sitting calico cat",
+      "A wide-eyed forest fox",
+      "A squatting bullfrog",
+      "A leaping koi fish"
+     ],
+     "settings": [
+      "A misty bamboo forest",
+      "A snow-covered pine branch",
+      "A moonlit zen garden",
+      "A rustic tatami mat room",
+      "A floating lotus pond",
+      "A jagged mountain peak"
+     ],
+     "props": [
+      "A glowing paper lantern",
+      "A single cherry blossom petal",
+      "A small ceramic sake bottle",
+      "A red wagasa umbrella",
+      "A miniature bonsai tree",
+      "A golden crescent moon"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv18xnau-hm1sf-mv18yf8c.jpg",
+   "batch": "mv18xaml-p4h2l",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:35.478Z",
+   "id": "mv18xnau-hm1sf",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Minimalist Woodblock Owl",
+   "brief": "A central, stylized owl stands on a horizontal burnt umber ledge against a dusty sage background. The owl features a dark charcoal-green body and a cream-colored facial disc with two solid black circular eyes. A simple grid pattern of brown squares covers its lower chest, maintaining a flat graphic aesthetic. The composition is a centered vertical portrait with ample negative space around the subject. Red hanko seal stamps are placed in the upper corners with small black kanji characters. The entire image displays a heavy wood grain and washi paper texture with visible horizontal printing lines.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:41.435Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnau-ejqxb-mv18yxer.jpg",
+   "batch": "mv18xaml-p4h2l",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:35.478Z",
+   "id": "mv18xnau-ejqxb",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Twin Forest Guardians",
+   "brief": "Two stylized owls of different sizes stand side-by-side on a thick, textured burnt umber branch. The larger owl is positioned slightly behind the smaller one, both facing forward with cream faces and charcoal bodies. The background is a uniform dusty sage, providing a calm backdrop for the earthy-toned subjects. Three red hanko stamps are distributed asymmetrically in the top right and bottom left corners. The lighting is flat and even, emphasizing the bold outlines and the fibrous texture of the paper medium.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:42.022Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnau-9g4x1-mv18zran.jpg",
+   "batch": "mv18xaml-p4h2l",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:35.478Z",
+   "id": "mv18xnau-9g4x1",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Midnight Watch Profile",
+   "brief": "A large-scale profile view of the owl occupies the right two-thirds of the frame, looking toward the left edge. The owl's wing shows a complex blocky pattern in charcoal and burnt umber, while its large cream face and single black eye dominate the upper right. This unbalanced composition leaves a wide expanse of dusty sage negative space on the left. Red square seals are clustered in the lower-left corner to balance the visual weight. Horizontal wood grain textures are heavily emphasized across the entire print, creating a weathered, rustic appearance.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:31.083Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnau-fjlvv-mv199jl2.jpg",
+   "batch": "mv18xaml-p4h2l",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:35.478Z",
+   "id": "mv18xnau-fjlvv",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Owl and Pine Bough",
+   "brief": "A small, stylized owl perches on a jagged, minimalist pine branch that extends diagonally from the top left corner toward the center. Below the owl, several stylized pine needle clusters are rendered as simple charcoal strokes against the dusty sage background. The bottom half of the poster consists of empty negative space, creating a sense of height. A tall vertical strip of black calligraphy and two small red hanko stamps are placed in the lower right corner. The owl maintains its cream-colored face and charcoal-green body with visible woodblock printing artifacts.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:46.695Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnau-2x03i-mv196xin.jpg",
+   "batch": "mv18xaml-p4h2l",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:35.478Z",
+   "id": "mv18xnau-2x03i",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Celestial Owl Path",
+   "brief": "A large, cream-colored circular moon dominates the upper half of the composition, with the dark charcoal silhouette of an owl partially overlapping its lower edge. The owl is viewed from behind, showing the intricate brown grid pattern on its folded wings against the dusty sage backdrop. Two bold red hanko stamps are placed inside the white moon's circle for a striking graphic effect. A series of black kanji characters flows vertically down the center of the owl’s back. The lighting is completely flat, relying on the sharp contrast between the cream moon and the dark charcoal-green subject.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:49.459Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xaml-p4h2l",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.053Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

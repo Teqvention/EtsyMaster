@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.870Z",
- "updatedAt": "2026-10-09T14:41:01.295Z",
+ "updatedAt": "2026-10-09T21:21:22.165Z",
  "original": {
   "status": "done",
   "file": "source-mv10uwfk.jpg",
@@ -108,8 +108,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.870Z"
+   "review": "approved",
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "reviewedAt": "2026-10-09T21:03:49.149Z"
   },
   {
    "status": "done",
@@ -121,8 +122,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.870Z"
+   "review": "rejected",
+   "createdAt": "2026-10-09T13:49:25.870Z",
+   "reviewedAt": "2026-10-09T21:21:22.164Z"
   },
   {
    "status": "done",
@@ -132,12 +134,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.870Z",
    "title": "The Scholar Cheetah's Salon",
    "brief": "A sleek cobalt blue cheetah wearing oversized tortoise-shell glasses sits upright on a velvet emerald green sofa, delicately holding a tiny espresso cup. The setting is a maximalist library with overflowing bookshelves and a vintage record player spinning a bright pink vinyl. The composition uses a bird’s-eye perspective looking down at a tilted angle to create dynamic energy. The art style is modern folk art with crisp, flat paper-cut silhouettes and dense floral patterns covering the wallpaper in mustard yellow and magenta. Large monstera leaves peek in from the corners to frame the cheetah. The image focuses on the rich textures of the patterned rug and book spines without any text.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:03:54.554Z"
   }
  ],
  "layout": "single",

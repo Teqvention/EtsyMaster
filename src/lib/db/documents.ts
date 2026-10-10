@@ -124,7 +124,7 @@ const like = (prefix: string) => `${prefix.replace(/[\\%_]/g, "\\$&")}%`
 function written(key: string, version: number, text: string) {
   const value = JSON.parse(text)
   cache.docs.set(key, { version, value })
-  for (const prefix of cache.keys.keys()) if (key.startsWith(prefix)) cache.keys.delete(prefix)
+  for (const [prefix, keys] of cache.keys) if (key.startsWith(prefix) && !keys.includes(key)) cache.keys.delete(prefix)
   return value
 }
 
@@ -156,6 +156,54 @@ export async function updateDoc<T>(key: string, fallback: T, change: (current: T
 /** Like `updateDoc`, for a document that must be there: answers null (and changes nothing) when it isn't. */
 export function changeDoc<T>(key: string, change: (current: T) => T | Promise<T>): Promise<T | null> {
   return apply(key, null, change)
+}
+
+/**
+ * Like `updateDoc`, for a document and the ones under `prefix` that change
+ * along with it (the pipeline's jobs and, one document each, their items):
+ * `change` gets copies of the document and of every one under `prefix` (by
+ * key), may change them in place and add new ones, and only those it changed
+ * are written. One transaction holding the row at `key`, so the group's
+ * changes from every server go one after another.
+ */
+export async function updateDocs<T, P>(
+  key: string,
+  fallback: T,
+  prefix: string,
+  change: (current: T, parts: Map<string, P>) => T | Promise<T>
+): Promise<void> {
+  await ready()
+  const done = await sql.begin(async (tx) => {
+    // Sent together: the row is held before its group's versions are read.
+    const [, [row], rows] = await Promise.all([
+      tx`insert into documents (key, value) values (${key}, ${json(fallback)}::text::json) on conflict (key) do nothing`,
+      tx<{ version: string }[]>`select version from documents where key = ${key} for update`,
+      tx<{ key: string; version: string }[]>`select key, version from documents where key like ${like(prefix)}`,
+    ])
+    const versions = new Map([[key, Number(row.version)], ...rows.map((r) => [r.key, Number(r.version)] as const)])
+    const stale = [...versions].filter(([k, version]) => cache.docs.get(k)?.version !== version).map(([k]) => k)
+    const fetched = stale.length
+      ? await tx<{ key: string; value: unknown }[]>`select key, value from documents where key = any(${stale})`
+      : []
+    const values = new Map(fetched.map((r) => [r.key, r.value]))
+    // As read, to tell what `change` changed; parsed again, its own copies.
+    const before = new Map([...versions.keys()].map((k) => [k, json(values.has(k) ? values.get(k) : cache.docs.get(k)!.value)]))
+    const parts = new Map<string, P>()
+    for (const [k, text] of before) if (k !== key) parts.set(k, JSON.parse(text))
+    const changes = new Map([[key, json(await change(JSON.parse(before.get(key)!), parts))]])
+    for (const [k, part] of parts) changes.set(k, json(part))
+    const writes = [...changes].filter(([k, text]) => text !== before.get(k))
+    const saved = await Promise.all(
+      writes.map(
+        ([k, text]) => tx<{ version: string }[]>`
+          insert into documents (key, value) values (${k}, ${text}::text::json)
+          on conflict (key) do update set value = excluded.value, version = documents.version + 1, updated_at = now()
+          returning version`
+      )
+    )
+    return writes.map(([k, text], i) => ({ key: k, text, version: Number(saved[i][0].version) }))
+  })
+  for (const { key: k, text, version } of done) written(k, version, text)
 }
 
 async function apply<T>(key: string, missing: { fallback: T } | null, change: (current: T) => T | Promise<T>) {

@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.868Z",
- "updatedAt": "2026-10-09T14:48:17.368Z",
+ "updatedAt": "2026-10-09T20:57:35.962Z",
  "original": {
   "status": "done",
   "file": "source-mv10uuep.jpg",
@@ -108,8 +108,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.868Z"
+   "review": "rejected",
+   "createdAt": "2026-10-09T13:49:25.868Z",
+   "reviewedAt": "2026-10-09T20:57:33.137Z"
   },
   {
    "status": "done",
@@ -119,12 +120,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.868Z",
    "title": "Sunny Morning Tea Nook",
    "brief": "Paint a cozy kitchen breakfast scene in a thick, textured acrylic style with visible impasto strokes. A turquoise ceramic teapot sits next to a bowl of bright lemons and a leafy spider plant in a blue-and-white patterned pot. The setting is a rustic light-wood table near a window with sheer white curtains. Use a palette of sky blue, lemon yellow, amber orange, and deep forest green. Emphasize heavy paint application on the fruit highlights and plant leaves, capturing a bright morning light that casts soft, long shadows across the tabletop. There is no lettering.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:57:34.697Z"
   },
   {
    "status": "done",
@@ -134,12 +136,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.868Z",
    "title": "Pastel Botanical Shelfie",
    "brief": "Illustrate a vibrant indoor plant sanctuary in a clean, graphic gouache style with flat color blocks. A white minimalist shelving unit holds a large Monstera Deliciosa, a trailing String of Pearls, a small ceramic cat statue, and a stack of pastel-colored art books. Use a palette of sage green, dusty lavender, warm terracotta, and soft peach against a pale mint background. The rendering should feature matte textures with delicate ink-style outlines for plant veins. Lighting is even and diffused, creating a cheerful, organized 'dopamine decor' vibe for a home office. No lettering is included.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:57:35.962Z"
   }
  ],
  "layout": "single",

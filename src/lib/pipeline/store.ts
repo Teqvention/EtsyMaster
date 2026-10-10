@@ -1,5 +1,5 @@
 import { listAccounts } from "@/lib/accounts/store"
-import { newId, readDoc, updateDoc } from "@/lib/db/documents"
+import { newId, readDoc, readDocs, updateDoc, updateDocs } from "@/lib/db/documents"
 import { isLive } from "@/lib/db/workers"
 import { getSet } from "@/lib/generation/storage"
 import { listChains } from "@/lib/mockups/chains"
@@ -13,18 +13,24 @@ import { PlanError } from "./errors"
 import { distribute, uploadOrder, type Assignment } from "./plan"
 import type { JobItem, PlanGroup, UploadJob, UploadPlan } from "./types"
 
-// Jobs and their items in one document ("pipeline/jobs"), read from memory
-// (see db/documents.ts). Every change goes through `change`, one after
-// another across every server, so the worker and the routes never write over
-// each other. Items are kept for good: Artikel finds the poster behind a
-// listing through them. What a test run would have sent sits apart, per item
-// (pipeline/items/<id>/payloads), so the list stays small.
+// The jobs in one document ("pipeline/jobs"), each item in its own under it
+// ("pipeline/jobs/<id>"), read from memory (see db/documents.ts). Every
+// change goes through `change`, one after another across every server, so
+// the worker and the routes never write over each other, and writes only the
+// documents it changed: a stage's step is an item's few kilobytes, not every
+// item there ever was. Items are kept for good: Artikel finds the poster
+// behind a listing through them. What a test run would have sent sits apart,
+// per item (pipeline/items/<id>/payloads), so the list stays small.
 
 const FILE = "pipeline/jobs"
+const ITEMS = `${FILE}/`
+const itemDoc = (id: string) => `${ITEMS}${id}`
 /** The upload drafts, read (never written) to find a poster's draft before the worker makes one. */
 const DRAFTS = "uploads/drafts"
 
 export type PipelineData = { jobs: UploadJob[]; items: JobItem[]; paused: boolean }
+/** "pipeline/jobs" as saved; `items` from before each had a document of its own. */
+type Saved = Partial<PipelineData>
 
 // On globalThis: route handlers, the worker and server components load
 // separate copies of this module, and all must see one state.
@@ -32,24 +38,28 @@ const global = globalThis as typeof globalThis & { __pipelineNotes?: Map<string,
 
 const iso = (ms = Date.now()) => new Date(ms).toISOString()
 
-const complete = (saved: Partial<PipelineData>): PipelineData => ({
+/** Oldest first, as they were made. */
+const complete = (saved: Saved, items: Iterable<JobItem>): PipelineData => ({
   jobs: saved.jobs ?? [],
-  items: saved.items ?? [],
+  items: [...(saved.items ?? []), ...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   paused: !!saved.paused,
 })
 
 /** Jobs and items as they are now. Shared: never change what this answers. */
 export async function readPipeline(): Promise<PipelineData> {
-  return complete(await readDoc<Partial<PipelineData>>(FILE, {}))
+  const [saved, items] = await Promise.all([readDoc<Saved>(FILE, {}), readDocs<JobItem>(ITEMS)])
+  return complete(saved, items.values())
 }
 
 /** Changes jobs and items in one step, after every other change on any server; answers what `edit` returns. */
 export async function change<T>(edit: (data: PipelineData) => T): Promise<T> {
   let result!: T
-  await updateDoc<Partial<PipelineData>>(FILE, {}, (saved) => {
-    const data = complete(saved)
+  await updateDocs<Saved, JobItem>(FILE, {}, ITEMS, (saved, items) => {
+    // Items still in the jobs' document move to their own on the first change.
+    const data = complete(saved, items.values())
     result = edit(data)
-    return data
+    for (const item of data.items) items.set(itemDoc(item.id), item)
+    return { jobs: data.jobs, paused: data.paused }
   })
   return result
 }

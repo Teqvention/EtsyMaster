@@ -12,13 +12,14 @@ import { cleanTag, cleanTags, cleanTitle, words } from "./text"
 import type { Draft, DraftPatch, DraftView, RemovedPoster, UploadsState, WaitingPoster } from "./types"
 
 // Upload drafts in one document ("uploads/drafts"), and the queue that
-// writes their listing copy in the background, two at a time, on the server
+// writes their listing copy in the background, eight at a time, on the server
 // doing the background work (see db/workers.ts): it hears of every draft
 // queued, whichever server queued it. Drafts it finds "writing" without
 // writing them were cut off (a restart, a server that stopped) and go again.
 
 const FILE = "uploads/drafts"
-const PARALLEL = 2
+// Gemini's gate (mockups/gemini.ts) backs off when Vertex is busy, so more at once costs nothing.
+const PARALLEL = 8
 
 /** Drafts whose copy this server is writing now. */
 const global = globalThis as typeof globalThis & { __uploadsWriting?: Set<string> }

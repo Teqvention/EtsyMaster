@@ -1,0 +1,46 @@
+{
+ "id": "mv18z7zz-ebb16",
+ "kind": "mockup",
+ "folder": "Funky",
+ "source": {
+  "listingId": 4394569314,
+  "title": "Duck Wine Party Art Print, Quirky Animal Poster, Retro Wall Art with Ducks and Wine, Fun Dining Room or Kitchen Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/cfa82f/7332641510/il_fullxfull.7332641510_t0e3.jpg",
+  "url": "https://www.etsy.com/listing/4394569314/duck-wine-party-art-print-quirky-animal",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "duck art",
+   "funny print",
+   "kitchen decor",
+   "retro poster",
+   "animal art",
+   "wine lovers",
+   "colorful wall art",
+   "quirky design",
+   "modern print",
+   "playful decor",
+   "dining room art",
+   "humorous poster",
+   "whimsical artwork"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:36:48.959Z",
+ "updatedAt": "2026-10-09T18:36:08.771Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1azkw5.jpg",
+  "width": 1980,
+  "height": 1865
+ },
+ "posters": [],
+ "outputs": [],
+ "mockup": {
+  "status": "done",
+  "file": "mockup-mv1b3irm.jpg",
+  "width": 2048,
+  "height": 2048
+ },
+ "batches": [],
+ "sceneId": "duck-wine-party-art-print-2"
+}

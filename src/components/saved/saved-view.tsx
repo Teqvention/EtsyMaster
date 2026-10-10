@@ -27,6 +27,7 @@ import { toast } from "sonner"
 import { GenerateDialog } from "@/components/generation/generate-dialog"
 import { LikedView } from "@/components/listings/liked-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
+import { fromSaved, MockupDialog, mockupPhotos } from "@/components/saved/mockup-dialog"
 import { SelectionBar, SelectMark } from "@/components/selection"
 import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
 import { Button } from "@/components/ui/button"
@@ -404,6 +405,9 @@ function FolderView({
   const [asking, setAsking] = React.useState<Work | null>(null)
   // A style asks which posters go on its board: these picked to start, or all of them.
   const [styling, setStyling] = React.useState<number[] | null>(null)
+  // Mockups ask which photos, of these listings, and where they go.
+  const [mocking, setMocking] = React.useState<SavedListing[] | null>(null)
+  const mockingListings = React.useMemo(() => (mocking ?? []).map(fromSaved), [mocking])
 
   // The newest set of each kind per listing (sets come newest first).
   const latest = React.useMemo(() => {
@@ -414,6 +418,11 @@ function FolderView({
     }
     return map
   }, [sets])
+  // A listing has a mockup set per photo made into one.
+  const mockupsOf = React.useMemo(
+    () => Map.groupBy((sets ?? []).filter((s) => s.kind === "mockup"), (s) => s.source.listingId),
+    [sets]
+  )
 
   const byId = React.useMemo(() => new Map(items.map((i) => [i.listingId, i])), [items])
   // All shows each folder under a small heading; a folder is one untitled group.
@@ -431,55 +440,42 @@ function FolderView({
   const pick = (ids: Iterable<number>) => [...ids].flatMap((id) => byId.get(id) ?? [])
 
   /**
-   * What a Generate button runs on: the pick as it is, or with nothing
+   * What Generate posters runs on: the pick as it is, or with nothing
    * picked, every poster without a result yet (failed ones run again).
    */
-  function work(kind: GenerationKind): Work {
+  function work(): Work {
     if (selection.count) return { fresh: pick(selection.selected), again: [] as GenerationSet[] }
     const fresh: SavedListing[] = []
     const again: GenerationSet[] = []
     for (const item of items) {
-      const set = latest.get(`${kind}:${item.listingId}`)
+      const set = latest.get(`poster:${item.listingId}`)
       if (!set) fresh.push(item)
       else if (set.status === "error") again.push(set)
     }
     return { fresh, again }
   }
 
-  /** Mockups go `into` the mockup category picked for them. */
-  async function run(kind: GenerationKind, { fresh, again }: Work, options?: GenerateOptions, into?: string) {
+  async function run({ fresh, again }: Work, options?: GenerateOptions) {
     const n = fresh.length + again.length
     if (!n) return
     // New posters ask what to make; failed sets just run again as asked before.
-    if (kind === "poster" && !options && fresh.length) return setAsking({ fresh, again })
+    if (!options && fresh.length) return setAsking({ fresh, again })
     selection.clear()
-    // Posters go in each listing's own folder, mockups in their mockup category.
-    const byFolder = Map.groupBy(fresh, (i) => into ?? i.folder)
+    // Posters go in each listing's own folder.
+    const byFolder = Map.groupBy(fresh, (i) => i.folder)
     try {
       await Promise.all([
-        ...[...byFolder].map(([to, listings]) => generate(kind, to, listings.map(sourceOf), options)),
+        ...[...byFolder].map(([to, listings]) => generate("poster", to, listings.map(sourceOf), options)),
         ...again.map((set) => retryGeneration(set.id)),
       ])
       const per = options ? options.variants.count + options.ideas.count : 0
-      toast.success(`Generating ${n} ${noun(kind, n)}`, {
-        description:
-          kind === "poster"
-            ? per
-              ? `Each poster is taken out of its photo, then ${per} new ${per === 1 ? "one is" : "ones are"} drawn from it.`
-              : "What failed before runs again."
-            : into
-              ? `Each photo becomes a blank mockup in the ${into} category.`
-              : "What failed before runs again.",
+      toast.success(`Generating ${n} ${noun("poster", n)}`, {
+        description: per
+          ? `Each poster is taken out of its photo, then ${per} new ${per === 1 ? "one is" : "ones are"} drawn from it.`
+          : "What failed before runs again.",
         action: {
           label: "View",
-          onClick: () =>
-            router.push(
-              into
-                ? `/generation?kind=mockup&folder=${encodeURIComponent(into)}`
-                : folder
-                  ? `/generation?folder=${encodeURIComponent(folder)}`
-                  : "/generation"
-            ),
+          onClick: () => router.push(folder ? `/generation?folder=${encodeURIComponent(folder)}` : "/generation"),
         },
       })
     } catch (error) {
@@ -526,9 +522,11 @@ function FolderView({
     setTarget(next)
   }
 
-  const mockups = work("mockup")
-  const posters = work("poster")
+  const posters = work()
   const targeted = pick(target)
+  // Mockups run on the pick, or every listing here, for the photos not made yet.
+  const mockable = selection.count ? pick(selection.selected) : items
+  const mockupsLeft = mockupPhotos(mockable.map(fromSaved), sets).left.length
 
   return (
     <>
@@ -555,26 +553,15 @@ function FolderView({
             <Count value={Math.min(selection.count || items.length, MAX_IMAGES)} variant="outline" />
           </Button>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <GenerateButton
-                kind="mockup"
-                icon={<FrameIcon />}
-                variant="outline"
-                count={mockups.fresh.length + mockups.again.length}
-                picked={selection.count > 0}
-                disabled={!items.length}
-              />
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64 p-0">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="px-2.5 pt-2 pb-1">Into mockup category</DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <CategoryPicker of="mockups" onPick={(into) => run("mockup", mockups, undefined, into)} />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <GenerateButton
+          kind="mockup"
+          icon={<FrameIcon />}
+          variant="outline"
+          count={mockupsLeft}
+          picked={selection.count > 0}
+          disabled={!items.length}
+          onClick={() => setMocking(mockable)}
+        />
         <GenerateButton
           kind="poster"
           label={folder ? undefined : "Generate all"}
@@ -583,7 +570,7 @@ function FolderView({
           count={posters.fresh.length + posters.again.length}
           picked={selection.count > 0}
           disabled={!items.length}
-          onClick={() => run("poster", posters)}
+          onClick={() => run(posters)}
         />
       </PaneHeader>
 
@@ -635,7 +622,7 @@ function FolderView({
                       <li key={item.listingId}>
                         <SavedTile
                           item={item}
-                          mockup={latest.get(`mockup:${item.listingId}`)}
+                          mockups={mockupsOf.get(item.listingId)}
                           poster={latest.get(`poster:${item.listingId}`)}
                           selected={selection.has(item.listingId)}
                           selecting={selection.count > 0}
@@ -653,22 +640,14 @@ function FolderView({
                   {targeted.length === 1 ? targeted[0].title : `${targeted.length} listings`}
                 </ContextMenuLabel>
               </ContextMenuGroup>
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>
-                  <FrameIcon />
-                  Generate {noun("mockup", targeted.length)}
-                </ContextMenuSubTrigger>
-                <ContextMenuSubContent className="w-64 p-0">
-                  <ContextMenuGroup>
-                    <ContextMenuLabel className="px-2.5 pt-2 pb-1">Into mockup category</ContextMenuLabel>
-                  </ContextMenuGroup>
-                  <CategoryPicker
-                    of="mockups"
-                    onPick={(into) => run("mockup", { fresh: targeted, again: [] }, undefined, into)}
-                  />
-                </ContextMenuSubContent>
-              </ContextMenuSub>
-              <ContextMenuItem onClick={() => run("poster", { fresh: targeted, again: [] })}>
+              <ContextMenuItem
+                disabled={!mockupPhotos(targeted.map(fromSaved), sets).left.length}
+                onClick={() => setMocking(targeted)}
+              >
+                <FrameIcon />
+                Generate {noun("mockup", targeted.length)}…
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => run({ fresh: targeted, again: [] })}>
                 <SparklesIcon />
                 Generate {noun("poster", targeted.length)}
               </ContextMenuItem>
@@ -718,7 +697,17 @@ function FolderView({
           }
           thumbs={(asking?.fresh ?? []).slice(0, 3).map((i) => i.image)}
           references={{ count: asking?.fresh.length ?? 1, noun: "steal" }}
-          onSubmit={(options) => (asking ? run("poster", asking, options) : undefined)}
+          onSubmit={(options) => (asking ? run(asking, options) : undefined)}
+        />
+
+        <MockupDialog
+          open={mocking !== null}
+          onOpenChange={(open) => !open && setMocking(null)}
+          listings={mockingListings}
+          description={
+            mocking?.length === 1 ? mocking[0].title : `${mocking?.length ?? 0} listings · ${folder ?? "All folders"}`
+          }
+          onDone={() => selection.clear()}
         />
 
         {folder && (
@@ -788,7 +777,8 @@ function GenerateButton({
   picked: boolean
   disabled: boolean
 } & Omit<React.ComponentProps<typeof Button>, "variant" | "disabled">) {
-  const done = !picked && count === 0
+  // A photo is never made into a mockup twice, picked or not.
+  const done = count === 0 && (!picked || kind === "mockup")
   return (
     <Button
       {...props}
@@ -797,10 +787,14 @@ function GenerateButton({
       disabled={disabled || done}
       title={
         done
-          ? `Every listing here has ${kind === "mockup" ? "a mockup" : "its posters"} — select some to run them again`
+          ? kind === "mockup"
+            ? "Every photo here is a mockup already"
+            : "Every listing here has its posters — select some to run them again"
           : picked
             ? `For the ${count} selected`
-            : `For the ${count} without ${noun(kind, 2)} yet`
+            : kind === "mockup"
+              ? `For the ${count} with photos not yet mockups`
+              : `For the ${count} without ${noun(kind, 2)} yet`
       }
     >
       {icon}
@@ -826,20 +820,23 @@ function Count({ value, variant }: { value: number; variant: "default" | "outlin
 
 function SavedTile({
   item,
-  mockup,
+  mockups,
   poster,
   selected,
   selecting,
   onToggle,
 }: {
   item: SavedListing
-  mockup: GenerationSet | undefined
+  /** One per photo made into a mockup, newest first. */
+  mockups: GenerationSet[] | undefined
   poster: GenerationSet | undefined
   selected: boolean
   selecting: boolean
   onToggle: (range: boolean) => void
 }) {
   const [loaded, setLoaded] = React.useState(false)
+  // What's still going shows first, then what failed.
+  const mockup = mockups && (mockups.find(isActive) ?? mockups.find((s) => s.status === "error") ?? mockups[0])
   return (
     <button
       type="button"
@@ -873,7 +870,7 @@ function SavedTile({
         <SelectMark selected={selected} selecting={selecting} />
         {(mockup || poster) && (
           <span className="absolute top-2 right-2 flex flex-col items-end gap-1">
-            {mockup && <SetChip set={mockup} label="Mockup" />}
+            {mockup && <SetChip set={mockup} label={mockups.length > 1 ? `${mockups.length} mockups` : "Mockup"} />}
             {poster && <SetChip set={poster} label="Posters" />}
           </span>
         )}

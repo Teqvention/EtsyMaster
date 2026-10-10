@@ -334,13 +334,16 @@ export function OutputTile({
 
 /** Where a set stands, in a few words. */
 export function progress(set: GenerationSet) {
-  const failed = [set.original, set.extraction, set.mockup, ...set.outputs].filter((a) => a?.status === "error").length
+  // A mockup set's blank is its mockup: one failure, not two.
+  const failed = [set.original, set.extraction, set.mockup, ...(set.kind === "poster" ? set.outputs : [])].filter((a) => a?.status === "error").length
   const made = set.outputs.filter((o) => o.status === "done").length
   const stage =
     set.original.status !== "done"
       ? "Fetching photo"
       : set.kind === "mockup"
-        ? "Emptying the frame"
+        ? set.outputs.some((o) => o.job)
+          ? "In a batch job"
+          : "Emptying the frame"
         : set.extraction?.status !== "done"
           ? "Finding the posters"
           : set.outputs.some((o) => o.status === "running" && !o.job)
@@ -493,6 +496,6 @@ export function batchSummary(set: GenerationSet) {
   }
 }
 
-/** Done outputs nobody has decided on yet. */
+/** Done outputs nobody has decided on yet (a mockup set's blank isn't one to decide on). */
 export const toReview = (set: GenerationSet) =>
-  set.outputs.filter((o) => o.status === "done" && !o.review)
+  set.kind === "poster" ? set.outputs.filter((o) => o.status === "done" && !o.review) : []

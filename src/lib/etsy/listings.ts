@@ -11,6 +11,7 @@ import { estimateSales, shopSalesCap, withReviewCount } from "./estimate"
 import type {
   Category,
   Listing,
+  ListingIdPage,
   ListingPage,
   ListingQuery,
   ListingShop,
@@ -92,6 +93,37 @@ export async function getShopListings(
   )
 
   return toPage(page, offset, await hydrate(page.results))
+}
+
+/**
+ * One page of a shop's active listings as ids: the shop analysis fetches in
+ * full only the ones it doesn't hold yet, so building on an earlier run costs
+ * one request per page plus those.
+ */
+export async function getShopListingIds(
+  shopId: number,
+  offset = 0,
+  limit = MAX_PAGE_SIZE,
+  sort: ShopListingSort = "created"
+): Promise<ListingIdPage> {
+  "use cache"
+  cacheLife("hours")
+
+  const page = await etsyGet<ApiPage<ApiListing>>(
+    `/shops/${shopId}/listings/active`,
+    { limit: Math.min(limit, MAX_PAGE_SIZE), offset, ...SHOP_SORTS[sort] }
+  )
+
+  const { total, nextOffset } = toPage(page, offset, [])
+  return { ids: page.results.map((l) => l.listing_id), total, nextOffset }
+}
+
+/** Listings in full by id (at most 100), in the order given; ones Etsy no longer has are left out. */
+export async function getListingsById(ids: number[]): Promise<Listing[]> {
+  "use cache"
+  cacheLife("hours")
+
+  return hydrate(ids.slice(0, MAX_PAGE_SIZE).map((listing_id) => ({ listing_id })))
 }
 
 /** A single listing, plus its review count — which sharpens the estimate. */

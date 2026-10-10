@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.871Z",
- "updatedAt": "2026-10-09T16:55:32.703Z",
+ "updatedAt": "2026-10-09T21:04:33.050Z",
  "original": {
   "status": "done",
   "file": "source-mv10uwr8.jpg",
@@ -176,8 +176,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.871Z"
+   "review": "rejected",
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "reviewedAt": "2026-10-09T21:04:17.243Z"
   },
   {
    "status": "done",
@@ -189,8 +190,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.871Z"
+   "review": "approved",
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "reviewedAt": "2026-10-09T21:04:19.363Z"
   },
   {
    "status": "done",
@@ -202,14 +204,15 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.871Z"
+   "review": "approved",
+   "createdAt": "2026-10-09T13:49:25.871Z",
+   "reviewedAt": "2026-10-09T21:04:21.213Z"
   },
   {
    "status": "done",
    "file": "out-mv134ueb-9k2ff-mv137cpc.jpg",
    "batch": "mv12vm63-yia45",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:13.571Z",
    "id": "mv134ueb-9k2ff",
    "poster": 0,
@@ -218,13 +221,14 @@
    "title": "Stacked Citrus Zest Print",
    "brief": "A tall, vertical stack of thick-cut citrus slices featuring blood orange, Meyer lemon, and Persian lime. Each slice is rendered with heavy impasto, creating a pebbled texture for the pith and glossy, translucent globs of paint for the juicy pulp. The composition is a tight, centered vertical crop against a soft, creamy beige background. The palette uses #FF5E0E for the orange, #E62E2D for the blood orange, and a vibrant neon yellow. Highlights are thick, buttery dabs of white paint that catch the light, making the fruit look dripping wet and three-dimensional.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:23.513Z"
   },
   {
    "status": "done",
    "file": "out-mv134ueb-zoged-mv138gen.jpg",
    "batch": "mv12vm63-yia45",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:13.571Z",
    "id": "mv134ueb-zoged",
    "poster": 0,
@@ -233,13 +237,14 @@
    "title": "Heavy Impasto Taco Feast",
    "brief": "A monumental, open-faced street taco overflowing with chunky salsa roja, vibrant avocado mash, and crumbled white cheese. The salsa is depicted with thick, jewel-like dollops of #E62E2D and #FF5E0E, while the avocado is a dense, sculpted smear of lime green with visible brush ridges. The composition is a close-up macro view, making the ingredients feel massive and tactile. Set against a warm, pale pink backdrop, the lighting creates deep shadows beneath the heavy paint mounds. The corn tortilla has a sandy, gritty texture created by dry-brushing thick beige paint.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:24.660Z"
   },
   {
    "status": "done",
    "file": "out-mv134ueb-0saca-mv13hihz.jpg",
    "batch": "mv12vm63-yia45",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:13.571Z",
    "id": "mv134ueb-0saca",
    "poster": 0,
@@ -248,13 +253,14 @@
    "title": "Neon Scoop Sundae Print",
    "brief": "A towering triple-scoop ice cream cone with melting strawberry, mango, and black cherry flavors stacked high. Each scoop is sculpted with massive, globular impasto strokes, featuring thick drips of syrup that look like liquid glass running down the sides. The black cherry scoop is a deep #2B1B17, the mango a neon #FF5E0E, and the strawberry a hot #FF69B4. A single, bulbous cherry with a thick white highlight sits on top. The background is a soft lavender-pink, and the entire piece uses hyper-saturated colors to make the dessert feel edible and energetic.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:25.796Z"
   },
   {
    "status": "done",
    "file": "out-mv134ueb-z5n30-mv13b7kq.jpg",
    "batch": "mv12vm6s-a1uzr",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:13.571Z",
    "poster": 0,
    "feedback": "Make it a tall stack of colourful donuts instead of vegetables, same painterly style and pink background",
@@ -266,13 +272,14 @@
    "title": "Leaning Pastel Donut Tower",
    "brief": "A tall, slightly precarious stack of five gourmet donuts leaning at a dynamic angle against a matte coral-pink backdrop. The stack features varied toppings: a lavender-glazed donut, a mint-green ring with chocolate drizzle, and a lemon-yellow donut encrusted with thick white sprinkles. The composition is a low-angle vertical shot, emphasizing the height and the doughy texture of each layer. Use a heavy impasto technique with visible palette knife ridges to define the thick frosting and globular sprinkles. Lighting should come from the upper right, creating deep, textured shadows and bright white, glossy highlights on the glaze.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:27.464Z"
   },
   {
    "status": "done",
    "file": "out-mv17eibi-pgorq-mv17fmkw.jpg",
    "batch": "mv17eibc-230w3",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T16:52:42.942Z",
    "poster": 0,
    "from": "medium",
@@ -283,13 +290,14 @@
    "title": "Floating Deluxe Burger Stack",
    "brief": "A vertical stack of deconstructed burger ingredients floats in the center of the frame against a solid #E996AD pink background. The stack includes a chunky #FFFFFF bun with heavy paint-dab seeds, ruffled #00A896 lettuce, a thick #8B0000 tomato slice, and a dark #1A1A1B patty. All elements are outlined in bold, wobbly black paint. The bottom bun sits on a flat #00A896 teal surface in the lower third. Use a heavy impasto technique with visible palette knife ridges to define the thick cheese and meat texture. Lighting is flat and frontal with no realistic shadows.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:29.007Z"
   },
   {
    "status": "done",
    "file": "out-mv17eibi-v8l8z-mv17i5b1.jpg",
    "batch": "mv17eibc-230w3",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T16:52:42.942Z",
    "poster": 0,
    "from": "medium",
@@ -300,13 +308,14 @@
    "title": "Impasto Burger Blueprint",
    "brief": "This centered composition features the exact components of a cheeseburger separated vertically to show every layer. Each ingredient is simplified into a chunky, iconic form: a #FFFFFF bun top, #8B0000 tomato, #FFFFFF cheese slab, and a textured #1A1A1B patty. The background is a solid #E996AD pink, while the foreground surface is #00A896 teal. Apply paint in thick, unblended layers with distinct ridges left by a palette knife. Use #FFFFFF for heavy, embossed highlights on the onion rings and bun. Bold, slightly shaky #1A1A1B outlines define every shape.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:30.205Z"
   },
   {
    "status": "done",
    "file": "out-mv17eibi-szzn5-mv17had0.jpg",
    "batch": "mv17eibc-230w3",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T16:52:42.942Z",
    "poster": 0,
    "from": "medium",
@@ -317,13 +326,14 @@
    "title": "The Leaning Double Decker",
    "brief": "A whimsical, slightly tilted stack of two burger patties and three buns dominates the frame. The patties are rendered in rich #8B0000 and #1A1A1B tones with deep, physical texture. A stray #2E59A7 blue napkin is tucked under the bottom bun, which sits on a horizontal #00A896 teal table. The background is a solid, flat #E996AD pink. Shapes are distorted and chunky, with bold #1A1A1B outlines and heavy blobs of #FFFFFF paint representing highlights on the pickles and seeds. The perspective is flattened, emphasizing the tactile ridges of the thick oil paint.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:31.100Z"
   },
   {
    "status": "done",
    "file": "out-mv17eibi-k30rs-mv17ggxj.jpg",
    "batch": "mv17eibc-230w3",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T16:52:42.942Z",
    "poster": 0,
    "from": "medium",
@@ -334,7 +344,8 @@
    "title": "Luxury Picnic Totem",
    "brief": "A tall, irreverent stack featuring a #FFFFFF burger bun, a thick wedge of #8B0000 meat, and a #2E59A7 patterned teacup balanced precariously on top. The tower is centered against a vibrant #E996AD pink wall and a #00A896 teal floor. The entire subject is encased in a thick, wobbly black outline. Use extreme impasto texture, with paint peaks so high they cast physical shadows on the canvas. Details like the cup pattern and bun seeds are single, heavy dabs of color. The mood is chic and celebratory, focusing on simplified, high-contrast forms.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:33.050Z"
   }
  ],
  "layout": "single",

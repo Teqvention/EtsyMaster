@@ -3,11 +3,14 @@
   "id": "c-mv15etdazhr",
   "name": "Altbau frontal angelehnt",
   "scenes": [
-   "01-altbau-frontal"
+   "01-altbau-frontal",
+   "04-diele",
+   "05-altbau-chromregal",
+   "06-nussbaum-sideboard"
   ],
   "video": null,
   "isDefault": true,
   "createdAt": "2026-10-09T15:56:58.030Z",
-  "updatedAt": "2026-10-09T15:56:58.030Z"
+  "updatedAt": "2026-10-09T20:44:09.684Z"
  }
 ]

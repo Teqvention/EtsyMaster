@@ -99,10 +99,10 @@ export function ClipsPanel({
               clip.id === selected ? "bg-accent text-accent-foreground" : "hover:bg-muted/60"
             )}
           >
-            <FilmIcon className={clip.listing ? "text-foreground" : "text-muted-foreground"} />
+            <FilmIcon className={clip.video ? "text-foreground" : "text-muted-foreground"} />
             <span className="min-w-0 flex-1 truncate">{clip.name}</span>
             <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-              {clip.listing && <span className="font-medium text-foreground">Listing · </span>}
+              {clip.video && <span className="font-medium text-foreground">Video · </span>}
               {formatSeconds(clip.duration)}
             </span>
           </li>

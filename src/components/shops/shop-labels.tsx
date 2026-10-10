@@ -269,6 +269,29 @@ export function ShopLabelButton({ shop }: { shop: ListingShop }) {
   )
 }
 
+/** In a shop's row on the Shops page: a tag that opens the same list. */
+export function ShopLabelIconButton({ shop, className }: { shop: ListingShop; className?: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Label ${shop.name}`}
+            className={cn("text-muted-foreground data-popup-open:bg-muted", className)}
+          />
+        }
+      >
+        <TagIcon />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 gap-0 p-0">
+        <LabelList shops={[shop]} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 /** Small and quiet, next to a shop's name. */
 export function LabelBadges({ labels, max = 3 }: { labels: string[]; max?: number }) {
   if (labels.length === 0) return null

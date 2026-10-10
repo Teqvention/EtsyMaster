@@ -90,13 +90,13 @@ export function MotionPanel({
   clip,
   keyIndex,
   onClip,
-  onListing,
+  onVideo,
   onKey,
 }: {
   clip: Clip | null
   keyIndex: number | null
   onClip: (patch: Partial<Clip>, merge?: string) => void
-  onListing: (listing: boolean) => void
+  onVideo: (video: boolean) => void
   onKey: (index: number, patch: KeyPatch, merge?: string) => void
 }) {
   if (!clip) {
@@ -122,8 +122,8 @@ export function MotionPanel({
           {outside && <p className="text-xs text-amber-600 dark:text-amber-500">Etsy takes 5–15 s.</p>}
         </div>
         <label className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Listing video</span>
-          <Switch checked={clip.listing} onCheckedChange={onListing} />
+          <span className="text-xs text-muted-foreground">Saved as video</span>
+          <Switch checked={clip.video} onCheckedChange={onVideo} />
         </label>
         <ValueSlider
           label="Handheld"

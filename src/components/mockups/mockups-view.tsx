@@ -5,16 +5,23 @@ import { useRouter, useSearchParams } from "next/navigation"
 import * as React from "react"
 import { zipSync } from "fflate"
 import {
+  CheckIcon,
+  ChevronDownIcon,
   FileArchiveIcon,
   FolderIcon,
   FrameIcon,
+  LayersIcon,
   ListOrderedIcon,
   ListPlusIcon,
   LoaderCircleIcon,
   PlayIcon,
   PlusIcon,
+  RefreshCwIcon,
   SparklesIcon,
   StarIcon,
+  StoreIcon,
+  Trash2Icon,
+  XIcon,
 } from "lucide-react"
 import { cn } from "cn"
 import { toast } from "sonner"
@@ -22,14 +29,29 @@ import { toast } from "sonner"
 import { useChains } from "@/components/mockups/chain-store"
 import { AddToChainItems, ChainsPanel } from "@/components/mockups/chains-panel"
 import { PosterPicker, usePoster } from "@/components/mockups/poster-picker"
+import { RegenerateMockupDialog, useRemaking } from "@/components/mockups/regenerate-dialog"
 import { Button } from "@/components/ui/button"
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { refreshCategories, useCategories } from "@/hooks/use-categories"
+import { useGenerations } from "@/hooks/use-generations"
 import { download, fetchScene, fileUrl } from "@/lib/mockups/client"
 import { exportName, exportScene, renderThumb } from "@/lib/mockups/export"
 import type { SceneSummary } from "@/lib/mockups/types"
@@ -40,16 +62,34 @@ export function MockupsView() {
   const poster = usePoster()
   const [scenes, setScenes] = React.useState<SceneSummary[] | null>(null)
   const [filter, setFilter] = useCategoryFilter()
+  const [shop, setShop] = useShopFilter()
   const [tab, setTab] = useTab()
   const chains = useChains()
-  const visible = React.useMemo(() => scenes && scenes.filter(filter.matches), [scenes, filter])
+  // The categories count what's left of the shop picked.
+  const fromShop = React.useMemo(
+    () => scenes && (shop ? scenes.filter((s) => s.shop?.toLowerCase() === shop.toLowerCase()) : scenes),
+    [scenes, shop]
+  )
+  const visible = React.useMemo(() => fromShop && fromShop.filter((s) => filter.matches(s)), [fromShop, filter])
+
+  async function remove(scene: SceneSummary) {
+    setScenes((all) => all?.filter((s) => s.id !== scene.id) ?? null)
+    try {
+      const response = await fetch(`/api/mockups/${scene.id}`, { method: "DELETE" })
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? response.statusText)
+      toast(`Deleted ${scene.name}`)
+    } catch (error) {
+      setScenes((all) => all && [...all, scene].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name)))
+      toast.error(`Couldn't delete ${scene.name}: ${(error as Error).message}`)
+    }
+  }
   const [progress, setProgress] = React.useState<string | null>(null)
   const [creating, setCreating] = React.useState<"room" | "reference" | null>(null)
   const fileInput = React.useRef<HTMLInputElement>(null)
   const referenceInput = React.useRef<HTMLInputElement>(null)
   const [name, setName] = React.useState("")
 
-  React.useEffect(() => {
+  const load = React.useCallback(() => {
     fetch("/api/mockups", { cache: "no-store" })
       .then(async (r) => {
         const body = await r.json()
@@ -57,10 +97,18 @@ export function MockupsView() {
         setScenes(body)
       })
       .catch((error) => {
-        setScenes([])
+        setScenes((all) => all ?? [])
         toast.error(`Couldn't load the mockups: ${error.message}`)
       })
   }, [])
+
+  // Read again when a mockup made again (by its set) gets its new blank.
+  const sets = useGenerations()
+  const blanks = sets
+    ?.filter((s) => s.kind === "mockup" && s.sceneId)
+    .map((s) => `${s.sceneId}:${s.mockup?.file}`)
+    .join()
+  React.useEffect(load, [load, blanks])
 
   // Scenes made on the server (from a reference) have no thumbnail until
   // saved in the editor, so render the missing ones here, one at a time.
@@ -118,12 +166,11 @@ export function MockupsView() {
         const scene = await fetchScene(summary.id)
         const jpeg = await exportScene(scene, poster.bitmap)
         files[exportName(scene)] = new Uint8Array(await jpeg.arrayBuffer())
-        const listing = scene.clips?.find((c) => c.listing)
-        if (listing) {
-          const video = await exportClip(scene, listing, poster.bitmap, undefined, (p) =>
+        for (const clip of scene.clips?.filter((c) => c.video) ?? []) {
+          const video = await exportClip(scene, clip, poster.bitmap, undefined, (p) =>
             setProgress(`${step} · video ${Math.floor(p * 100)} %`)
           )
-          files[clipFileName(scene, listing)] = new Uint8Array(await video.arrayBuffer())
+          files[clipFileName(scene, clip)] = new Uint8Array(await video.arrayBuffer())
         }
       }
       const zip = zipSync(files, { level: 0 })
@@ -171,13 +218,27 @@ export function MockupsView() {
           video, numbered in listing order. Right-click a mockup to put it in a chain.
         </p>
 
-        {scenes && <CategoryFilter scenes={scenes} filter={filter} onChange={setFilter} />}
+        {scenes && (
+          <div className="flex flex-wrap items-start gap-2">
+            <ShopFilter scenes={scenes} shop={shop} onChange={setShop} />
+            <div className="min-w-0 flex-1">
+              <CategoryFilter scenes={fromShop!} filter={filter} onChange={setFilter} />
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4">
           {visible === null
             ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-xl" />)
             : visible.map((scene) => (
-                <MockupCard key={scene.id} scene={scene} onShowChains={() => setTab(CHAINS)} />
+                <MockupCard
+                  key={scene.id}
+                  scene={scene}
+                  onShowChains={() => setTab(CHAINS)}
+                  onShop={setShop}
+                  onDelete={() => remove(scene)}
+                  onRedrawn={load}
+                />
               ))}
 
           <div className="flex aspect-square flex-col justify-center gap-3 rounded-xl border border-dashed p-4">
@@ -350,13 +411,117 @@ function CategoryFilter({
   )
 }
 
+// --- Shops ---
+
+/** The shop mockups are shown of, kept in `?shop=` (absent for every shop). */
+function useShopFilter() {
+  const shop = useSearchParams().get("shop") || null
+  const setShop = React.useCallback((next: string | null) => {
+    const params = new URLSearchParams(window.location.search)
+    if (next) params.set("shop", next)
+    else params.delete("shop")
+    const query = params.toString()
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)
+  }, [])
+  return [shop, setShop] as const
+}
+
+/** Which shop's stolen mockups are shown; only there once any are. */
+function ShopFilter({
+  scenes,
+  shop,
+  onChange,
+}: {
+  scenes: SceneSummary[]
+  shop: string | null
+  onChange: (shop: string | null) => void
+}) {
+  const shops = React.useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>()
+    for (const { shop } of scenes) {
+      if (!shop) continue
+      const entry = counts.get(shop.toLowerCase()) ?? { name: shop, count: 0 }
+      counts.set(shop.toLowerCase(), { ...entry, count: entry.count + 1 })
+    }
+    return [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+  }, [scenes])
+  if (!shops.length && !shop) return null
+  const current = !shop ? null : (shops.find((s) => s.name.toLowerCase() === shop.toLowerCase()) ?? { name: shop, count: 0 })
+
+  return (
+    <div className="flex items-center" role="group" aria-label="Shop">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn("max-w-56 min-w-0", current && "rounded-r-none border-brand/50 bg-brand/8")}
+            />
+          }
+        >
+          <StoreIcon className="text-muted-foreground" />
+          <span className="truncate">{current ? current.name : "All shops"}</span>
+          {current && <span className="text-xs text-muted-foreground tabular-nums">{current.count}</span>}
+          <ChevronDownIcon className="text-muted-foreground" data-icon="inline-end" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-80 w-60">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Stolen from</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onChange(null)}>
+              <LayersIcon />
+              <span className="flex-1">All shops</span>
+              {!current && <CheckIcon />}
+            </DropdownMenuItem>
+            {shops.map((s) => (
+              <DropdownMenuItem key={s.name} onClick={() => onChange(s.name)}>
+                <StoreIcon />
+                <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{s.count}</span>
+                {current?.name.toLowerCase() === s.name.toLowerCase() && <CheckIcon />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {current && (
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Every shop"
+          title="Every shop"
+          onClick={() => onChange(null)}
+          className="-ml-px rounded-l-none border-brand/50"
+        >
+          <XIcon />
+        </Button>
+      )}
+    </div>
+  )
+}
+
 // A mockup in the grid. Like an Etsy listing, hovering plays its video. The
-// corner button (or a right-click) puts it in a chain.
-function MockupCard({ scene, onShowChains }: { scene: SceneSummary; onShowChains: () => void }) {
+// corner buttons make it again, put it in a chain (so does a right-click)
+// and delete it; its shop filters the grid to that shop.
+function MockupCard({
+  scene,
+  onShowChains,
+  onShop,
+  onDelete,
+  onRedrawn,
+}: {
+  scene: SceneSummary
+  onShowChains: () => void
+  onShop: (shop: string) => void
+  onDelete: () => void
+  onRedrawn: () => void
+}) {
+  const [regenerating, setRegenerating] = React.useState(false)
+  const remaking = useRemaking(scene.id)
   const video = React.useRef<HTMLVideoElement>(null)
   const hovered = React.useRef(false)
   const [playing, setPlaying] = React.useState(false)
-  const clip = scene.clips.find((c) => c.listing && c.preview) ?? scene.clips.find((c) => c.preview)
+  const clip = scene.clips.find((c) => c.video && c.preview) ?? scene.clips.find((c) => c.preview)
   const count = scene.clips.length
   const inChains = (useChains() ?? []).filter((c) => c.scenes.includes(scene.id))
 
@@ -406,6 +571,14 @@ function MockupCard({ scene, onShowChains }: { scene: SceneSummary; onShowChains
                 )}
               />
             )}
+            {remaking && (
+              <span className="absolute inset-0 grid place-items-center bg-background/60 backdrop-blur-[2px]">
+                <span className="flex items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs font-medium shadow-sm">
+                  <LoaderCircleIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
+                  Making it again
+                </span>
+              </span>
+            )}
             {count > 0 && (
               <span
                 aria-label={count === 1 ? "1 animation" : `${count} animations`}
@@ -436,6 +609,29 @@ function MockupCard({ scene, onShowChains }: { scene: SceneSummary; onShowChains
             </span>
           </div>
         </Link>
+        {scene.shop && (
+          // Outside the link: it filters the grid instead of opening the editor.
+          <button
+            type="button"
+            onClick={() => onShop(scene.shop!)}
+            title={`Only mockups stolen from ${scene.shop}`}
+            className="absolute bottom-[2.6rem] left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/55 py-0.5 pr-2 pl-1.5 text-[11px] font-medium text-white backdrop-blur-sm transition-colors outline-none hover:bg-black/75 focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3 [&_svg]:shrink-0"
+          >
+            <StoreIcon />
+            <span className="truncate">{scene.shop}</span>
+          </button>
+        )}
+        <Button
+          variant="secondary"
+          size="icon-sm"
+          aria-label={`Regenerate ${scene.name}`}
+          title="Regenerate: say what should be different"
+          disabled={remaking}
+          onClick={() => setRegenerating(true)}
+          className={cn(CORNER, "right-20")}
+        >
+          <RefreshCwIcon />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -444,7 +640,7 @@ function MockupCard({ scene, onShowChains }: { scene: SceneSummary; onShowChains
                 size="icon-sm"
                 aria-label={`Add ${scene.name} to a chain`}
                 title="Add to chain"
-                className="absolute top-2 right-2 rounded-full bg-background/90 opacity-0 shadow-sm backdrop-blur-sm transition-[opacity,scale] duration-150 ease-out focus-visible:opacity-100 active:scale-[0.97] data-popup-open:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:group-hover/card:opacity-100"
+                className={cn(CORNER, "right-11")}
               />
             }
           >
@@ -454,10 +650,59 @@ function MockupCard({ scene, onShowChains }: { scene: SceneSummary; onShowChains
             <AddToChainItems scene={scene} onShowChains={onShowChains} />
           </DropdownMenuContent>
         </DropdownMenu>
+        <DeleteCorner name={scene.name} inChains={inChains.length} onDelete={onDelete} />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">
         <AddToChainItems scene={scene} onShowChains={onShowChains} />
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={remaking} onClick={() => setRegenerating(true)}>
+          <RefreshCwIcon />
+          Regenerate…
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onClick={onDelete}>
+          <Trash2Icon />
+          Delete mockup
+        </ContextMenuItem>
       </ContextMenuContent>
+      <RegenerateMockupDialog
+        open={regenerating}
+        onOpenChange={setRegenerating}
+        sceneId={scene.id}
+        name={scene.name}
+        image={scene.thumb && fileUrl(scene.id, scene.thumb)}
+        onRedrawn={onRedrawn}
+      />
     </ContextMenu>
+  )
+}
+
+/** A button in the card's top right, shown on hover. */
+const CORNER =
+  "absolute top-2 rounded-full bg-background/90 opacity-0 shadow-sm backdrop-blur-sm transition-[opacity,scale] duration-150 ease-out focus-visible:opacity-100 active:scale-[0.97] data-popup-open:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:group-hover/card:opacity-100"
+
+/** The card's bin: a first click arms it, a second deletes. */
+function DeleteCorner({ name, inChains, onDelete }: { name: string; inChains: number; onDelete: () => void }) {
+  const [armed, setArmed] = React.useState(false)
+  React.useEffect(() => {
+    if (!armed) return
+    const timer = setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(timer)
+  }, [armed])
+  return (
+    <Button
+      variant={armed ? "destructive" : "secondary"}
+      size={armed ? "sm" : "icon-sm"}
+      aria-label={armed ? `Really delete ${name}` : `Delete ${name}`}
+      title={armed ? (inChains ? `Also leaves ${inChains === 1 ? "its chain" : `its ${inChains} chains`}` : undefined) : "Delete"}
+      onClick={() => (armed ? onDelete() : setArmed(true))}
+      onBlur={() => setArmed(false)}
+      className={cn(
+        "absolute top-2 right-2 rounded-full shadow-sm backdrop-blur-sm transition-[opacity,scale] duration-150 ease-out focus-visible:opacity-100 active:scale-[0.97] pointer-coarse:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:group-hover/card:opacity-100",
+        armed ? "opacity-100" : "bg-background/90 opacity-0 hover:text-destructive"
+      )}
+    >
+      <Trash2Icon />
+      {armed && "Delete?"}
+    </Button>
   )
 }

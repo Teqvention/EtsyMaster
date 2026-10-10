@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils"
 // afresh (`key`) for each opening.
 
 // Not "steal-mockups:category": that one could hold a Saved folder.
-const LAST_CATEGORY = "steal-mockups:mockup-category"
+export const LAST_MOCKUP_CATEGORY = "steal-mockups:mockup-category"
 
 type Choice = "shown" | "all" | "pick"
 
@@ -53,7 +53,7 @@ export function StealMockupsDialog({
   const [picked, setPicked] = React.useState<ReadonlySet<number>>(() => new Set([photo]))
   const [chosenCategory, setCategory] = React.useState<string | null>(null)
   const [last] = React.useState(() =>
-    typeof window === "undefined" ? null : localStorage.getItem(LAST_CATEGORY)
+    typeof window === "undefined" ? null : localStorage.getItem(LAST_MOCKUP_CATEGORY)
   )
   const [busy, setBusy] = React.useState(false)
   const category = chosenCategory ?? last
@@ -88,7 +88,7 @@ export function StealMockupsDialog({
     setBusy(true)
     try {
       await generate("mockup", category, sources)
-      localStorage.setItem(LAST_CATEGORY, category)
+      localStorage.setItem(LAST_MOCKUP_CATEGORY, category)
       onOpenChange(false)
       toast.success(
         count === 1 ? `Stealing the mockup into ${category}` : `Stealing ${count} mockups into ${category}`,
@@ -236,13 +236,13 @@ export function StealMockupsDialog({
   )
 }
 
-function ChoiceCard({
+export function ChoiceCard({
   value,
   title,
   detail,
   children,
 }: {
-  value: Choice
+  value: string
   title: string
   detail: string
   children: React.ReactNode
@@ -261,7 +261,7 @@ function ChoiceCard({
   )
 }
 
-function Thumb({ src, className }: { src?: string; className?: string }) {
+export function Thumb({ src, className }: { src?: string; className?: string }) {
   if (!src) return null
   return (
     <span className={cn("relative block size-full", className)}>

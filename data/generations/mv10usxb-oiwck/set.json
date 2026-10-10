@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.871Z",
- "updatedAt": "2026-10-09T15:17:12.207Z",
+ "updatedAt": "2026-10-09T21:04:04.426Z",
  "original": {
   "status": "done",
   "file": "source-mv10ux11.jpg",
@@ -105,12 +105,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.871Z",
    "title": "Sunlit Terrace Table",
    "brief": "Paint a vertical view of a quiet Mediterranean cafe corner. The foreground features a small round table with a blue-and-white checkered cloth and two red cafe chairs. A large mustard-yellow umbrella hangs overhead in place of an awning. The background shows a white-washed wall with a dark blue door and shutters. Use thick, visible gouache brushstrokes and a palette of cream, cobalt blue, terracotta red, and deep leaf green. Lighting is flat and bright, suggesting high noon in a coastal town.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:00.553Z"
   },
   {
    "status": "done",
@@ -120,12 +121,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.871Z",
    "title": "Aegean Balcony Morning",
    "brief": "Illustrate a Mediterranean breakfast scene on a stone balcony overlooking a deep blue sea. The focus is a marble bistro table in the lower third of the frame, holding a ceramic carafe and a bowl of bright oranges. Frame the view with a sun-bleached archway draped in vibrant purple bougainvillea. Use a shifted palette of seafoam green, coral pink, ochre, and warm white. Apply dry-brush textures to the stone walls and smooth, flat color blocks for the water. The lighting is soft morning gold, casting gentle shadows.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:03.104Z"
   },
   {
    "status": "done",
@@ -135,12 +137,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.871Z",
    "title": "Coastal Window Still Life",
    "brief": "Create a minimalist travel-themed still life set on a rustic wooden window sill. The scene includes a wide-brimmed straw hat resting against a vintage bottle of olive oil and a single sprig of rosemary in a glass. In the background, a simple window frame looks out onto a hazy, abstract lavender field under a pale sky. Use a palette of sage green, dusty rose, burnt sienna, and parchment white. The rendering combines thin charcoal linework with translucent watercolor washes and heavy paper texture. Soft, diffused lighting creates long, subtle shadows across the sill.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:04.426Z"
   }
  ],
  "layout": "single",

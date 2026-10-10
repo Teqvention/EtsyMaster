@@ -36,24 +36,24 @@ export async function checkDemand(phrases: string[], maxSearches = 5): Promise<K
   const now = Date.now()
   const known = await readDoc<Known>(FILE, {})
   const found = new Map<string, KeywordDemand>()
-  const searched: KeywordDemand[] = []
-  // A failed search uses one up too: then the quota or the API is the trouble, not the phrase.
-  let searches = maxSearches
+  const unknown: string[] = []
   for (const phrase of wanted) {
-    if (fresh(known[phrase], now)) {
-      found.set(phrase, known[phrase])
-      continue
-    }
-    if (searches <= 0) continue
-    searches--
-    try {
-      const demand = await search(phrase)
-      found.set(phrase, demand)
-      searched.push(demand)
-    } catch (error) {
-      console.warn(`Keyword demand "${phrase}":`, error instanceof Error ? error.message : error)
-    }
+    if (fresh(known[phrase], now)) found.set(phrase, known[phrase])
+    else unknown.push(phrase)
   }
+  // All at once (etsyRequest spaces them out per key). A failed search uses
+  // one up too: then the quota or the API is the trouble, not the phrase.
+  const searched = (
+    await Promise.all(
+      unknown.slice(0, maxSearches).map((phrase) =>
+        searchOnce(phrase).catch((error) => {
+          console.warn(`Keyword demand "${phrase}":`, error instanceof Error ? error.message : error)
+          return null
+        })
+      )
+    )
+  ).filter((d): d is KeywordDemand => !!d)
+  for (const demand of searched) found.set(demand.phrase, demand)
   if (searched.length) {
     await updateDoc<Known>(FILE, {}, (current) => {
       const kept = Object.entries(current).filter(([, d]) => fresh(d, now))
@@ -61,6 +61,20 @@ export async function checkDemand(phrases: string[], maxSearches = 5): Promise<K
     })
   }
   return wanted.flatMap((p) => found.get(p) ?? [])
+}
+
+// On globalThis, so listings written side by side (and a dev reload) share them.
+const global = globalThis as typeof globalThis & { __demandSearches?: Map<string, Promise<KeywordDemand>> }
+const searching = (global.__demandSearches ??= new Map())
+
+/** One search per phrase, shared by listings asking at once. */
+function searchOnce(phrase: string): Promise<KeywordDemand> {
+  let found: Promise<KeywordDemand> | undefined = searching.get(phrase)
+  if (!found) {
+    found = search(phrase).finally(() => searching.delete(phrase))
+    searching.set(phrase, found)
+  }
+  return found
 }
 
 async function search(phrase: string): Promise<KeywordDemand> {

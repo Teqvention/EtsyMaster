@@ -41,21 +41,26 @@ export const newId = () => `${Date.now().toString(36)}-${Math.random().toString(
 
 const pending = (): Asset => ({ status: "pending", file: null })
 
+export const INTERRUPTED = "Interrupted — the server running it stopped"
+
 // Work in progress when its server stopped never finishes; say so, so it can be retried.
 // Outputs in a batch job go on at Vertex: the set stays running, for the batch poller.
-// Those still waiting to go out in one were that server's to send.
+// Those still waiting to go out in one were that server's to send (they keep
+// `job: SENDING`, so the batch check sends them again).
 function interrupted(set: GenerationSet): GenerationSet {
   if (set.status !== "queued" && set.status !== "running") return set
   const stop = <T extends Asset & { job?: string }>(a: T): T =>
     (a.status === "pending" || a.status === "running") && (!a.job || a.job === SENDING)
-      ? { ...a, status: "error", error: "Interrupted — the server running it stopped" }
+      ? { ...a, status: "error", error: INTERRUPTED }
       : a
+  // A mockup's scene waits on its blank coming back from a batch job.
+  const painting = set.outputs.some((o) => o.job && o.job !== SENDING)
   return {
     ...set,
-    status: set.outputs.some((o) => o.job && o.job !== SENDING) ? "running" : "error",
+    status: painting ? "running" : "error",
     original: stop(set.original),
     extraction: set.extraction && stop(set.extraction),
-    mockup: set.mockup && stop(set.mockup),
+    mockup: set.mockup && (painting ? set.mockup : stop(set.mockup)),
     posters: set.posters.map(stop),
     outputs: set.outputs.map(stop),
   }
@@ -146,12 +151,8 @@ export async function createSet(
     original: pending(),
     posters: [],
     outputs: [],
-    ...(kind === "poster"
-      ? {
-          extraction: pending(),
-          batches: [{ id: newId(), options, createdAt: now, expanded: false }],
-        }
-      : { mockup: pending(), batches: [] }),
+    batches: [{ id: newId(), options, createdAt: now, expanded: false }],
+    ...(kind === "poster" ? { extraction: pending() } : { mockup: pending() }),
   }
   await writeDoc(docKey(id), { ...set, runner: instanceId })
   return set

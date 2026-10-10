@@ -23,6 +23,8 @@ export type ShopVisit = {
   analysis: ShopAnalysisSummary | null
   /** Names the shop is filed under, as first typed; matched case-insensitively. */
   labels?: string[]
+  /** ISO 8601, while the shop is liked. */
+  likedAt?: string
 }
 
 export type ShopHistory = Record<number, ShopVisit>
@@ -40,6 +42,8 @@ export type StoredAnalysis = {
   listingTotal: number | null
   reviews: ShopReview[]
   reviewTotal: number | null
+  /** ISO 8601: every review in the window up to then is held (absent before this was kept). */
+  reviewsAt?: string | null
   /** ISO 8601 */
   analysedAt: string
 }

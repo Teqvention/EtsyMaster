@@ -4,12 +4,14 @@ import type { SizeKey } from "@/lib/catalog/sizes"
 // Gelato, without anyone watching. One click on Uploads makes a job: the
 // posters of the chosen groups, each assigned to an upload account. Every
 // poster is a job item that walks through the stages below on its own; each
-// stage is repeatable and every id it gets (Gelato product, Etsy listing,
-// image ids) is saved the moment it exists, so a restart or a failure picks
-// up where it stopped instead of making a second listing.
+// stage is repeatable and every id it gets (Gelato product, Etsy listing) is
+// saved the moment it exists, the photos' once they're up (one sent again
+// replaces its rank), so a restart or a failure picks up where it stopped
+// instead of making a second listing.
 //
-// Stored as the document "pipeline/jobs" (jobs and items); the print files
-// and listing media they make are files under pipeline/items/<itemId>/.
+// Stored as the document "pipeline/jobs" (the jobs) and one per item under
+// it; the print files and listing media they make are files under
+// pipeline/items/<itemId>/.
 
 /** A group: the posters drawn from one reference photo (a generation set). */
 export type GroupId = string

@@ -128,6 +128,14 @@ export type RecentListing = {
   description?: string
 }
 
+/**
+ * The listings being written now, as planned (their form and the strategy
+ * they lean to first), oldest first: written side by side, they aren't among
+ * each other's recent listings yet, so each new plan counts them as the newest.
+ */
+const global = globalThis as typeof globalThis & { __copyWriting?: Set<RecentListing> }
+const writing = (global.__copyWriting ??= new Set())
+
 export type CopyInput = {
   source: DraftSource
   design: DraftDesign
@@ -224,19 +232,20 @@ function offSubject({ source, design, analysis }: Pick<CopyInput, "source" | "de
 
 function planFor(input: CopyInput): Plan {
   const recent = input.recent.slice(0, RECENT)
+  const latest = [...[...writing].reverse(), ...recent]
   const crowded = new Map<string, number>()
   for (const r of recent) {
     for (const tag of new Set((r.tags ?? []).map(cleanTag))) crowded.set(tag, (crowded.get(tag) ?? 0) + 1)
   }
   return {
-    strategies: freshStrategies(recent),
+    strategies: freshStrategies(latest),
     shape: leastUsed(
       Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, s.share])) as Record<Shape, number>,
-      recent.map((r) => r.form?.title ?? shapeOf(r.title))
+      latest.map((r) => r.form?.title ?? shapeOf(r.title))
     ),
     opening: leastUsed(
       Object.fromEntries(Object.keys(OPENINGS).map((k) => [k, 1])) as Record<Opening, number>,
-      recent.map((r) => r.form?.story)
+      latest.map((r) => r.form?.story)
     ),
     crowded: new Map([...crowded].filter(([, n]) => n >= CROWDED).sort((a, b) => b[1] - a[1])),
     exclude: offSubject(input),
@@ -507,6 +516,16 @@ function tidyStory(story: string) {
  */
 export async function writeListing(input: CopyInput): Promise<ListingCopy> {
   const plan = planFor(input)
+  const planned: RecentListing = { title: "", strategy: plan.strategies[0], form: { title: plan.shape, story: plan.opening } }
+  writing.add(planned)
+  try {
+    return await written(input, plan)
+  } finally {
+    writing.delete(planned)
+  }
+}
+
+async function written(input: CopyInput, plan: Plan): Promise<ListingCopy> {
   const ask = (retry?: string) =>
     askJson<Answer>(prompt(input, plan, retry), input.image ? [input.image] : [], {
       schema: SCHEMA,
@@ -546,7 +565,6 @@ export async function draftCopy(draft: Draft, recent: RecentListing[]): Promise<
   const set = await getSet(draft.generationId)
   const output = set.outputs.find((o) => o.id === draft.outputId)
   const analysis = set.posters.find((p) => p.index === output?.poster)?.analysis
-  const image = output?.file ? await readSetFile(set.id, output.file).catch(() => undefined) : undefined
 
   // What the poster shows, from its name and the brief's first sentence.
   const shown = [design.title, plainBrief(design.summary ?? "").split(/(?<=[.!?])\s/)[0]].filter(Boolean).join(" ")
@@ -556,7 +574,11 @@ export async function draftCopy(draft: Draft, recent: RecentListing[]): Promise<
     focus: words(shown).filter((w) => !COLOURS.has(w)).join(" "),
     exclude: offSubject({ source, design, analysis }),
   }
-  const [keywords, insights] = await Promise.all([keywordContext(query, 40), libraryInsights()])
+  const [image, keywords, insights] = await Promise.all([
+    output?.file ? readSetFile(set.id, output.file).catch(() => undefined) : undefined,
+    keywordContext(query, 40),
+    libraryInsights(),
+  ])
   return writeListing({ source, design, analysis, folder: draft.folder, image, keywords, insights, recent, hint: draft.hint })
 }
 

@@ -63,11 +63,12 @@ const CALLS = { listing: 30, verify: 2, live: 2, postcheck: 10 }
  */
 const GELATO_PER_HOUR = 60
 /**
- * At most this many of a store's products on their way to Etsy at once: four
- * sent within minutes took Gelato over ten minutes each, so a store's pace
- * follows how fast Gelato publishes rather than a guess.
+ * At most this many of a store's products on their way to Etsy at once, so a
+ * store's pace follows how fast Gelato publishes. Gelato took about ten
+ * minutes a product whether one of a store's or seven were on their way (74
+ * posters, 10 Oct), so six held a store to one every hundred seconds or so.
  */
-const GELATO_IN_FLIGHT = 6
+const GELATO_IN_FLIGHT = 24
 /** A create that got no answer: looked for this long before it's taken as never made. */
 const RECOVER_AFTER = 10 * MINUTE
 /** Gelato usually has the listing on Etsy within minutes; one still unpublished gets a nudge. */
@@ -160,77 +161,93 @@ async function pace(ctx: StageContext, storeId: string) {
 
 // --- Gelato ---
 
-/** Gelato makes the product from the account's template; it puts the listing on Etsy and the listing id comes back. */
+/**
+ * Gelato makes the product from the account's template; it puts the listing
+ * on Etsy and the listing id comes back. Only the create holds the store
+ * (see worker.ts): a product made, the item waits a moment and its next run
+ * watches Gelato publish it, holding nothing.
+ */
 export async function gelato(ctx: StageContext): Promise<StageResult> {
   const { storeId, key } = await gelatoOf(ctx.account)
+  if (ctx.item.gelatoProductId) return published(ctx, key, storeId)
 
-  if (!ctx.item.gelatoProductId && ctx.did("gelatoSent")) {
+  if (ctx.did("gelatoSent")) {
     // Sent before without an answer (a crash, a timeout): Gelato may have made it anyway.
     const since = Date.parse(ctx.did("gelatoSent")!) - 2 * MINUTE
     const made = (await listProducts(key, storeId, 0, 50)).find(
       (p) => p.title === ctx.item.title && Date.parse(p.createdAt) >= since
     )
-    if (made) await ctx.save({ gelatoProductId: made.id })
-    else if (Date.now() - Date.parse(ctx.did("gelatoSent")!) < RECOVER_AFTER) {
+    if (made) {
+      await ctx.save({ gelatoProductId: made.id })
+      throw new Parked(PUBLISH_POLL, "Gelato is putting it on Etsy")
+    }
+    if (Date.now() - Date.parse(ctx.did("gelatoSent")!) < RECOVER_AFTER) {
       throw new Parked(2 * MINUTE, "Checking whether Gelato made the product")
-    } else await ctx.unstep("gelatoSent")
+    }
+    await ctx.unstep("gelatoSent")
   }
 
-  if (!ctx.item.gelatoProductId) {
-    const files = ctx.item.printFiles ?? []
-    if (!files.length || files.some((f) => !f.url)) throw new Fatal("The print files aren't online: run the print stage again")
-    const { templateId, check } = await templateOf(ctx.account, ctx.orientation)
-    await pace(ctx, storeId)
-    const body = gelatoBody(templateId, check.sizes, await textOf(ctx), files, (f) => f.url!)
-    if (body.variants.length !== OFFERED.length) {
-      throw new Fatal(`Only ${body.variants.length} of the ${OFFERED.length} sizes have a print file`)
-    }
-    // The title finds the product again should the answer get lost.
-    await ctx.save({ title: body.title })
-    await ctx.step("gelatoSent")
-    try {
-      const product = await createFromTemplate(key, storeId, body)
-      await ctx.save({ gelatoProductId: product.id })
-    } catch (error) {
-      // Refused outright: nothing was made, so it may be sent again.
-      if (error instanceof GelatoError && error.status >= 400 && error.status < 500) {
-        await ctx.unstep("gelatoSent")
-        if (error.status === 429) throw new Parked(10 * MINUTE, "Gelato asks to slow down")
-        throw new Fatal(error.message)
-      }
-      throw error
-    }
+  const files = ctx.item.printFiles ?? []
+  if (!files.length || files.some((f) => !f.url)) throw new Fatal("The print files aren't online: run the print stage again")
+  const { templateId, check } = await templateOf(ctx.account, ctx.orientation)
+  await pace(ctx, storeId)
+  const body = gelatoBody(templateId, check.sizes, await textOf(ctx), files, (f) => f.url!)
+  if (body.variants.length !== OFFERED.length) {
+    throw new Fatal(`Only ${body.variants.length} of the ${OFFERED.length} sizes have a print file`)
   }
-  return published(ctx, key, storeId)
+  // The title finds the product again should the answer get lost.
+  await ctx.save({ title: body.title })
+  await ctx.step("gelatoSent")
+  try {
+    const product = await createFromTemplate(key, storeId, body)
+    await ctx.save({ gelatoProductId: product.id })
+  } catch (error) {
+    // Refused outright: nothing was made, so it may be sent again.
+    if (error instanceof GelatoError && error.status >= 400 && error.status < 500) {
+      await ctx.unstep("gelatoSent")
+      if (error.status === 429) throw new Parked(10 * MINUTE, "Gelato asks to slow down")
+      throw new Fatal(error.message)
+    }
+    throw error
+  }
+  throw new Parked(PUBLISH_POLL, "Gelato is putting it on Etsy")
 }
 
+/**
+ * Looks at the product every PUBLISH_POLL until Gelato has it on Etsy, in
+ * one run: a run parked between looks would write the pipeline document
+ * twice a look, and a store has dozens of products on their way at once.
+ */
 async function published(ctx: StageContext, key: string, storeId: string): Promise<StageResult> {
-  const product = await getProduct(key, storeId, ctx.item.gelatoProductId!)
-  const listingId = Number(product.externalId)
-  if (product.externalId && Number.isSafeInteger(listingId) && listingId > 0) {
-    await ctx.save({ etsyListingId: listingId })
-    return { note: `Etsy listing ${listingId}` }
+  for (;;) {
+    const product = await getProduct(key, storeId, ctx.item.gelatoProductId!)
+    const listingId = Number(product.externalId)
+    if (product.externalId && Number.isSafeInteger(listingId) && listingId > 0) {
+      await ctx.save({ etsyListingId: listingId })
+      return { note: `Etsy listing ${listingId}` }
+    }
+    // Gelato reports an error now and then (GENERAL_ERROR, often right after a
+    // second publish while its first is still under way) and puts the product
+    // on Etsy minutes later anyway: only the timeout gives up.
+    const error = product.publishingErrorCode
+    const since = ctx.did("publishSince") ?? (await ctx.step("publishSince"))
+    const waited = Date.now() - Date.parse(since)
+    if (waited > PUBLISH_TIMEOUT) {
+      throw new Fatal(
+        error
+          ? `Gelato couldn't put it on Etsy (${error}) in ${PUBLISH_TIMEOUT / MINUTE} minutes`
+          : `Gelato hasn't put it on Etsy in ${PUBLISH_TIMEOUT / MINUTE} minutes (product ${product.status})`
+      )
+    }
+    // A nudge only for a product Gelato never began to publish.
+    const publishing = product.status?.startsWith("publishing")
+    if (waited > NUDGE_AFTER && !publishing && !product.publishedAt && !ctx.did("gelatoPublish")) {
+      await ctx.step("gelatoPublish")
+      await publishProduct(key, storeId, product.id)
+    }
+    ctx.progress(error ? `Gelato reports ${error}; waiting whether it gets there anyway` : "Gelato is putting it on Etsy")
+    await new Promise((resolve) => setTimeout(resolve, PUBLISH_POLL))
   }
-  // Gelato reports an error now and then (GENERAL_ERROR, often right after a
-  // second publish while its first is still under way) and puts the product
-  // on Etsy minutes later anyway: only the timeout gives up.
-  const error = product.publishingErrorCode
-  const since = ctx.did("publishSince") ?? (await ctx.step("publishSince"))
-  const waited = Date.now() - Date.parse(since)
-  if (waited > PUBLISH_TIMEOUT) {
-    throw new Fatal(
-      error
-        ? `Gelato couldn't put it on Etsy (${error}) in ${PUBLISH_TIMEOUT / MINUTE} minutes`
-        : `Gelato hasn't put it on Etsy in ${PUBLISH_TIMEOUT / MINUTE} minutes (product ${product.status})`
-    )
-  }
-  // A nudge only for a product Gelato never began to publish.
-  const publishing = product.status?.startsWith("publishing")
-  if (waited > NUDGE_AFTER && !publishing && !product.publishedAt && !ctx.did("gelatoPublish")) {
-    await ctx.step("gelatoPublish")
-    await publishProduct(key, storeId, product.id)
-  }
-  throw new Parked(PUBLISH_POLL, error ? `Gelato reports ${error}; waiting whether it gets there anyway` : "Gelato is putting it on Etsy")
 }
 
 // --- Etsy listing ---
@@ -268,19 +285,25 @@ export async function listing(ctx: StageContext): Promise<StageResult> {
   }
 
   const photos = ctx.item.media?.photos ?? []
-  let ids = ctx.item.imageIds ?? []
-  for (let i = ids.length; i < photos.length; i++) {
-    ctx.progress(`Photo ${i + 1} of ${photos.length}`)
-    // Overwriting rank i + 1 replaces Gelato's photo there, or one of ours a crash left without its id.
-    const image = await uploadImage(account.id, listingId, await readFileUnder(photos[i]), {
-      rank: i + 1,
-      overwrite: true,
-      altText: text.alt[i],
-      name: `${i + 1}.jpg`,
-    })
-    if (!image.listing_image_id) throw new Error("Etsy didn't say which photo it made")
-    ids = [...ids, image.listing_image_id]
-    await ctx.save({ imageIds: ids })
+  const saved = ctx.item.imageIds ?? []
+  let ids = saved
+  // The ids saved once, after the last photo or the one that failed: each
+  // save writes the whole pipeline document, about as much as a photo.
+  try {
+    for (let i = ids.length; i < photos.length; i++) {
+      ctx.progress(`Photo ${i + 1} of ${photos.length}`)
+      // Overwriting rank i + 1 replaces Gelato's photo there, or one of ours a crash left without its id.
+      const image = await uploadImage(account.id, listingId, await readFileUnder(photos[i]), {
+        rank: i + 1,
+        overwrite: true,
+        altText: text.alt[i],
+        name: `${i + 1}.jpg`,
+      })
+      if (!image.listing_image_id) throw new Error("Etsy didn't say which photo it made")
+      ids = [...ids, image.listing_image_id]
+    }
+  } finally {
+    if (ids !== saved) await ctx.save({ imageIds: ids })
   }
   if (!ctx.did("photos")) {
     const { results } = await listingImages(account.id, listingId)

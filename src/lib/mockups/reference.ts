@@ -4,8 +4,8 @@ import { freshFile } from "./edit"
 import { blankReplica, guessSheets } from "./gemini"
 import { refineSheet } from "./locate"
 import { extractSheet, type Pixels } from "./sheet"
-import { createScene, readSceneFile, saveFile, saveScene } from "./storage"
-import type { PosterLayer, Quad, Scene } from "./types"
+import { createScene, readSceneFile, replaceRoom, saveFile, saveScene } from "./storage"
+import type { ImageLayer, PosterLayer, Quad, Scene } from "./types"
 
 // A scene from someone else's finished mockup: Nano Banana redraws it with
 // blank sheets, every sheet's corners are found, and each gets its own poster
@@ -13,9 +13,26 @@ import type { PosterLayer, Quad, Scene } from "./types"
 export async function createSceneFromReference(
   name: string,
   reference: Buffer,
-  about: Pick<Scene, "category" | "source"> = {}
+  about: Pick<Scene, "category" | "source" | "shop"> = {}
 ) {
-  const scene = await createScene(name, await blankReplica(reference), about)
+  return createSceneFromBlank(name, await blankReplica(reference), about)
+}
+
+/** A scene from a reference already redrawn with blank frames (see `blankReplica`). */
+export async function createSceneFromBlank(
+  name: string,
+  blank: Buffer,
+  about: Pick<Scene, "category" | "source" | "shop"> = {}
+) {
+  return located(await createScene(name, blank, about))
+}
+
+/** A scene's blank made again: the new one goes under it, its sheets found afresh. */
+export async function replaceBlank(id: string, blank: Buffer) {
+  return located(await replaceRoom(id, blank))
+}
+
+async function located(scene: Scene) {
   try {
     return { ...(await placeSheets(scene)), located: true }
   } catch (error) {
@@ -24,6 +41,10 @@ export async function createSceneFromReference(
     return { ...scene, located: false }
   }
 }
+
+/** The file of the scene's room. */
+export const roomFile = (scene: Scene) =>
+  scene.layers.find((l): l is ImageLayer => l.kind === "image" && l.role === "background")?.src ?? "background.jpg"
 
 /** A listing photo from Etsy's image CDN, the only host references are fetched from. */
 export async function fetchReference(url: string) {
@@ -38,7 +59,7 @@ export async function fetchReference(url: string) {
 
 /** Replaces the scene's placeholder poster with one poster per sheet found. */
 export async function placeSheets(scene: Scene): Promise<Scene> {
-  const background = await readSceneFile(scene.id, "background.jpg")
+  const background = await readSceneFile(scene.id, roomFile(scene))
   const { data, info } = await sharp(background).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   const room = { data: new Uint8ClampedArray(data), width: info.width, height: info.height }
   const quads = (await guessSheets(background)).map((q) => refineSheet(room, q))

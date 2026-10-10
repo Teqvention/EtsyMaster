@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.863Z",
- "updatedAt": "2026-10-09T15:17:12.196Z",
+ "updatedAt": "2026-10-09T20:55:47.376Z",
  "original": {
   "status": "done",
   "file": "source-mv10ut68.jpg",
@@ -105,12 +105,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.863Z",
    "title": "Macaque Pendulum Print",
    "brief": "Redraw the three monkeys in a descending chain, with the top monkey hanging by its tail from a stylized, calligraphic pine branch. Use the same mustard-gold and dark-umber palette on a stippled oatmeal paper texture. Maintain the vertical composition and red block seals, but change the seal designs to circular shapes. The monkeys should have new, distinct facial expressions—one curious, one sleepy, and one grinning. Focus on a heavy, stippled ink texture that mimics traditional woodblock grain.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:47.376Z"
   },
   {
    "status": "done",
@@ -120,12 +121,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.863Z",
    "title": "Stacked Red-Crowned Cranes",
    "brief": "A vertical arrangement of three elegant cranes standing on each other's backs in a playful balancing act, rendered in a traditional ukiyo-e style. The palette shifts to soft indigo, charcoal grey, and cream, with the cranes' heads providing small pops of vermillion red. The background is a weathered, light grey paper with a subtle horizontal wood grain texture. A large, rectangular red seal sits in the top right corner to balance the tall, thin subject. The style remains flat with bold, clean outlines.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:40.480Z"
   },
   {
    "status": "done",
@@ -135,12 +137,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.863Z",
    "title": "Lunar Hare Ascent",
    "brief": "A fresh concept featuring three stylized hares leaping toward a large, textured golden moon in a vertical, spaced-out line. The style is inspired by Japanese folk art (Mingei) with bold, chunky shapes and a coarse linen-like texture overlay. The palette uses deep navy, ochre, and terracotta on a warm parchment background. There is no black line work; the hare shapes are defined entirely by flat color blocks and heavy stippled grain. A single, minimalist geometric stamp in red is placed at the bottom center.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:43.340Z"
   }
  ],
  "layout": "single",

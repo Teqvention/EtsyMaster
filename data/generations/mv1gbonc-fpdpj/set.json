@@ -1,0 +1,211 @@
+{
+ "id": "mv1gbonc-fpdpj",
+ "kind": "poster",
+ "folder": "Texture High Saturation",
+ "source": {
+  "listingId": 4377997590,
+  "title": "Mediterranean Kitchen Wall Art Print, Food Still Life Poster, Colorful Dining Room Artwork, Fruit and Salad Illustration, Rustic Wall Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/ec985a/7240471908/il_fullxfull.7240471908_927j.jpg",
+  "url": "https://www.etsy.com/listing/4377997590/mediterranean-kitchen-wall-art-print",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "kitchen wall art",
+   "Mediterranean print",
+   "food still life art",
+   "fruit wall poster",
+   "tomato salad artwork",
+   "colorful wall art",
+   "modern food art",
+   "rustic wall print",
+   "olive wall art",
+   "dining room poster",
+   "fresh food artwork",
+   "rustic dining decor",
+   "kitchen print"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T21:02:27.720Z",
+ "updatedAt": "2026-10-09T21:15:00.699Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1gbpjw.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv1gbtwp.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "Mediterranean food illustration",
+   "analysis": {
+    "summary": "A sun-drenched Mediterranean still life featuring a caprese salad, olives, and cherries on a yellow-striped tablecloth with dappled leaf shadows.",
+    "subject": "A spread of Mediterranean appetizers including mozzarella with tomatoes, green olives, and dark cherries.",
+    "setting": "An outdoor dining table under the shade of a tree, suggested by the soft leaf shadows.",
+    "action": "Resting on a table during a leisurely summer lunch.",
+    "style": "Gouache-style digital illustration, flat shading with subtle gradients, bold saturated colors, and stylized dappled light effects.",
+    "palette": [
+     "#f2c84b",
+     "#8b0021",
+     "#d32f2f",
+     "#717d32",
+     "#fdfbf0",
+     "#94a684",
+     "#f3934e"
+    ],
+    "composition": "Bird's-eye view top-down perspective, asymmetrical arrangement with a large plate bottom-left and smaller bowl top-right, balanced by scattered fruit and a drink.",
+    "typography": null,
+    "mood": "Warm, appetizing, nostalgic, and relaxed.",
+    "audience": "Home decorators and food lovers looking for vibrant kitchen or dining room art that evokes European summer travel.",
+    "hook": "The use of high-contrast dappled shadows creates a sensory 'feeling' of warmth and leisure that transforms a simple food illustration into a specific summer memory.",
+    "swaps": {
+     "subjects": [
+      "Fresh oysters with lemon wedges",
+      "Aperol spritz with a thick orange slice",
+      "Sardines in an open vintage tin",
+      "Sliced figs with prosciutto and honey",
+      "A crusty baguette with a slab of salted butter",
+      "A bowl of bright yellow lemons with green leaves"
+     ],
+     "settings": [
+      "A blue and white checkered picnic blanket",
+      "A rustic terracotta tiled balcony",
+      "A weathered wooden pier by the sea",
+      "A white marble kitchen countertop",
+      "A green metal garden bistro table",
+      "A woven wicker tray on a sandy beach"
+     ],
+     "props": [
+      "A pair of chunky tortoiseshell sunglasses",
+      "A half-empty bottle of chilled rose wine",
+      "A small bunch of hand-picked wildflowers",
+      "A vintage brass corkscrew",
+      "A crumpled linen napkin with blue stripes",
+      "A small dish of flaky sea salt"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv1gc2g8-t65sk-mv1gf9h9.jpg",
+   "batch": "mv1gbonc-1f614",
+   "review": "approved",
+   "createdAt": "2026-10-09T21:02:45.608Z",
+   "id": "mv1gc2g8-t65sk",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": "mv1g8jp3-sujik",
+   "title": "Impasto Mediterranean Table",
+   "brief": "A top-down digital oil painting recreating the Mediterranean meal with heavy impasto texture. Centered on a green-striped plate, mounds of white mozzarella and red #EF4444 tomatoes are topped with #166534 green herbs. A bowl of #166534 olives sits at the top right, while deep crimson #EF4444 cherries and a glass of orange liquid are scattered across a yellow-striped #FACC15 tablecloth. Strong overhead sunlight creates deep #3B82F6 blue shadows, with thick, raised dabs of pure #FFFFFF white paint for highlights on the glossy fruits and glass.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:14:47.903Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1gc2g8-qciob-mv1gmrst.jpg",
+   "batch": "mv1gbonc-1f614",
+   "review": "approved",
+   "createdAt": "2026-10-09T21:02:45.608Z",
+   "id": "mv1gc2g8-qciob",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": "mv1g8jp3-sujik",
+   "title": "Sun-Drenched Summer Salad",
+   "brief": "A digital oil painting featuring a centered caprese salad and surrounding snacks in a thick, tactile style. The salad is arranged on a scalloped-edge #F9A8D4 pink plate, flanked by a cluster of cherries in #EF4444 and a small ceramic bowl of #166534 green olives. The tablecloth features a bold #3B82F6 blue gingham pattern. High-angle sunlight casts sharp, dark crimson shadows under each cherry, and every highlight is rendered with a heavy, physical-looking blob of #FFFFFF paint to emphasize the juiciness of the food.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:14:53.941Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1gc2g8-d5doo-mv1gl942.jpg",
+   "batch": "mv1gbonc-1f614",
+   "review": "rejected",
+   "createdAt": "2026-10-09T21:02:45.608Z",
+   "id": "mv1gc2g8-d5doo",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": "mv1g8jp3-sujik",
+   "title": "Textured Mediterranean Still Life",
+   "brief": "This digital oil painting uses visible, chunky brushstrokes to depict a Mediterranean lunch from a high-angle bird's-eye view. A large plate of tomatoes and cheese is the central focus, surrounded by scattered #EF4444 cherries and a glass of amber-colored juice. The palette is dominated by high-saturation #EF4444 and #FACC15, with all shapes defined by bold blocks of color rather than lines. Shadows are rendered in deep, saturated #3B82F6 blue, while the light-reflecting surfaces of the olives and cherries are marked by thick, opaque #FFFFFF paint dabs.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:14:56.609Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1gc2g8-9lhb4-mv1giyo3.jpg",
+   "batch": "mv1gbonc-1f614",
+   "review": "rejected",
+   "createdAt": "2026-10-09T21:02:45.608Z",
+   "id": "mv1gc2g8-9lhb4",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": "mv1g8jp3-sujik",
+   "title": "Gingham Feast Illustration",
+   "brief": "A vibrant and indulgent flat-lay composition centered on a large, ornate bowl filled with #EF4444 tomatoes, #166534 olives, and #FFFFFF cheese pearls. The bowl rests on a vivid #3B82F6 blue and #FFFFFF white gingham tablecloth, with loose cherries scattered around the edges to create a sense of movement. The painting style is 'alla prima,' with thick paint build-up following the round contours of the fruit. Direct, intense sunlight creates brilliant specular highlights of pure #FFFFFF and deep, cool shadows that give the scene a tactile, sensory feel.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:14:58.326Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1gc2g8-9xmla-mv1gg8l6.jpg",
+   "batch": "mv1gbonc-1f614",
+   "review": "rejected",
+   "createdAt": "2026-10-09T21:02:45.608Z",
+   "id": "mv1gc2g8-9xmla",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": "mv1g8jp3-sujik",
+   "title": "Abstracted Summer Harvest",
+   "brief": "A bold, personal interpretation of a Mediterranean meal using extreme impasto digital techniques. The canvas is filled with thick, sculptural blocks of #EF4444 red and #FACC15 yellow, representing a zoomed-in perspective of tomatoes, cherries, and oils. The background is a vibrant mix of #F9A8D4 pink and #3B82F6 blue strokes that suggest a patterned textile without fine detail. Light is treated as a physical material, with enormous, raised dabs of #FFFFFF white representing sun glints, and deep #3B82F6 blue voids used to define the heavy, cast shadows of the food.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:15:00.699Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv1gbonc-1f614",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": "mv1g8jp3-sujik"
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T21:02:27.720Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

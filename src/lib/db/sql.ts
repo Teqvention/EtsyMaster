@@ -11,7 +11,7 @@ import { SCHEMA } from "./schema"
 type Db = {
   sql: postgres.Sql
   /** Connections held by locks, apart from `sql`'s: see `exclusive`. */
-  locks?: postgres.Sql
+  lockPool?: postgres.Sql
   ready?: Promise<void>
   /** Called with every "changes" notification: "d <version> <key>" or "f <hash> <key>". */
   listeners: Set<(payload: string) => void>
@@ -21,10 +21,10 @@ type Db = {
 
 const global = globalThis as typeof globalThis & { __db?: Db }
 
-const connect = (max: number) =>
+const connect = (max: number, idle = 30) =>
   postgres(process.env.DATABASE_URL ?? "", {
     max,
-    idle_timeout: 30,
+    idle_timeout: idle,
     connect_timeout: 15,
     // "relation already exists, skipping" and the like.
     onnotice: () => {},
@@ -34,12 +34,13 @@ const connect = (max: number) =>
 const db = (global.__db ??= { sql: connect(12), listeners: new Set(), resets: new Set() })
 // A lock keeps its connection while its work runs, and the work queries
 // through `sql`: sharing one pool, ten generations running at once held
-// every connection and waited forever for one more.
-db.locks ??= connect(30)
+// every connection and waited forever for one more. Idle ones stay open a
+// while: one closing as a lock waits for a connection can lose that wait (see `reserve`).
+db.lockPool ??= connect(30, 600)
 
 export const sql = db.sql
 /** Where locks hold their connection: never `sql`, which their work needs. */
-export const locks = db.locks
+export const locks = db.lockPool
 
 /** Connected, the tables there and change notifications coming; once per server. */
 export function ready() {
@@ -77,10 +78,18 @@ export function onChange(listener: (payload: string) => void, reset: () => void)
  */
 export async function exclusive<T>(name: string, work: () => Promise<T>): Promise<T | null> {
   await ready()
-  const connection = await locks.reserve()
+  // Taking a lock is instant; one that isn't says so, to find out why.
+  let step = "a connection"
+  const slow = setTimeout(() => console.warn(`Lock ${name}: still waiting for ${step} after 30 s`), 30_000)
+  const connection = await reserve().catch((error) => {
+    clearTimeout(slow)
+    throw error
+  })
   const beat = holdAlive(connection)
   try {
+    step = "the lock"
     const [{ ok }] = await connection`select pg_try_advisory_lock(hashtextextended(${name}, 0)) as ok`
+    clearTimeout(slow)
     if (!ok) return null
     try {
       return await work()
@@ -88,9 +97,33 @@ export async function exclusive<T>(name: string, work: () => Promise<T>): Promis
       await connection`select pg_advisory_unlock(hashtextextended(${name}, 0))`.catch(() => {})
     }
   } finally {
+    clearTimeout(slow)
     clearInterval(beat)
     await connection`select set_config('idle_session_timeout', '0', false)`.catch(() => {})
     connection.release()
+  }
+}
+
+const RESERVE_WAIT = 20_000
+const RESERVE_TRIES = 5
+
+/**
+ * A connection of `locks` to hold a lock on. postgres.js (3.4.9) can lose a
+ * wait for one for good: when another connection closes while it waits, the
+ * wait moves to that one's reconnect, which drops it. So a wait that takes
+ * too long is given up and asked again; a connection that still comes goes
+ * back.
+ */
+export async function reserve(): Promise<postgres.ReservedSql> {
+  for (let tries = 1; ; tries++) {
+    const asked = locks.reserve()
+    let timer: NodeJS.Timeout | undefined
+    const late = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), RESERVE_WAIT)))
+    const connection = await Promise.race([asked, late]).finally(() => clearTimeout(timer))
+    if (connection) return connection
+    void asked.then((c) => c.release(), () => {})
+    if (tries === RESERVE_TRIES) throw new Error(`No database connection to hold a lock on after ${tries} tries`)
+    console.warn(`Database: no connection for a lock after ${RESERVE_WAIT / 1000} s, asking again`)
   }
 }
 

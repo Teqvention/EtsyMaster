@@ -302,29 +302,7 @@ function Form({
       {!inspired && <PresetBar current={current} busy={busy} onRun={submit} />}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-4 py-3">
-        <span className="text-xs font-medium text-muted-foreground">Delivery</span>
-        <ToggleGroup
-          variant="outline"
-          size="sm"
-          spacing={0}
-          value={[delivery]}
-          onValueChange={(value) => value[0] && setDelivery(value[0] as Delivery)}
-          aria-label="Delivery"
-        >
-          <ToggleGroupItem value="now">
-            <ZapIcon />
-            Now
-          </ToggleGroupItem>
-          <ToggleGroupItem value="batch">
-            <ClockIcon />
-            Batch
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <span className="text-xs text-pretty text-muted-foreground">
-          {delivery === "batch"
-            ? "Half the price, no waiting on quota; back in minutes to a few hours."
-            : "Drawn straight away, up to 20 at a time."}
-        </span>
+        <DeliveryField value={delivery} onChange={setDelivery} />
       </div>
 
       <DialogFooter className="m-0 flex-row items-center gap-2 rounded-b-xl border-t bg-muted/40 p-3 sm:justify-between">
@@ -501,10 +479,41 @@ function CreativityField({ group, onChange }: { group: GenerateGroup; onChange: 
 
 // --- How it's painted, remembered on this device ---
 
+/** Now or Batch, with what each means; laid out by the row around it. */
+export function DeliveryField({ value, onChange }: { value: Delivery; onChange: (value: Delivery) => void }) {
+  return (
+    <>
+      <span className="text-xs font-medium text-muted-foreground">Delivery</span>
+      <ToggleGroup
+        variant="outline"
+        size="sm"
+        spacing={0}
+        value={[value]}
+        onValueChange={(next) => next[0] && onChange(next[0] as Delivery)}
+        aria-label="Delivery"
+      >
+        <ToggleGroupItem value="now">
+          <ZapIcon />
+          Now
+        </ToggleGroupItem>
+        <ToggleGroupItem value="batch">
+          <ClockIcon />
+          Batch
+        </ToggleGroupItem>
+      </ToggleGroup>
+      <span className="text-xs text-pretty text-muted-foreground">
+        {value === "batch"
+          ? "Half the price, no waiting on quota; back in minutes to a few hours."
+          : "Drawn straight away, up to 20 at a time."}
+      </span>
+    </>
+  )
+}
+
 const DELIVERY_KEY = "etsy-research:generate-delivery"
 const deliveryListeners = new Set<() => void>()
 
-function useDelivery() {
+export function useDelivery() {
   const delivery = React.useSyncExternalStore(
     (notify) => {
       deliveryListeners.add(notify)

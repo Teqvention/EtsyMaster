@@ -7,13 +7,14 @@ import { recordShopAnalysis, type ShopAnalysisSummary } from "@/hooks/use-shop-h
 import {
   applyReviews,
   defaultPlan,
+  newReviewsSince,
   planCost,
   reviewsSince,
   type AnalysisPlan,
 } from "@/lib/etsy/analysis"
 import type {
   Listing,
-  ListingPage,
+  ListingIdPage,
   ListingShop,
   ShopReview,
   ShopReviewPage,
@@ -27,7 +28,9 @@ import type { StoredAnalysis } from "@/lib/shops/types"
 // up where it got to. Each page goes through the server's cache, so re-running
 // a plan costs no quota; finished runs are also kept for the session, and
 // every run that settles is stored on the server, so a shop analysed before
-// opens with its listings at once.
+// opens with its listings at once. A run can build on an earlier one: listings
+// come as a page of ids first, and only the ones not held yet are fetched in
+// full; held reviews are topped up with the ones newer than them.
 
 const PAGE = 100
 
@@ -43,6 +46,8 @@ export type AnalysisRun = {
   reviews: ShopReview[]
   /** Reviews in the window, once the first page says. */
   reviewTotal: number | null
+  /** ISO 8601: every review in the window up to then is held. */
+  reviewsAt: string | null
   error: string | null
   /** ISO 8601, once settled: when its data was fetched. */
   analysedAt: string | null
@@ -127,6 +132,8 @@ export function storedRun(stored: StoredAnalysis): AnalysisRun {
     listingTotal: stored.listingTotal,
     reviews: stored.reviews,
     reviewTotal: stored.reviewTotal,
+    // Kept before this was: a finished run had them all when it settled.
+    reviewsAt: stored.reviewsAt !== undefined ? stored.reviewsAt : stored.status === "done" ? stored.analysedAt : null,
     error: null,
     analysedAt: stored.analysedAt,
     stored: true,
@@ -144,6 +151,7 @@ function storeRun(shop: ListingShop, run: AnalysisRun) {
     listingTotal: run.listingTotal,
     reviews: run.reviews,
     reviewTotal: run.reviewTotal,
+    reviewsAt: run.reviewsAt,
     analysedAt: run.analysedAt ?? new Date().toISOString(),
   }
   fetch(`/api/shops/${shop.id}/analysis`, {
@@ -178,11 +186,17 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
 /**
  * Fetches the shop with `plan`, or shows the session's copy of that run.
  * `fresh` fetches again even then (the server's page cache still applies).
+ * `from`, an earlier run of the shop, is built on: its listings aren't fetched
+ * again, nor its reviews when it had them all for the plan's window.
  */
 export async function startAnalysis(
   shop: ListingShop,
   plan: AnalysisPlan,
-  { fresh = false, quiet = false } = {}
+  {
+    fresh = false,
+    quiet = false,
+    from = null,
+  }: { fresh?: boolean; quiet?: boolean; from?: AnalysisRun | null } = {}
 ) {
   stopAnalysis(shop.id)
   const shopId = shop.id
@@ -193,6 +207,12 @@ export async function startAnalysis(
     return
   }
 
+  const held = new Map((from?.listings ?? []).map((l) => [l.id, l]))
+  // Reviews `from` had every one of for this window, and up to when.
+  const heldReviews =
+    from?.reviewsAt && from.plan.reviews === plan.reviews
+      ? { reviews: from.reviews, total: from.reviewTotal, at: from.reviewsAt }
+      : null
   const abort = new AbortController()
   let current: AnalysisRun = {
     shopId,
@@ -202,6 +222,7 @@ export async function startAnalysis(
     listingTotal: null,
     reviews: [],
     reviewTotal: null,
+    reviewsAt: null,
     error: null,
     analysedAt: null,
     stored: false,
@@ -216,9 +237,11 @@ export async function startAnalysis(
     emit()
   }
 
+  const seen = new Set<number>()
+  let listed = false
   try {
-    // Listings, in the plan's order, up to its limit.
-    const seen = new Set<number>()
+    // Listings, in the plan's order, up to its limit: a page of ids, then in
+    // full the ones not held yet.
     for (let offset: number | null = 0; offset !== null; ) {
       const remaining = plan.limit - current.listings.length
       if (remaining <= 0) break
@@ -227,23 +250,42 @@ export async function startAnalysis(
         limit: String(Math.min(PAGE, remaining)),
         sort: plan.sort,
       })
-      const page: ListingPage = await getJson<ListingPage>(
-        `/api/shops/${shopId}/listings?${params}`,
+      const page: ListingIdPage = await getJson<ListingIdPage>(
+        `/api/shops/${shopId}/listing-ids?${params}`,
         abort.signal
       )
       // Offset paging over a live shop can repeat a listing across pages.
-      const fresh = page.listings.filter((l) => !seen.has(l.id))
-      fresh.forEach((l) => seen.add(l.id))
+      const ids = page.ids.filter((id) => !seen.has(id))
+      const missing = ids.filter((id) => !held.has(id))
+      if (missing.length > 0) {
+        const fetched = await getJson<Listing[]>(`/api/listings/batch?ids=${missing.join(",")}`, abort.signal)
+        fetched.forEach((l) => held.set(l.id, l))
+      }
+      ids.forEach((id) => seen.add(id))
       update({
-        listings: [...current.listings, ...fresh].slice(0, plan.limit),
+        // Ones Etsy no longer has in full are left out.
+        listings: [...current.listings, ...ids.flatMap((id) => held.get(id) ?? [])].slice(0, plan.limit),
         listingTotal: page.total,
       })
       offset = page.nextOffset
     }
+    listed = true
 
-    // Then every review in the window, newest first.
+    // Then every review in the window, newest first: those held already are
+    // kept, and only the ones since the day they were fetched are fetched.
+    const reviewsAt = new Date().toISOString()
     if (plan.reviews !== "none") {
-      const since = reviewsSince(plan.reviews)
+      const window = reviewsSince(plan.reviews)
+      const heldUntil = heldReviews ? newReviewsSince(plan.reviews, heldReviews.at) : null
+      const older =
+        heldReviews && heldUntil !== null
+          ? heldReviews.reviews.filter(
+              (r) => r.createdAt < heldUntil * 1000 && r.createdAt >= (window ?? 0) * 1000
+            )
+          : []
+      const since = heldUntil ?? window
+      const fetched: ShopReview[] = []
+      update({ reviews: older })
       for (let offset: number | null = 0; offset !== null; ) {
         const params = new URLSearchParams({ offset: String(offset) })
         if (since) params.set("since", String(since))
@@ -251,18 +293,30 @@ export async function startAnalysis(
           `/api/shops/${shopId}/reviews?${params}`,
           abort.signal
         )
-        update({ reviews: [...current.reviews, ...page.reviews], reviewTotal: page.total })
+        fetched.push(...page.reviews)
+        update({ reviews: [...fetched, ...older], reviewTotal: page.total + older.length })
         offset = page.nextOffset
       }
     }
 
-    update({ status: "done", analysedAt: new Date().toISOString() })
+    update({ status: "done", reviewsAt, analysedAt: new Date().toISOString() })
     finished.set(runKey(shopId, plan), current)
   } catch (error) {
+    // Stopped or failed part way, what was held still is: the listings not
+    // reached yet, and the reviews this run didn't get to replace.
+    const keep: Partial<AnalysisRun> = {
+      ...(from && !listed && { listings: [...current.listings, ...from.listings.filter((l) => !seen.has(l.id))] }),
+      ...(heldReviews && {
+        reviews: heldReviews.reviews,
+        reviewTotal: heldReviews.total,
+        reviewsAt: heldReviews.at,
+      }),
+    }
     if (abort.signal.aborted) {
-      update({ status: "stopped", analysedAt: new Date().toISOString() })
+      update({ ...keep, status: "stopped", analysedAt: new Date().toISOString() })
     } else {
       update({
+        ...keep,
         status: "error",
         error: error instanceof Error ? error.message : "Couldn't load the shop",
         analysedAt: new Date().toISOString(),
@@ -338,8 +392,10 @@ export function onBackgroundSettle(notify: (settled: ShopRun) => void) {
 
 // "Get all listings" for a list of shops: every active listing of each, two
 // shops at a time, so the server spreads them over both analysis accounts.
-// The runs are ordinary ones (header, recent shops, stored copy); only the
-// batch as a whole ends with a toast.
+// Nothing is fetched twice: a shop that has all its listings already is left
+// out, and the rest build on what's held of them. The runs are ordinary ones
+// (header, recent shops, stored copy); only the batch as a whole ends with a
+// toast.
 
 const BATCH_CONCURRENCY = 2
 
@@ -373,9 +429,42 @@ export function useBatch() {
   return React.useSyncExternalStore(subscribeBatch, () => batch, () => null)
 }
 
-/** Every active listing (and the cheap review window the shop's default plan picks). */
-export function allListingsPlan(shop: ListingShop): AnalysisPlan {
-  return { ...defaultPlan(shop), limit: Math.max(shop.activeListings, 1) }
+/**
+ * Whether an analysis holds every listing of a shop with `activeListings`:
+ * nothing for "Get all listings" to add.
+ */
+export function hasAllListings(
+  analysis: Pick<ShopAnalysisSummary, "plan" | "complete" | "listings"> | null | undefined,
+  activeListings: number
+) {
+  return (
+    !!analysis &&
+    analysis.plan.limit >= activeListings &&
+    (analysis.complete || analysis.listings >= activeListings)
+  )
+}
+
+/**
+ * Every active listing, in the order and with the review window `from` had
+ * (or the cheap one the shop's default plan picks).
+ */
+export function allListingsPlan(shop: ListingShop, from?: AnalysisRun | null): AnalysisPlan {
+  const plan = { ...defaultPlan(shop), limit: Math.max(shop.activeListings, from?.listingTotal ?? 0, 1) }
+  return from ? { ...plan, sort: from.plan.sort, reviews: from.plan.reviews } : plan
+}
+
+/**
+ * About how many Etsy requests "Get all listings" makes for the shop: none
+ * once it has every listing; otherwise a page of ids per 100 listings, the
+ * ones not held yet in full, and the reviews newer than those held.
+ */
+export function allListingsCost(shop: ListingShop, analysis: ShopAnalysisSummary | null | undefined) {
+  if (hasAllListings(analysis, shop.activeListings)) return 0
+  const total = Math.max(shop.activeListings, 1)
+  const missing = Math.max(total - (analysis?.listings ?? 0), 0)
+  const plan = analysis?.plan ?? defaultPlan(shop)
+  const reviews = plan.reviews !== "none" && analysis?.complete ? 1 : planCost({ ...plan, limit: 0 }, shop)
+  return Math.ceil(total / PAGE) + Math.ceil(missing / PAGE) + reviews
 }
 
 /**
@@ -399,8 +488,7 @@ export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> 
   const worker = async () => {
     for (let shop = batchQueue.shift(); shop && !batchStopped; shop = batchQueue.shift()) {
       setBatch({ ...batch!, current: [...batch!.current, shop] })
-      await startAnalysis(shop, allListingsPlan(shop), { quiet: true })
-      const status = currentRun(shop.id)?.status
+      const status = await getMissingListings(shop)
       setBatch({
         ...batch!,
         done: batch!.done + 1,
@@ -414,6 +502,30 @@ export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> 
   batchQueue = []
   setBatch(null)
   return settled
+}
+
+// One shop of the batch, built on what's held of it. One that turns out to
+// have every listing already (the recent shops list hadn't caught up) is left
+// as it is. Resolves with how its run ended.
+async function getMissingListings(shop: ListingShop) {
+  const from = await heldRun(shop)
+  const total = Math.max(shop.activeListings, from?.listingTotal ?? 0)
+  if (from && hasAllListings({ plan: from.plan, complete: from.status === "done", listings: from.listings.length }, total)) {
+    remember(shop, from)
+    return null
+  }
+  if (batchStopped) return null
+  await startAnalysis(shop, allListingsPlan(shop, from), { quiet: true, from })
+  return currentRun(shop.id)?.status ?? null
+}
+
+/** What's held of the shop: this session's run or the server's copy, whichever has more listings. */
+async function heldRun(shop: ListingShop): Promise<AnalysisRun | null> {
+  const session = currentRun(shop.id)
+  const stored = await fetchStoredAnalysis(shop.id).catch(() => null)
+  const kept = stored && storedRun(stored)
+  if (!session || session.status === "idle") return kept
+  return kept && kept.listings.length > session.listings.length ? kept : session
 }
 
 /** Stops the batch: the shops under way stop where they got to, the rest aren't started. */

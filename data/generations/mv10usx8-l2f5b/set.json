@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.868Z",
- "updatedAt": "2026-10-09T15:17:12.202Z",
+ "updatedAt": "2026-10-09T20:57:17.020Z",
  "original": {
   "status": "done",
   "file": "source-mv10uuq5.jpg",
@@ -106,12 +106,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.868Z",
    "title": "Potting Bench Progress",
    "brief": "A still-life scene of a weathered potting bench featuring a pair of canvas gardening gloves, a small hand trowel, and a single ceramic pot holding a leafy monstera sapling. The composition occupies the lower two-thirds of the frame, leaving the upper-right corner open for text. Use the original palette of forest green, dusty rose, terracotta, and cream with a heavy grain texture to mimic mid-century screen printing. Hand-painted cursive text in dark green reads, 'Give yourself time to bloom.'",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:57:13.424Z"
   },
   {
    "status": "done",
@@ -121,12 +122,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.868Z",
    "title": "The Morning Greenhouse View",
    "brief": "A top-down bird’s-eye view of a garden work table covered in scattered seed packets, a half-peeled orange, and several small sprouting herbs in mismatched ceramic mugs. The palette shifts to include sage green, lavender, ochre, and slate blue with thick linocut-style outlines and overlapping color layers. Frame the scene tightly, focusing on the tactile textures of the wooden table and glossy ceramic glazes. Lettering is centered at the bottom in a bold, blocky serif typeface: 'Patience is the secret ingredient.'",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:57:15.800Z"
   },
   {
    "status": "done",
@@ -136,12 +138,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.868Z",
    "title": "Roots of Resilience",
    "brief": "A minimalist folk-art illustration showing a large, stylized oak tree with an intricate, visible root system stretching deep into a cross-section of the earth. Inside the roots and trunk, paint small geometric patterns in metallic gold to represent hidden progress. The palette features emerald green, navy blue, and coral against a flat off-white background. The rendering is clean and graphic with sharp edges and no grain, focusing on a symmetrical, vertically-centered composition without any text.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:57:17.020Z"
   }
  ],
  "layout": "single",

@@ -1,0 +1,208 @@
+{
+ "id": "mv18xamg-6s0n5",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4406417706,
+  "title": "Japanese Frog with Umbrella Poster, Woodblock Art Print",
+  "image": "https://i.etsystatic.com/24426965/r/il/9936f5/7453911761/il_fullxfull.7453911761_jme9.jpg",
+  "url": "https://www.etsy.com/listing/4406417706/japanese-frog-with-umbrella-poster",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "Japanese Art",
+   "Frog Poster",
+   "Woodblock Style",
+   "Umbrella Art",
+   "Rain Scene",
+   "Green Artwork",
+   "Red Umbrella",
+   "Nature Print",
+   "Asian Style",
+   "Frog Illustration",
+   "Linework Art",
+   "Minimal Scene",
+   "Textured Print"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.048Z",
+ "updatedAt": "2026-10-09T21:19:22.892Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv18xax9.jpg",
+  "width": 2400,
+  "height": 2400
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv18xguk.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "frog with umbrella print",
+   "analysis": {
+    "summary": "A whimsical Japanese woodblock-style print featuring a dark green frog sitting under a red umbrella during a heavy downpour.",
+    "subject": "A stylized dark green frog with large, expressive eyes and a textured skin pattern.",
+    "setting": "A minimalist outdoor space defined by dense vertical rain streaks against a cream-colored, textured background.",
+    "action": "The frog sits patiently on its haunches, holding a small red umbrella to shield itself from the rain.",
+    "style": "Japanese woodblock print (Ukiyo-e) with linocut textures, bold dark outlines, rhythmic hatch patterns for shading, and a cream-colored washi paper texture.",
+    "palette": [
+     "#1a2e24",
+     "#8b2629",
+     "#e5e0d3",
+     "#000000"
+    ],
+    "composition": "Vertical orientation with the subject placed in the lower-right quadrant; the upper two-thirds are filled with repetitive rain lines creating a sense of scale; features traditional red seal stamps and vertical text on the left.",
+    "typography": "Vertical Japanese calligraphy in black ink on the left side, accompanied by three red hanko (seal) stamps.",
+    "mood": "Serene, whimsical, and charmingly ironic.",
+    "audience": "Home decorators seeking Japandi or Zen aesthetics, frog enthusiasts, and those looking for quirky yet sophisticated nursery or bathroom wall art.",
+    "hook": "The humorous irony of a water-loving amphibian using an umbrella, executed in a traditional, high-brow art style that makes the joke feel elegant and timeless.",
+    "swaps": {
+     "subjects": [
+      "A grumpy calico cat",
+      "A chubby tanuki",
+      "A wide-eyed owl",
+      "A long-eared white rabbit",
+      "A slow-moving turtle",
+      "A curious red panda"
+     ],
+     "settings": [
+      "A snowy mountain pass",
+      "A blooming cherry blossom garden",
+      "A misty bamboo forest",
+      "A moonlit wooden bridge",
+      "A quiet zen rock garden",
+      "A bustling Edo-period street"
+     ],
+     "props": [
+      "A steaming bowl of ramen",
+      "A glowing paper lantern",
+      "A delicate folding fan",
+      "A tiny wooden boat",
+      "A ceramic tea cup",
+      "A colorful silk kimono"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv18xnr2-aomm9-mv1913ga.jpg",
+   "batch": "mv18xamh-3tjbp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:36.061Z",
+   "id": "mv18xnr2-aomm9",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Frog Under Umbrella Redux",
+   "brief": "A dark green frog sits in the lower-right corner under a deep red umbrella during a downpour. The frog is rendered with black rhythmic hatch patterns for shading on a cream-colored washi paper background. The upper two-thirds of the vertical composition are filled with thin, vertical black rain lines. Three red hanko seal stamps and vertical black calligraphy are placed on the left side. The lighting is flat, consistent with traditional Ukiyo-e woodblock prints.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:19:22.891Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnr2-yiwxj-mv1954py.jpg",
+   "batch": "mv18xamh-3tjbp",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:36.061Z",
+   "id": "mv18xnr2-yiwxj",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Rainy Wait on Washi",
+   "brief": "A dark green frog holds a deep red umbrella, now positioned in the center of the lower third of the frame. The rain lines are varied, with some splashing against the bottom edge in short, horizontal linocut strokes. The cream background features more prominent paper grain texture. Vertical black calligraphy is moved to the top-left corner, and a single red seal stamp is placed in the bottom-right. The frog's eye is slightly larger and more centered on the head.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:03.149Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnr2-b4i6i-mv197hgw.jpg",
+   "batch": "mv18xamh-3tjbp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:36.061Z",
+   "id": "mv18xnr2-b4i6i",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "The Umbrella Close-Up",
+   "brief": "A medium-close-up shot shows the dark green frog from the chest up, occupying the entire bottom half of the frame. The deep red umbrella canopy fills the horizontal center, cutting across the mid-section. Rain lines are shorter and denser, creating a heavy texture against the cream backdrop. Two red hanko stamps are placed symmetrically in the lower corners. Black vertical text runs along the right edge of the composition.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:04.527Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnr2-vy7vk-mv1990eg.jpg",
+   "batch": "mv18xamh-3tjbp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:36.061Z",
+   "id": "mv18xnr2-vy7vk",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Gathering in the Storm",
+   "brief": "A wide shot featuring a group of three dark green frogs of varying sizes, all huddled under one large, wide deep red umbrella. The umbrella is centered, with the frogs arranged in a triangular grouping beneath it on the cream-colored ground. The vertical rain lines are interrupted by the umbrella's silhouette, leaving the area directly beneath the frogs clear. Linocut hatchings create a sense of volume on the umbrella's surface. Calligraphy and stamps are clustered in the top-right quadrant.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:06.886Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xnr2-oqivq-mv192e48.jpg",
+   "batch": "mv18xamh-3tjbp",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:36.061Z",
+   "id": "mv18xnr2-oqivq",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "The Floating Umbrella Boat",
+   "brief": "A deep red umbrella is flipped upside down and floats like a boat on a cream-colored pond surface. A dark green frog sits inside the inverted umbrella, looking out as heavy black rain lines fall vertically around it. The composition uses a bold diagonal layout, with the umbrella boat positioned in the lower-left. Rhythmic black linocut strokes create stylized circular ripples in the water. A large red seal stamp serves as a focal point in the upper-right corner.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:06:08.730Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xamh-3tjbp",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.048Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

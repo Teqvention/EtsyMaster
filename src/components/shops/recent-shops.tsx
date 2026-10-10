@@ -10,6 +10,7 @@ import {
   ArrowUpNarrowWideIcon,
   CheckIcon,
   DownloadIcon,
+  HeartIcon,
   ListChecksIcon,
   LoaderCircleIcon,
   SearchIcon,
@@ -23,15 +24,15 @@ import {
 
 import { SelectionBar } from "@/components/selection"
 import { getAllListings } from "@/components/shops/import-shops"
-import { LabelBadges, LabelDialog } from "@/components/shops/shop-labels"
+import { LabelBadges, LabelDialog, ShopLabelIconButton } from "@/components/shops/shop-labels"
+import { ShopLikeButton } from "@/components/shops/shop-like"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { allListingsPlan, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
+import { allListingsCost, hasAllListings, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
 import { forgetShop, hasLabel, useShopLabels, type ShopVisit } from "@/hooks/use-shop-history"
-import { planCost } from "@/lib/etsy/analysis"
-import type { ListingShop } from "@/lib/etsy/types"
 import { useSelection } from "@/hooks/use-selection"
 import { formatCompact, formatCompactCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
 import { timeAgo } from "@/lib/shops/time-ago"
@@ -40,9 +41,10 @@ import { cn } from "@/lib/utils"
 // Shops opened before, most recent first: one row each, with what the last
 // analysis found, so the list doubles as a quick comparison. The column heads
 // (or the sort menu, where they're hidden) reorder it, and the bar above
-// narrows it by name, country, analysis and sales. Shops can be filed under
-// labels: the chips filter by them, and Select picks shops to label in one go.
-// All but the search live in the URL (`?label=&country=&status=&sales=&sort=`).
+// narrows it by name, liked, country, analysis and sales. Shops can be liked
+// and filed under labels from their row: the chips filter by label, and Select
+// picks shops to label in one go. All but the search live in the URL
+// (`?label=&liked&country=&status=&sales=&sort=`).
 
 const COLUMNS =
   "grid-cols-[minmax(0,1fr)_auto] @2xl:grid-cols-[minmax(0,1fr)_7rem_6rem_5rem_4.5rem] @4xl:grid-cols-[minmax(0,1fr)_5.5rem_7rem_6rem_5rem_4.5rem]"
@@ -131,7 +133,7 @@ export function RecentShops({
           </>
         ) : (
           <>
-            <GetAllListingsButton shops={shown.map((v) => v.shop)} />
+            <GetAllListingsButton visits={shown} />
             <Button variant="outline" size="sm" onClick={() => setPicking(true)} title="Pick shops to label">
               <ListChecksIcon />
               Select
@@ -163,7 +165,7 @@ export function RecentShops({
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <div
-            className={`hidden items-center gap-x-4 border-b bg-muted/40 py-1.5 pr-11 pl-3 text-[11px] text-muted-foreground uppercase @2xl:grid ${COLUMNS}`}
+            className={`hidden items-center gap-x-4 border-b bg-muted/40 py-1.5 pr-24 pl-3 text-[11px] text-muted-foreground uppercase @2xl:grid ${COLUMNS}`}
           >
             <SortHead column="name" label="Shop" sort={sort} onSort={toggleSort} />
             <SortHead column="active" label="Active" sort={sort} onSort={toggleSort} end className="hidden @4xl:flex" />
@@ -203,7 +205,7 @@ export function RecentShops({
           size="sm"
           className="active:scale-[0.97]"
           onClick={() => getAllListings(picked)}
-          title={`Every active listing of the picked shops, ${allListingsCost(picked)}`}
+          title={missingListings(shown.filter((v) => selection.has(v.shop.id)))}
         >
           <DownloadIcon />
           Get all listings
@@ -220,14 +222,19 @@ export function RecentShops({
 
 // --- Get all listings ---
 
-function allListingsCost(shops: ListingShop[]) {
-  const requests = shops.reduce((total, shop) => total + planCost(allListingsPlan(shop), shop), 0)
-  return `about ${formatNumber(requests)} Etsy requests`
+// What "Get all listings" would do for the shops: only the listings they don't have yet.
+function missingListings(visits: ShopVisit[]) {
+  const missing = visits.filter((v) => !hasAllListings(v.analysis, v.shop.activeListings))
+  if (missing.length === 0) {
+    return visits.length === 1 ? "This shop has all its listings already" : "Every shop here has all its listings already"
+  }
+  const requests = missing.reduce((total, v) => total + allListingsCost(v.shop, v.analysis), 0)
+  return `The listings still missing from ${formatNumber(missing.length)} of ${formatNumber(visits.length)} shops, about ${formatNumber(requests)} Etsy requests`
 }
 
-// Every active listing of the shops listed, two shops at a time over both
+// The listings the shops listed don't have yet, two shops at a time over both
 // analysis accounts; while that runs, how far it got and a way to stop it.
-function GetAllListingsButton({ shops }: { shops: ListingShop[] }) {
+function GetAllListingsButton({ visits }: { visits: ShopVisit[] }) {
   const batch = useBatch()
   if (batch) {
     return (
@@ -250,9 +257,9 @@ function GetAllListingsButton({ shops }: { shops: ListingShop[] }) {
       variant="ghost"
       size="sm"
       className="text-muted-foreground"
-      disabled={shops.length === 0}
-      onClick={() => getAllListings(shops)}
-      title={`Every active listing of the ${formatNumber(shops.length)} shops listed, ${allListingsCost(shops)}`}
+      disabled={visits.length === 0}
+      onClick={() => getAllListings(visits.map((v) => v.shop))}
+      title={missingListings(visits)}
     >
       <DownloadIcon />
       Get all listings
@@ -411,9 +418,9 @@ function SortMenu({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }
 // --- Filters ---
 
 type Status = "all" | "analysed" | "partial" | "none"
-type Filters = { country: string; status: Status; sales: number }
+type Filters = { country: string; status: Status; sales: number; liked: boolean }
 
-const NO_FILTERS: Filters = { country: "all", status: "all", sales: 0 }
+const NO_FILTERS: Filters = { country: "all", status: "all", sales: 0, liked: false }
 
 const STATUSES: Record<Status, { label: string; matches: (v: ShopVisit) => boolean }> = {
   all: { label: "Any analysis", matches: () => true },
@@ -421,7 +428,7 @@ const STATUSES: Record<Status, { label: string; matches: (v: ShopVisit) => boole
   // Stopped part way, or more listings than it covered: the ones "Get all listings" would add to.
   partial: {
     label: "Partly analysed",
-    matches: (v) => !!v.analysis && (!v.analysis.complete || v.analysis.listings < v.shop.activeListings),
+    matches: (v) => !!v.analysis && !hasAllListings(v.analysis, v.shop.activeListings),
   },
   none: { label: "Not analysed", matches: (v) => !v.analysis },
 }
@@ -437,6 +444,7 @@ function readFilters(params: URLSearchParams): Filters {
     country: params.get("country") || "all",
     status: Object.hasOwn(STATUSES, status) ? (status as Status) : "all",
     sales: Number.isFinite(sales) && sales > 0 ? sales : 0,
+    liked: params.has("liked"),
   }
 }
 
@@ -445,16 +453,18 @@ function filterParams(f: Filters) {
     country: f.country === "all" ? null : f.country,
     status: f.status === "all" ? null : f.status,
     sales: f.sales > 0 ? String(f.sales) : null,
+    liked: f.liked ? "" : null,
   }
 }
 
 const NO_FILTER_PARAMS = filterParams(NO_FILTERS)
 
 function hasFilters(f: Filters) {
-  return f.country !== "all" || f.status !== "all" || f.sales > 0
+  return f.country !== "all" || f.status !== "all" || f.sales > 0 || f.liked
 }
 
 function matchesFilters(v: ShopVisit, f: Filters, words: string[]) {
+  if (f.liked && !v.likedAt) return false
   if (f.country !== "all" && (v.shop.country ?? NO_COUNTRY) !== f.country) return false
   if (!STATUSES[f.status].matches(v)) return false
   if (f.sales > 0 && (v.analysis?.salesPerMonth ?? 0) < f.sales) return false
@@ -522,6 +532,7 @@ function FilterBar({
       label: `${formatNumber(min)}+ sales / mo (${formatNumber(visits.filter((v) => (v.analysis?.salesPerMonth ?? 0) >= min).length)})`,
     })),
   ]
+  const liked = visits.filter((v) => v.likedAt).length
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -552,6 +563,19 @@ function FilterBar({
         )}
       </InputGroup>
 
+      {(liked > 0 || filters.liked) && (
+        <Toggle
+          variant="outline"
+          size="sm"
+          pressed={filters.liked}
+          onPressedChange={(pressed) => onFilter({ liked: pressed })}
+          className="gap-1.5 aria-pressed:border-brand/50 aria-pressed:bg-brand/5"
+        >
+          <HeartIcon className={cn("transition-[fill,color] duration-150 ease-out", filters.liked && "fill-like text-like")} />
+          Liked
+          <span className="text-xs text-muted-foreground tabular-nums">{formatNumber(liked)}</span>
+        </Toggle>
+      )}
       <FilterSelect value={filters.country} items={countryItems} label="Country" onChange={(country) => onFilter({ country })} />
       <FilterSelect
         value={filters.status}
@@ -698,7 +722,7 @@ function ShopRow({
         onMouseDown={(event) => selecting && event.shiftKey && event.preventDefault()}
         aria-pressed={selecting ? selected : undefined}
         className={cn(
-          "grid w-full items-center gap-x-4 py-2 pr-11 pl-3 text-left text-xs tabular-nums transition-[background-color] duration-150 ease-out focus-visible:bg-muted/60 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted/60",
+          "grid w-full items-center gap-x-4 py-2 pr-24 pl-3 text-left text-xs tabular-nums transition-[background-color] duration-150 ease-out focus-visible:bg-muted/60 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted/60",
           selected && "bg-brand/8 [@media(hover:hover)]:hover:bg-brand/12",
           COLUMNS
         )}
@@ -777,21 +801,37 @@ function ShopRow({
           </span>
         </span>
       </button>
-      {!selecting && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Remove ${shop.name} from recent shops`}
-          title={visit.labels?.length ? "Labelled shops stay in the list until removed" : undefined}
-          onClick={() => forgetShop(shop.id)}
-          className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground transition-opacity duration-150 ease-out [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
-        >
-          <XIcon />
-        </Button>
-      )}
+      {/* The heart stays put while liked; the rest show on hover. */}
+      <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-0.5">
+        {!selecting && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Remove ${shop.name} from recent shops`}
+              title={
+                visit.labels?.length || visit.likedAt
+                  ? "Labelled and liked shops stay in the list until removed"
+                  : undefined
+              }
+              onClick={() => forgetShop(shop.id)}
+              className={cn("text-muted-foreground", ON_HOVER)}
+            >
+              <XIcon />
+            </Button>
+            <ShopLabelIconButton shop={shop} className={ON_HOVER} />
+          </>
+        )}
+        <ShopLikeButton shop={shop} className={cn(!visit.likedAt && ON_HOVER)} />
+      </span>
     </li>
   )
 }
+
+// Row actions that only show on hover or focus (always on touch screens), and
+// while their popover is open.
+const ON_HOVER =
+  "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100 data-popup-open:opacity-100"
 
 // The shop's best sellers at a glance; overlapping keeps the row short.
 function TopThumbs({ top }: { top: { title: string; thumb: string | null }[] }) {

@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.867Z",
- "updatedAt": "2026-10-09T15:18:17.987Z",
+ "updatedAt": "2026-10-09T20:56:56.431Z",
  "original": {
   "status": "done",
   "file": "source-mv10uu94.jpg",
@@ -104,12 +104,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.867Z",
    "title": "Alligator Tea Ceremony Print",
    "brief": "A black alligator sits cross-legged on a circular woven mat, holding a steaming ceramic tea bowl with both hands. It is flanked by two tall, stylized bamboo stalks in minimalist black pots instead of palms, maintaining a symmetrical vertical composition. The art style uses heavy linocut textures and flat color blocks on an aged cream background. The palette consists of #E5DFC5 for the paper, #1A5230 for the bamboo, #000000 for the alligator, and #D85D36 for the tea bowl. A small black rectangular box at the top center contains the kanji character for 'Tea'.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:32.270Z"
   },
   {
    "status": "done",
@@ -119,12 +120,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.867Z",
    "title": "Tiger Calligraphy Woodblock Poster",
    "brief": "A lithe, black-striped tiger hunched over a low wooden writing desk, holding a long calligraphy brush in its paw. The tiger is positioned at a three-quarter angle in the lower half of the frame, creating a sense of focused activity. The background features a large, stylized golden sun partially obscured by dark indigo clouds in a classic ukiyo-e style. The palette shifts to deep indigo, ochre yellow, and a soft parchment white with sharp black outlines. Visible woodgrain texture is stamped into the large color blocks, suggesting a traditional hand-printed method.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:36.131Z"
   },
   {
    "status": "done",
@@ -134,12 +136,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.867Z",
    "title": "Atomic Hippo Piano Lounge",
    "brief": "A large, minimalist hippopotamus wearing a tiny red bowtie sits at a sleek, three-legged grand piano in a Mid-Century Modern style. The composition is asymmetrical, showing a wide-angle view of a quirky lounge with a starburst wall clock and a single tapered-leg planter. The rendering uses flat, overlapping geometric shapes and grainy stippled textures rather than linocut lines. The palette features sage green, mustard yellow, charcoal gray, and pops of coral pink. A single diagonal beam of soft yellow light cuts across the floor to create a moody, jazz-club atmosphere.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:56.431Z"
   }
  ],
  "layout": "single",

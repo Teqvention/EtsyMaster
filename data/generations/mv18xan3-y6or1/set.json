@@ -1,0 +1,210 @@
+{
+ "id": "mv18xan3-y6or1",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4386355003,
+  "title": "Japanese Woodblock Print, Vintage Lotus Flower Art, Traditional Ukiyo-e Botanical Poster, Blue Floral Wall Art, Japanese Home Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/3fe96d/7331080143/il_fullxfull.7331080143_jap6.jpg",
+  "url": "https://www.etsy.com/listing/4386355003/japanese-woodblock-print-vintage-lotus",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "japanese art",
+   "ukiyoe print",
+   "woodblock art",
+   "lotus flower art",
+   "vintage poster",
+   "oriental decor",
+   "asian wall art",
+   "botanical print",
+   "japan print",
+   "classic artwork",
+   "floral poster",
+   "zen wall decor",
+   "blue flower art"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.071Z",
+ "updatedAt": "2026-10-09T21:12:00.892Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv19dpex.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv19dtmn.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "blue lotus woodblock print",
+   "analysis": {
+    "summary": "Elegant indigo and white poppies bloom amidst large, textured sage leaves in a traditional Japanese woodblock composition.",
+    "subject": "Blue and white poppies with large, serrated leaves",
+    "setting": "A minimalist, neutral-toned space suggesting a traditional botanical study",
+    "action": "Growing upwards in a graceful, asymmetrical cluster",
+    "style": "Japanese woodblock print (Ukiyo-e), bold black outlines, flat color with subtle gradients, visible washi paper texture, fine stippling on stems",
+    "palette": [
+     "#E8E2D1",
+     "#1A3A6C",
+     "#5B84A8",
+     "#7A9B8F",
+     "#F5F5F5",
+     "#B8860B"
+    ],
+    "composition": "Vertical orientation, bottom-heavy with dense foliage, stems leading the eye to blooms in the upper two-thirds, significant negative space at the top, asymmetrical balance",
+    "typography": "Vertical Japanese calligraphy in black ink located in the top left and right corners, including a red artist seal",
+    "mood": "Serene, sophisticated, timeless, and contemplative",
+    "audience": "Interior designers and homeowners seeking minimalist, Zen-inspired decor for bedrooms or quiet living spaces",
+    "hook": "The striking contrast of deep indigo against a warm neutral background provides a modern 'Blue and White' aesthetic within a prestigious historical art form.",
+    "swaps": {
+     "subjects": [
+      "Red-crowned cranes",
+      "Spotted koi fish",
+      "Giant peonies",
+      "Golden chrysanthemums",
+      "Dragonflies",
+      "Snowy owls"
+     ],
+     "settings": [
+      "Misty mountain peak",
+      "Zen rock garden",
+      "Moonlit pond",
+      "Bamboo forest",
+      "Snow-covered bridge",
+      "Coastal cliffside"
+     ],
+     "props": [
+      "Silk folding fan",
+      "Ceramic tea bowl",
+      "Stone lantern",
+      "Bonsai tree",
+      "Floating lotus leaf",
+      "Woven straw hat"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv19dzvm-dri6v-mv19iy42.jpg",
+   "batch": "mv18xan3-9yn9s",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:48:18.274Z",
+   "id": "mv19dzvm-dri6v",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Indigo Poppies in Washi",
+   "brief": "A vertical woodblock print featuring three main poppies—two deep indigo and one white with a blue edge—emerging from large, textured sage-green leaves. The composition is bottom-heavy with stems extending upward into the neutral beige background, featuring fine black stippling on the stalks. The rendering uses bold black outlines and flat colors with subtle gradients on the petals. Japanese calligraphy in black ink and a red artist seal are positioned in the upper corners. The overall texture mimics aged washi paper with visible fibers.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:54.422Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19dzvm-ut0oj-mv19k1hq.jpg",
+   "batch": "mv18xan3-9yn9s",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:48:18.274Z",
+   "id": "mv19dzvm-ut0oj",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Serene Blue Poppy Cluster",
+   "brief": "Four open poppies and several nodding buds are arranged in a dense vertical cluster, shifting the focus slightly to the right side of the frame. The palette consists of indigo, dusty blue, sage green, and white petals against a warm beige background. Large, serrated sage leaves overlap at the bottom, providing a solid base for the thin, stippled stems. Small mustard-gold accents appear in the poppy centers. A vertical column of Japanese text occupies the top left, balanced by a red seal on the lower right.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:58.889Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19dzvm-t608k-mv19nea5.jpg",
+   "batch": "mv18xan3-9yn9s",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:48:18.274Z",
+   "id": "mv19dzvm-t608k",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Diagonal Indigo Bloom",
+   "brief": "This composition features a diagonal arrangement where poppy stems sweep from the bottom left toward the top right corner. The large indigo blooms are concentrated in the upper right, while the dusty blue and white poppies remain near the center. The bottom left corner is filled with broad, sage-colored leaves with prominent black-line veining. The background remains a flat neutral beige with a heavy washi paper texture. Black calligraphy is restricted to the top right, emphasizing the movement of the flowers.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:59.890Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19dzvm-g3wnk-mv19nwvq.jpg",
+   "batch": "mv18xan3-9yn9s",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:48:18.274Z",
+   "id": "mv19dzvm-g3wnk",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Indigo Canopy View",
+   "brief": "A low-angle perspective looking up through the poppy stems toward the blooms. Two large indigo poppies dominate the top of the frame, their petals shown from an underside view with mustard-gold stamens visible. The thin, stippled stems create a vertical rhythmic pattern across the center, leading down to smaller sage-green leaves at the very bottom edge. The white poppy is placed centrally to provide a bright focal point. The lighting is flat and even, characteristic of traditional Ukiyo-e prints.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:00.892Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19dzvm-omx61-mv19lcfn.jpg",
+   "batch": "mv18xan3-9yn9s",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:48:18.274Z",
+   "id": "mv19dzvm-omx61",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Zen Poppy Circle",
+   "brief": "The botanical elements are contained within a large, implied circular layout in the center of the vertical poster. Several indigo poppies and sage leaves are cropped by this circular boundary, though a few stippled stems and one white petal 'break' the edge and bleed into the surrounding beige negative space. A single indigo petal is shown drifting toward the bottom. The calligraphy is placed vertically along the left side of the circle, and the red artist seal sits at the bottom center, maintaining a sophisticated and balanced look.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:12.986Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xan3-9yn9s",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.071Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

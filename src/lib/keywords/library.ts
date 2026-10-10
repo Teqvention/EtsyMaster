@@ -335,23 +335,39 @@ export async function keywordListings(keyword: string, kind: KeywordInsight["kin
  * shows (`focus`) count for more; those with an `exclude` word (the source's
  * subject, when ours has another) don't fit at all. Topped up with the
  * library's best keywords overall when few fit, so there is always something
- * to learn from.
+ * to learn from. Shared: never change what this answers.
  */
-export async function keywordContext(
-  query: { title: string; tags: string[]; focus?: string; exclude?: string[] },
-  limit = 40
-): Promise<KeywordInsight[]> {
-  const { tags, phrases } = await stats()
+export async function keywordContext(query: KeywordQuery, limit = 40): Promise<KeywordInsight[]> {
+  const statistics = await stats()
+  let held = answers.get(statistics)
+  if (!held) answers.set(statistics, (held = new Map()))
+  const key = JSON.stringify([query.title, query.tags, query.focus, query.exclude, limit])
+  let answer = held.get(key)
+  if (!answer) {
+    if (held.size >= MAX_ANSWERS) held.clear()
+    held.set(key, (answer = fitting(statistics, query, limit)))
+  }
+  return answer
+}
+
+type KeywordQuery = { title: string; tags: string[]; focus?: string; exclude?: string[] }
+
+// Answers kept per version of the statistics: the Uploads page asks the same
+// for every draft each time it looks, every couple of seconds while copy is written.
+const answers = new WeakMap<Stats, Map<string, KeywordInsight[]>>()
+const MAX_ANSWERS = 2000
+
+function fitting({ tags, phrases }: Stats, query: KeywordQuery, limit: number) {
   const focus = new Set(wordsOf(query.focus ?? "").filter((w) => !GENERIC.has(w)))
   const exclude = new Set((query.exclude ?? []).flatMap(wordsOf))
   const words = new Set([...wordsOf(query.title), ...query.tags.flatMap(wordsOf), ...focus])
   const exact = new Set(query.tags.map(normalise))
   const excluded = (own: string[]) => own.some((w) => exclude.has(w))
-  if (words.size === 0 && exact.size === 0) return tags.filter((t) => !excluded(wordsOf(t.keyword))).slice(0, limit)
+  if (words.size === 0 && exact.size === 0) return tags.filter((t) => !excluded(keywordWords(t).own)).slice(0, limit)
 
   const relevant: { insight: KeywordInsight; weight: number }[] = []
   for (const insight of [...tags, ...phrases]) {
-    const own = wordsOf(insight.keyword)
+    const { own, telling } = keywordWords(insight)
     if (own.length === 0 || excluded(own)) continue
     const shared = own.filter((w) => words.has(w)).length / own.length
     const relevance = exact.has(insight.keyword) ? 1 : shared
@@ -359,7 +375,6 @@ export async function keywordContext(
     // telling words don't all fit ("funny cat" on a pig) counts half, one
     // with no telling word at all ("wall decor") little more.
     if (relevance < 0.5) continue
-    const telling = own.filter((w) => !GENERIC.has(w))
     const whole = exact.has(insight.keyword) || telling.every((w) => words.has(w))
     const shown = telling.length ? telling.filter((w) => focus.has(w)).length / telling.length : 0
     const weight =
@@ -375,7 +390,7 @@ export async function keywordContext(
     const have = new Set(picked.map((p) => `${p.kind}:${p.keyword}`))
     for (const tag of tags) {
       if (picked.length >= limit) break
-      if (!have.has(`tag:${tag.keyword}`) && tag.shops > 1 && !excluded(wordsOf(tag.keyword))) picked.push(tag)
+      if (!have.has(`tag:${tag.keyword}`) && tag.shops > 1 && !excluded(keywordWords(tag).own)) picked.push(tag)
     }
   }
   return picked
@@ -480,6 +495,20 @@ function wordsOf(text: string) {
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
     .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+}
+
+// A library keyword's words, worked out once per version of the statistics:
+// the Uploads page weighs every keyword for every draft each time it looks.
+const wordsOfKeyword = new WeakMap<KeywordInsight, { own: string[]; telling: string[] }>()
+
+function keywordWords(insight: KeywordInsight) {
+  let held = wordsOfKeyword.get(insight)
+  if (!held) {
+    const own = wordsOf(insight.keyword)
+    held = { own, telling: own.filter((w) => !GENERIC.has(w)) }
+    wordsOfKeyword.set(insight, held)
+  }
+  return held
 }
 
 function round(n: number, digits = 2) {

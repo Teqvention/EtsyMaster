@@ -1,0 +1,210 @@
+{
+ "id": "mv18xan5-vyfsp",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4394677413,
+  "title": "Japanese Pufferfish Art Print, Mid Century Modern Wall Art, Colorful Fish Illustration Poster, Minimal Coastal Home Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/9f3379/7381174677/il_fullxfull.7381174677_1239.jpg",
+  "url": "https://www.etsy.com/listing/4394677413/japanese-pufferfish-art-print-mid",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "japanese art",
+   "pufferfish print",
+   "mid century",
+   "modern wall art",
+   "fish poster",
+   "asian decor",
+   "coastal design",
+   "colorful art",
+   "minimal decor",
+   "ocean wall art",
+   "retro print",
+   "japanese poster",
+   "modern home"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.073Z",
+ "updatedAt": "2026-10-09T21:12:33.973Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv19nx2b.jpg",
+  "width": 1980,
+  "height": 1865
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv19o18j.jpg",
+   "width": 1029,
+   "height": 1441,
+   "label": "Japanese pufferfish print",
+   "analysis": {
+    "summary": "A whimsical cluster of colorful, patterned pufferfish floating amidst elegant Japanese calligraphy on a warm neutral background.",
+    "subject": "A variety of puffed-up fugu fish with distinct patterns like dots, stripes, and spikes.",
+    "setting": "A minimalist, parchment-like beige space suggesting a calm, stylized underwater scene.",
+    "action": "Floating in a dense, overlapping school, looking in different directions.",
+    "style": "Japanese woodblock print aesthetic mixed with Mid-Century Modern graphic design, featuring flat color planes, screen-print textures, and naive, rounded forms.",
+    "palette": [
+     "#d2ccb3",
+     "#1a364b",
+     "#c1a01c",
+     "#f4f3e9",
+     "#b53d2f",
+     "#6b703e"
+    ],
+    "composition": "Vertical portrait orientation with an asymmetrical balance; fish are clustered on the left and center while vertical calligraphy occupies the right, utilizing overlapping shapes to create depth.",
+    "typography": "Vertical Japanese calligraphy in black ink on the right side; a small red square artist seal (hanko) in the bottom left corner; small horizontal descriptive text at the very bottom.",
+    "mood": "Playful yet sophisticated, blending traditional eastern art with modern decorative charm.",
+    "audience": "Interior designers and homeowners looking for coastal-themed or Japandi-style wall art for kitchens, bathrooms, or living rooms.",
+    "hook": "The charm of 'dangerously cute' pufferfish rendered in a high-end, textured graphic style that feels both vintage and contemporary.",
+    "swaps": {
+     "subjects": [
+      "Octopus with curly, patterned tentacles",
+      "Round, plump calico cats",
+      "Prickly, stylized hedgehogs",
+      "Oversized, colorful beetles",
+      "Plump, round quails",
+      "Floating, translucent jellyfish"
+     ],
+     "settings": [
+      "A misty bamboo forest",
+      "A minimalist Zen garden",
+      "A geometric coral reef",
+      "A snowy mountain peak",
+      "A vintage tea room",
+      "A stylized lotus pond"
+     ],
+     "props": [
+      "Steaming ceramic tea cups",
+      "Floating cherry blossom petals",
+      "Traditional patterned paper fans",
+      "Glowing paper lanterns",
+      "Stylized bonsai trees",
+      "Floating origami cranes"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv19oa7a-zk42q-mv19ur1y.jpg",
+   "batch": "mv18xan5-27sfv",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:56:18.214Z",
+   "id": "mv19oa7a-zk42q",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Floating Fugu Gathering",
+   "brief": "A cluster of eight round pufferfish floats on a warm beige (#d2ccb3) background. The largest fish is dark blue (#1a364b) with yellow spikes at the top, followed by a cream (#f4f3e9) fish below it and a golden yellow (#c1a01c) fish in the center. Vertical Japanese calligraphy in black ink runs down the right side of the frame. A small red (#b53d2f) square hanko seal sits in the bottom left corner. The style uses screen-print textures with flat color planes and visible grain.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:15.273Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19oa7a-xl3gh-mv19puw7.jpg",
+   "batch": "mv18xan5-27sfv",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:56:18.214Z",
+   "id": "mv19oa7a-xl3gh",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Patterned Sea Swell",
+   "brief": "Nine colorful pufferfish of various sizes overlap in the center-left of a portrait frame. The fish feature muted red (#b53d2f), olive green (#6b703e), and off-white (#f4f3e9) bodies with varied patterns like polka dots and dashed spikes. A column of vertical black calligraphy is placed slightly more central than the reference, while the background remains a flat #d2ccb3. Texture is heavy with woodblock-style overlaps and slightly misaligned color layers for a vintage feel.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:22.067Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19oa7a-dx77k-mv19qfx2.jpg",
+   "batch": "mv18xan5-27sfv",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:56:18.214Z",
+   "id": "mv19oa7a-dx77k",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Diagonal Fugu Procession",
+   "brief": "A diagonal procession of pufferfish swims from the bottom-left corner toward the top-right against a #d2ccb3 backdrop. The fish vary in pattern, including one large olive green (#6b703e) fish with cream spikes and a small dotted blue (#1a364b) fish trailing behind. Vertical calligraphy is placed in the top-left and bottom-right empty spaces to balance the movement. All shapes are rounded with a hand-cut paper appearance and tactile screen-printed grain.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:23.031Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19oa7a-fn26g-mv19xckq.jpg",
+   "batch": "mv18xan5-27sfv",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:56:18.214Z",
+   "id": "mv19oa7a-fn26g",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Depths of the Kelp Forest",
+   "brief": "A trio of oversized pufferfish dominates the lower half of the frame, with smaller fish receding into the distance above them in a vertical stack. Stylized vertical seaweed stalks in olive green (#6b703e) rise between the fish. A pale cream (#f4f3e9) sun-like circle sits behind the top cluster of fish on the #d2ccb3 background. Textures show distressed ink layers and white flecks suggesting sea foam, with black calligraphy integrated between the seaweed.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:33.973Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19oa7a-sb21t-mv19rrzi.jpg",
+   "batch": "mv18xan5-27sfv",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:56:18.214Z",
+   "id": "mv19oa7a-sb21t",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Fugu Mandala Circle",
+   "brief": "A circular kaleidoscope arrangement of twelve pufferfish, their tails pointing toward a central empty point on a #d2ccb3 background. The fish alternate colors between dark blue (#1a364b), muted red (#b53d2f), and golden yellow (#c1a01c) to create a rhythmic pattern. Short blocks of black calligraphy are placed in each corner of the poster, framing the central circle. The rendering features flat, bold shapes with heavy wood-grain texture and a red hanko seal positioned in the exact center.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:12:28.408Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xan5-27sfv",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.073Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

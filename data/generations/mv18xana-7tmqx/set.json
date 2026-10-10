@@ -1,0 +1,249 @@
+{
+ "id": "mv18xana-7tmqx",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4411819584,
+  "title": "Japanese Tiger Print, Stylized Swirl Illustration Poster",
+  "image": "https://i.etsystatic.com/24426965/r/il/d51107/7439001666/il_fullxfull.7439001666_hgq4.jpg",
+  "url": "https://www.etsy.com/listing/4411819584/japanese-tiger-print-stylized-swirl",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "tiger illustration",
+   "japanese art",
+   "swirl pattern",
+   "tiger poster",
+   "asian decor",
+   "maroon artwork",
+   "oriental print",
+   "stylized tiger",
+   "minimal wall art",
+   "animal design",
+   "ink style art",
+   "graphic poster",
+   "wall decor"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.078Z",
+ "updatedAt": "2026-10-09T21:16:59.484Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1af2zd.jpg",
+  "width": 2400,
+  "height": 2400
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv1af70q.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "stylized tiger illustration",
+   "analysis": {
+    "summary": "A powerful tiger with intricate, rhythmic linework pounces through a sea of stylized dusty-rose swirling clouds in a modern Ukiyo-e style.",
+    "subject": "A stylized tiger",
+    "setting": "A background of dense, ornamental swirling clouds",
+    "action": "Descending or pouncing downwards through the mist",
+    "style": "Japanese woodblock print (Ukiyo-e) aesthetic, linocut illustration, intricate rhythmic line patterns, flat color fields, cream-toned washi paper texture",
+    "palette": [
+     "#F2E8D5",
+     "#4A101D",
+     "#D08A92",
+     "#E5B5BC"
+    ],
+    "composition": "Vertical orientation, central subject flowing diagonally from top-left to bottom-center, surrounded by organic swirls that create a sense of movement, balanced negative space at the margins",
+    "typography": "Vertical Japanese kanji characters in the bottom left accompanied by a red hanko seal stamp, and a smaller square seal in the bottom right",
+    "mood": "Powerful, rhythmic, elegant, and serene",
+    "audience": "Collectors of Japandi decor, fans of traditional Asian art, and interior designers looking for sophisticated animal motifs for living rooms or home offices",
+    "hook": "The striking contrast between the fierce, detailed linework of the tiger and the soft, repetitive curves of the pink clouds creates a modern, high-end take on traditional folklore.",
+    "swaps": {
+     "subjects": [
+      "A coiled Japanese dragon",
+      "A pair of leaping Koi fish",
+      "A long-necked white crane",
+      "A multi-tailed Kitsune fox",
+      "A prowling black panther",
+      "A soaring phoenix"
+     ],
+     "settings": [
+      "A dense bamboo forest",
+      "A snow-capped mountain peak",
+      "A cherry blossom grove in full bloom",
+      "A turbulent ocean with crashing waves",
+      "A moonlit night sky",
+      "A minimalist Zen rock garden"
+     ],
+     "props": [
+      "Clutching a golden pearl",
+      "Chasing a floating silk ribbon",
+      "Leaping over a red Torii gate",
+      "Resting on a gnarled pine branch",
+      "Surrounded by falling maple leaves",
+      "Holding a traditional katana in its mouth"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv1afdp7-764jm-mv1ao6lz.jpg",
+   "batch": "mv18xana-s4ebp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:17:22.459Z",
+   "id": "mv1afdp7-764jm",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Celestial Tiger Pounce",
+   "brief": "A powerful tiger with deep burgundy rhythmic stripes pounces downward from the top-left corner against a cream-toned washi paper background. The tiger is surrounded by dense, dusty-rose swirling clouds that mirror the contours of its muscular form. The vertical composition features the tiger's tail curving elegantly into the top-right corner, balanced by vertical kanji and a red square seal in the bottom left. The linework is intricate and sharp, utilizing flat color fields of burgundy and pink to create a sense of movement. Lighting is flat and even, highlighting the rhythmic line patterns across the animal's body.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:41.635Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1afdp7-t8jtn-mv1aiuxy.jpg",
+   "batch": "mv18xana-s4ebp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:17:22.459Z",
+   "id": "mv1afdp7-t8jtn",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Reclining Tiger in Rose Clouds",
+   "brief": "The tiger is depicted in a horizontal, stalking pose, centered lower in the frame than the original reference. Its tail loops twice in the upper half of the composition, framed by a larger number of smaller, tighter rose-colored swirls that fill the negative space. The palette uses #4A101D for the stripes and #F2E8D5 for the tiger's body, set against layered #D08A92 and #E5B5BC clouds. The vertical kanji text is relocated to the top left, while a small red hanko seal sits at the bottom right. The grainy washi paper texture is visible throughout the cream sections.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:43.471Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1afdp7-eclvv-mv1b0v2s.jpg",
+   "batch": "mv18xana-s4ebp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:17:22.459Z",
+   "id": "mv1afdp7-eclvv",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Tiger and Rising Mist",
+   "brief": "The tiger is framed in a tight, vertical profile, moving from the bottom-right upward toward the top-left corner. Its body is partially obscured by large, bold swirls of light-pink and dusty-rose mist that rise vertically from the bottom of the poster. The deep burgundy rhythmic linework of the tiger contrasts sharply against the cream background and soft pink elements. A column of kanji characters is centered on the right side, flanked by two small red seals near the margin. The composition emphasizes upward diagonal movement, leaving open cream-colored space at the top of the frame.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:51.989Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1afdp7-1wq4c-mv1alpj5.jpg",
+   "batch": "mv18xana-s4ebp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:17:22.459Z",
+   "id": "mv1afdp7-1wq4c",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Tiger Cresting the Peak",
+   "brief": "A dramatic close-up view focuses on the tiger’s head and front paws as it peers over a stylized, swirling rose-colored mountain peak. The tiger's gaze is directed forward, with burgundy linework forming intense patterns around the eyes and snout. Stylized cherry blossom petals in light pink are scattered among the dusty-rose cloud swirls for added detail. The composition is centered and symmetrical, with the tiger's tail framing the top of the image in a wide arch. The red hanko seal is placed prominently in the center-bottom, anchoring the rhythmic linocut illustration.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:53.387Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1afdp7-mxkgr-mv1b24pv.jpg",
+   "batch": "mv18xana-s4ebp",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:17:22.459Z",
+   "id": "mv1afdp7-mxkgr",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "The Tiger’s Rhythmic Reflection",
+   "brief": "A circular composition features two tigers depicted in a mirrored 'yin-yang' style, their bodies curving into a perfect ring. One tiger is rendered in deep burgundy stripes on a cream base, while the other uses dusty-rose stripes on a light-pink base, both pouncing through a vortex of rhythmic swirls. The surrounding negative space on the cream washi paper is filled with a rain of tiny, stylized rose-colored cloud patterns. An oversized red hanko seal sits exactly in the center of the tiger circle. Vertical text is placed outside the circle in the four corners, creating a balanced and meditative modern Ukiyo-e layout.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:55.653Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1fd22m-3cp80-mv1fesr0.jpg",
+   "batch": "mv1fd22e-1cp3g",
+   "review": "rejected",
+   "createdAt": "2026-10-09T20:35:32.158Z",
+   "poster": 0,
+   "feedback": "Make it only one coherent tail",
+   "from": "mv1afdp7-t8jtn",
+   "id": "mv1fd22m-3cp80",
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Prowling Tiger in Dusty-Rose Mist",
+   "brief": "A tiger in a low, horizontal prowling stance moves across the lower-center of the vertical frame. Its body is defined by intricate, rhythmic linework in deep burgundy (#4A101D) against a cream base (#F2E8D5). A single, long tail reaches upward in a gentle, continuous curve toward the top-right corner, avoiding any loops. The tiger is surrounded by clusters of stylized, swirling clouds in dusty-rose (#D08A92) and light pink (#E5B5BC), which are more densely packed around the tiger's legs than in the original. Vertical kanji characters are located in the top-left corner, with a single red hanko seal placed at the bottom-right. The background maintains a flat, grainy washi paper texture throughout the cream areas.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:59.484Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xana-s4ebp",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.078Z",
+   "expanded": true
+  },
+  {
+   "id": "mv1fd22e-1cp3g",
+   "options": {
+    "variants": {
+     "count": 1,
+     "creativity": [
+      "subtle"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    },
+    "feedback": "Make it only one coherent tail",
+    "from": "mv1afdp7-t8jtn"
+   },
+   "createdAt": "2026-10-09T20:35:32.150Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

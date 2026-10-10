@@ -198,7 +198,9 @@ export type GenerationSet = {
   posters: ExtractedPoster[]
   /** Finding the posters (one step for all of them). */
   extraction?: Asset
+  /** Mockup sets: one, saying how the blank mockup is painted. */
   batches: Batch[]
+  /** Mockup sets: one, the photo redrawn with blank frames, which the scene is made from. */
   outputs: Output[]
   /** Batch jobs painting its outputs, oldest first. */
   jobs?: PaintJob[]

@@ -1,0 +1,209 @@
+{
+ "id": "mv18xamx-zsi8x",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4384551665,
+  "title": "Japanese Koi Fish Poster, Minimalist Asian Wall Art, Zen Water Painting, Japandi Decor, Tranquil Pond Print, Modern Oriental Artwork",
+  "image": "https://i.etsystatic.com/24426965/r/il/b758a8/7321023357/il_fullxfull.7321023357_5i1o.jpg",
+  "url": "https://www.etsy.com/listing/4384551665/japanese-koi-fish-poster-minimalist",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "koi fish art",
+   "japanese art",
+   "asian wall art",
+   "zen decor",
+   "japandi print",
+   "minimalist art",
+   "koi pond print",
+   "oriental poster",
+   "tranquil decor",
+   "water art print",
+   "luck symbol art",
+   "modern wall art",
+   "japanese print"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.065Z",
+ "updatedAt": "2026-10-09T21:08:41.641Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1991gi.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv1996c1.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "four koi fish print",
+   "analysis": {
+    "summary": "Four vibrant koi fish gracefully circle each other in a minimalist pond, rendered in a traditional Japanese woodblock style.",
+    "subject": "Four koi fish in varying colors: solid red, solid black, orange, and white with red spots.",
+    "setting": "A minimalist pond represented by subtle white ripples on a textured beige background.",
+    "action": "Swimming in a gentle, clockwise circular formation.",
+    "style": "Japanese woodblock print (Ukiyo-e style) with clean outlines, flat color fills, and a distinct washi paper texture.",
+    "palette": [
+     "#D2C4B0",
+     "#C82525",
+     "#1A1A1A",
+     "#E68A5C",
+     "#F5F5F5"
+    ],
+    "composition": "Top-down perspective with a centered subject, generous negative space, and vertical calligraphy/seal placement in the upper right corner.",
+    "typography": "Vertical Japanese calligraphy in black ink and a square red hanko seal in the top right corner.",
+    "mood": "Serene, meditative, and balanced.",
+    "audience": "Interior design enthusiasts looking for Japandi, minimalist, or Zen-inspired decor for bedrooms or home offices.",
+    "hook": "The elegant simplicity of the circular composition combined with the timeless, calming appeal of Japanese Zen aesthetics.",
+    "swaps": {
+     "subjects": [
+      "A pair of long-tailed goldfish",
+      "Two white cranes in flight",
+      "A group of bright green tree frogs",
+      "A solitary red-eared slider turtle",
+      "Three blue dragonflies",
+      "A school of tiny silver minnows"
+     ],
+     "settings": [
+      "A mossy stone water basin",
+      "A moonlit dark lake surface",
+      "A shallow bamboo grove stream",
+      "A raked Zen sand garden",
+      "A rain-dappled forest puddle",
+      "A still pond covered in duckweed"
+     ],
+     "props": [
+      "Floating pink lotus flowers",
+      "Fallen orange maple leaves",
+      "Submerged smooth river stones",
+      "Swirling white cherry blossoms",
+      "A single floating peacock feather",
+      "A small, empty wooden sake cup"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv199e92-da7q6-mv19pe6v.jpg",
+   "batch": "mv18xamx-376fj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:44:43.622Z",
+   "id": "mv199e92-da7q6",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Four Koi Circle",
+   "brief": "A top-down depiction of four koi fish—one solid red, one white with red spots, one orange, and one black—swimming in a tight circle. The composition is centered on a tan #D2C4B0 background with a heavy washi paper texture. The koi are rendered with clean black outlines and flat color fills using #C82525, #1A1A1A, #E68A5C, and #F5F5F5. Fine, white #F5F5F5 lines form concentric water ripples around the fish. Black vertical calligraphy and a square red seal are positioned in the top right corner.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:08:22.866Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199e92-xi19r-mv19ca7d.jpg",
+   "batch": "mv18xamx-376fj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:44:43.622Z",
+   "id": "mv199e92-xi19r",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Three Koi Drift",
+   "brief": "Three koi fish (spotted red/white, solid black, and orange) swim in a loose diagonal line from the bottom-left toward the top-right. This arrangement creates more negative space in the top-left and bottom-right sections of the #D2C4B0 textured background. The art style maintains the flat woodblock aesthetic with sharp outlines. Subtle #F5F5F5 ripples trail behind each fish to suggest forward motion. Calligraphy is placed in the top left, with the red hanko seal shifted to the bottom right for a balanced, asymmetrical layout.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:40.989Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199e92-9mi3x-mv19mgfl.jpg",
+   "batch": "mv18xamx-376fj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:44:43.622Z",
+   "id": "mv199e92-9mi3x",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Parallel Stream",
+   "brief": "Five koi fish are arranged in two vertical columns, swimming upward against the grain of the #D2C4B0 washi paper. The fish use the shop's palette of #C82525, #1A1A1A, and #E68A5C, with white accents in #F5F5F5. The composition is strictly vertical, emphasizing length and flow. Water ripples are rendered as thin, horizontal white lines across the center of the frame. The black calligraphy is placed horizontally at the top, while the red seal sits at the very bottom center.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:08:34.659Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199e92-9u6ab-mv19g08k.jpg",
+   "batch": "mv18xamx-376fj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:44:43.622Z",
+   "id": "mv199e92-9u6ab",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Lotus Shadow Gathering",
+   "brief": "A group of six small koi are clustered in the lower-right quadrant, swimming toward a central point as if feeding. A single, large circular outline representing a lotus leaf in #F5F5F5 occupies the top-left quadrant, partially overlapping the water ripples. The woodblock style remains consistent with flat fills and even lighting. The #D2C4B0 background texture is highly visible in the open spaces. Calligraphy runs vertically down the far-left edge, and the red seal is placed inside the lotus leaf outline.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:08:41.641Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199e92-2koe2-mv19oemk.jpg",
+   "batch": "mv18xamx-376fj",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:44:43.622Z",
+   "id": "mv199e92-2koe2",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "The Infinite Spiral",
+   "brief": "Two large koi, one #1A1A1A black and one #C82525 red, are cropped tightly to form a Yin-Yang-inspired spiral that fills the entire frame. The remaining colors, #E68A5C and #F5F5F5, are used for the intricate scale details and fins that overlap in the center. The perspective is a dramatic close-up, removing most of the #D2C4B0 negative space. The red hanko seal is placed at the exact center of the fish spiral, and no calligraphy is used to maintain a minimalist, bold focus.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:49.558Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xamx-376fj",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.065Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

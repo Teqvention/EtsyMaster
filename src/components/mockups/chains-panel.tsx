@@ -91,7 +91,7 @@ export function ChainsPanel({ scenes }: { scenes: SceneSummary[] | null }) {
       <div className="flex flex-wrap items-center gap-2">
         <p className="mr-auto max-w-2xl text-sm text-muted-foreground">
           A chain is the picture order of one listing: up to {MAX_CHAIN_PHOTOS} mockups — the first is the
-          thumbnail — then one video. Uploads use the <StarIcon className="inline size-3.5 -translate-y-px fill-brand text-brand" /> default.
+          thumbnail — then an optional video: none picked, none uploaded. Uploads use the <StarIcon className="inline size-3.5 -translate-y-px fill-brand text-brand" /> default.
         </p>
         {!loading && (chains.length > 0 || naming) && (
           <Button size="sm" onClick={() => setNaming(true)} disabled={naming}>

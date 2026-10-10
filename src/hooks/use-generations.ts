@@ -90,6 +90,20 @@ export async function retryGeneration(id: string, delivery?: Delivery) {
   replace(await call<GenerationSet>(`/api/generations/${id}`, { method: "POST", body: JSON.stringify({ delivery }) }))
 }
 
+/**
+ * The mockup's blank made again, the way `feedback` asks. One stolen from a
+ * listing photo goes back to its set (painted `delivery`) and this returns at
+ * once; any other is redrawn now, and this returns when it's done.
+ */
+export async function regenerateMockup(sceneId: string, feedback: string, delivery: Delivery) {
+  const result = await call<{ set?: GenerationSet; scene?: { id: string; located: boolean } }>(
+    `/api/mockups/${sceneId}/regenerate`,
+    { method: "POST", body: JSON.stringify({ feedback, delivery }) }
+  )
+  if (result.set) replace(result.set)
+  return result
+}
+
 /** Stops every set that hasn't sent its images off yet; batch jobs already painting carry on. */
 export async function stopWaitingGenerations() {
   const { stopped } = await call<{ stopped: number }>("/api/generations/stop", { method: "POST" })

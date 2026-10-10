@@ -6,6 +6,7 @@ import * as React from "react"
 import {
   ArrowLeftIcon,
   BrushIcon,
+  CheckIcon,
   DownloadIcon,
   EraserIcon,
   FilmIcon,
@@ -17,6 +18,7 @@ import {
   SaveIcon,
   Trash2Icon,
   Undo2Icon,
+  VideoIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -110,7 +112,7 @@ export function MockupEditor({ id }: { id: Promise<string> }) {
   return <Editor key={scene.id} initial={scene} />
 }
 
-type Busy = "save" | "export" | "generate" | "brush" | null
+type Busy = "save" | "video" | "export" | "generate" | "brush" | null
 type Mode = "layers" | "animate"
 
 const sheetKey = (p: PosterLayer) => JSON.stringify([p.quad, p.sheet?.flat])
@@ -158,7 +160,7 @@ function Editor({ initial }: { initial: Scene }) {
   const [mode, setMode] = React.useState<Mode>("layers")
   const clips = scene.clips ?? []
   const [clipId, setClipId] = React.useState<string | null>(
-    () => (initial.clips?.find((c) => c.listing) ?? initial.clips?.[0])?.id ?? null
+    () => (initial.clips?.find((c) => c.video) ?? initial.clips?.[0])?.id ?? null
   )
   const clip = clips.find((c) => c.id === clipId) ?? null
   const [keyIndex, setKeyIndex] = React.useState<number | null>(0)
@@ -545,19 +547,12 @@ function Editor({ initial }: { initial: Scene }) {
 
   function deleteClip(id: string) {
     const i = clips.findIndex((c) => c.id === id)
-    commitClips((cs) => {
-      const rest = cs.filter((c) => c.id !== id)
-      // Etsy shows one video; keep one when the listing clip goes.
-      if (cs.some((c) => c.id === id && c.listing) && rest.length) rest[0] = { ...rest[0], listing: true }
-      return rest
-    })
+    commitClips((cs) => cs.filter((c) => c.id !== id))
     const next = clips.filter((c) => c.id !== id)[Math.min(i, clips.length - 2)]
     if (next) selectClip(next.id)
     else setClipId(null)
   }
 
-  const setListing = (id: string, listing: boolean) =>
-    commitClips((cs) => cs.map((c) => (c.id === id ? { ...c, listing } : listing ? { ...c, listing: false } : c)))
 
   const patchKeys = (fn: (keys: Keyframe[]) => Keyframe[], merge?: string) =>
     clip && commitClips((cs) => cs.map((c) => (c.id === clip.id ? { ...c, keys: fn(c.keys) } : c)), merge)
@@ -628,10 +623,9 @@ function Editor({ initial }: { initial: Scene }) {
   }
 
   // ── Save / export ───────────────────────────────────────────────────────
-  async function save() {
+  async function save(s = sceneRef.current, as: "save" | "video" = "save") {
     if (busy) return
-    setBusy("save")
-    const s = sceneRef.current
+    setBusy(as)
     try {
       const srcs = new Set<string>()
       for (const l of s.layers) {
@@ -663,13 +657,24 @@ function Editor({ initial }: { initial: Scene }) {
       history.replace(s, out)
       setSaved(out)
       setUnsavedPixels(false)
-      toast.success("Saved")
+      toast.success(as === "video" ? "Saved as a video — chains can pick it now" : "Saved")
     } catch (e) {
       toast.error(`Save failed: ${(e as Error).message}`)
     } finally {
       setBusy(null)
       setProgress(null)
     }
+  }
+
+  /** Makes the clip one of the videos a chain can pick, and saves the mockup. */
+  function saveAsVideo() {
+    if (!clip || busy) return
+    const s = sceneRef.current
+    const next = clip.video
+      ? s
+      : { ...s, clips: (s.clips ?? []).map((c) => (c.id === clip.id ? { ...c, video: true } : c)) }
+    history.commit(next)
+    save(next, "video")
   }
 
   async function exportJpeg() {
@@ -876,15 +881,36 @@ function Editor({ initial }: { initial: Scene }) {
               {exportName(scene)}
             </Button>
           ) : (
-            <Button variant="outline" size="sm" onClick={exportVideo} disabled={!poster || !clip || !!busy}>
-              {busy === "export" ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
-              {clip ? clipFileName(scene, clip) : "Export MP4"}
-              {busy === "export" && progress !== null && (
-                <span className="text-muted-foreground tabular-nums">{progress} %</span>
-              )}
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={exportVideo} disabled={!poster || !clip || !!busy}>
+                {busy === "export" ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
+                {clip ? clipFileName(scene, clip) : "Export MP4"}
+                {busy === "export" && progress !== null && (
+                  <span className="text-muted-foreground tabular-nums">{progress} %</span>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={saveAsVideo}
+                disabled={!clip || !!busy || (clip.video && !dirty)}
+                title={clip?.video ? "Chains can pick this animation as their video" : "Save this animation as a video chains can pick"}
+              >
+                {busy === "video" ? (
+                  <LoaderCircleIcon className="animate-spin" />
+                ) : clip?.video && !dirty ? (
+                  <CheckIcon />
+                ) : (
+                  <VideoIcon />
+                )}
+                {clip?.video && !dirty ? "Saved as video" : "Save as video"}
+                {busy === "video" && progress !== null && (
+                  <span className="text-muted-foreground tabular-nums">{progress} %</span>
+                )}
+              </Button>
+            </>
           )}
-          <Button size="sm" onClick={save} disabled={!dirty || !!busy}>
+          <Button size="sm" onClick={() => save()} disabled={!dirty || !!busy}>
             {busy === "save" ? <LoaderCircleIcon className="animate-spin" /> : <SaveIcon />}
             Save
             {busy === "save" && progress !== null && <span className="tabular-nums opacity-70">{progress} %</span>}
@@ -964,7 +990,7 @@ function Editor({ initial }: { initial: Scene }) {
               clip={clip}
               keyIndex={keyIndex}
               onClip={(p, merge) => clip && patchClip(clip.id, p, merge)}
-              onListing={(on) => clip && setListing(clip.id, on)}
+              onVideo={(on) => clip && patchClip(clip.id, { video: on })}
               onKey={patchKey}
             />
           ) : (

@@ -1,0 +1,86 @@
+{
+ "id": "mv1g8jp3-sujik",
+ "name": "Texture Highsaturation",
+ "images": [
+  {
+   "file": "img-mv1g9f33lawu.jpg",
+   "width": 1374,
+   "height": 2048,
+   "addedAt": "2026-10-09T21:00:42.015Z",
+   "from": "mv10usxa-on2ze/out-medium-mv12qjbe.jpg"
+  },
+  {
+   "file": "img-mv1g9f34jb5l.jpg",
+   "width": 1374,
+   "height": 2048,
+   "addedAt": "2026-10-09T21:00:42.015Z",
+   "from": "mv10usxa-on2ze/out-low-mv13iwug.jpg"
+  }
+ ],
+ "guide": {
+  "summary": "A vibrant, high-texture impasto style characterized by thick, visible oil paint strokes and high-saturation colors. It utilizes a flat-lay perspective and strong, direct lighting to create a lush, tactile, and sunny atmosphere.",
+  "medium": "Digital oil painting with a heavy impasto effect.",
+  "technique": "Alla prima style using thick, visible brushstrokes that follow the contours of the objects. Shapes are defined by bold blocks of color rather than outlines, with heavy paint build-up in highlight areas.",
+  "palette": [
+   {
+    "hex": "#EF4444",
+    "role": "dominant fruit flesh and deep shadows"
+   },
+   {
+    "hex": "#FACC15",
+    "role": "bright fruit skins and honeyed accents"
+   },
+   {
+    "hex": "#3B82F6",
+    "role": "background patterns and cool cast shadows"
+   },
+   {
+    "hex": "#F9A8D4",
+    "role": "soft background wash and floral accents"
+   },
+   {
+    "hex": "#FFFFFF",
+    "role": "thick impasto highlights and specular glints"
+   },
+   {
+    "hex": "#166534",
+    "role": "leafy greens and secondary shadows"
+   }
+  ],
+  "lighting": "Strong, direct overhead or high-angle sunlight creating high-contrast, brilliant highlights and deep, saturated cast shadows.",
+  "composition": "Top-down flat lay or high-angle bird's-eye view. The subject is centered and fills the majority of the frame, often resting on a patterned or decorative surface.",
+  "detail": "High tactile detail achieved through paint texture rather than fine lines. Focus on the physical 'juiciness' and surface sheen of the subjects.",
+  "typography": null,
+  "mood": "Vibrant, sunny, and indulgent with a Mediterranean summer aesthetic.",
+  "motifs": [
+   "Gingham or checkered fabric patterns",
+   "Scalloped plate edges with gold or dotted trim",
+   "Small scattered blossoms with yellow centers",
+   "Thick, raised white paint dabs for highlights",
+   "Saturated blue or violet cast shadows"
+  ],
+  "do": [
+   "Use thick, chunky brushstrokes that are clearly visible.",
+   "Maintain high color saturation across the entire image.",
+   "Render shadows using deep blues, purples, or crimsons instead of black.",
+   "Center the subject in a flat-lay perspective.",
+   "Apply pure white paint dabs for specular highlights on glossy surfaces."
+  ],
+  "dont": [
+   "Do not use smooth, airbrushed gradients.",
+   "Do not use thin, black ink outlines.",
+   "Do not use muted, desaturated, or earthy tones.",
+   "Do not include photographic depth of field or blurred backgrounds.",
+   "Do not leave any areas of the canvas flat or without visible texture."
+  ],
+  "prompt": "Digital oil painting in a heavy impasto style with thick, visible brushstrokes and high tactile texture. Use a vibrant, high-saturation palette featuring #EF4444, #FACC15, and #3B82F6. The composition is a top-down flat lay with the subject centered. Apply strong, direct sunlight from a high angle, creating sharp, deep shadows in shades of blue or dark crimson. Highlights must be rendered as thick, raised dabs of pure white paint. Avoid smooth gradients or thin lines; define all shapes through bold blocks of color and heavy paint application. Incorporate a patterned background like blue gingham or a scalloped-edge pink plate. The overall mood is sunny, Mediterranean, and indulgent."
+ },
+ "guideStatus": "idle",
+ "createdAt": "2026-10-09T21:00:01.335Z",
+ "updatedAt": "2026-10-09T21:01:15.722Z",
+ "guideImages": [
+  "img-mv1g9f33lawu.jpg",
+  "img-mv1g9f34jb5l.jpg"
+ ],
+ "guideEdited": false
+}

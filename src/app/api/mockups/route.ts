@@ -1,9 +1,15 @@
+import { listSets } from "@/lib/generation/storage"
 import { respond } from "@/lib/mockups/respond"
 import { createScene, listScenes } from "@/lib/mockups/storage"
 
-// All scenes, in listing order.
+// All scenes, in listing order. Scenes stolen before they kept their shop
+// take it from the generation set that made them.
 export async function GET() {
-  return respond(listScenes)
+  return respond(async () => {
+    const [scenes, sets] = await Promise.all([listScenes(), listSets()])
+    const shopOf = new Map(sets.flatMap((s) => (s.sceneId && s.source.shop ? [[s.sceneId, s.source.shop]] : [])))
+    return scenes.map((s) => (s.shop || !shopOf.has(s.id) ? s : { ...s, shop: shopOf.get(s.id) }))
+  })
 }
 
 // New scene from an uploaded room photo (form fields `name`, `image`,

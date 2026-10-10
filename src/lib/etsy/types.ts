@@ -149,6 +149,15 @@ export type ListingPage = {
   nextOffset: number | null
 }
 
+/** One page of a shop's active listings, as ids only. */
+export type ListingIdPage = {
+  ids: number[]
+  /** Active listings Etsy reports. */
+  total: number
+  /** Offset for the next page, or null at the end. */
+  nextOffset: number | null
+}
+
 export type Category = { id: number; name: string }
 
 // --- Shop analysis ---

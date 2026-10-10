@@ -3,7 +3,7 @@ import { hostname } from "node:os"
 
 import type postgres from "postgres"
 
-import { LOCK_SILENCE, locks, ready, sql } from "./sql"
+import { LOCK_SILENCE, ready, reserve, sql } from "./sql"
 
 // Several dev servers share one database, but some work must happen once:
 // the upload worker, Artikel's bulk actions, the daily sync, the copywriter.
@@ -68,7 +68,7 @@ async function elect() {
   let connection: postgres.ReservedSql | null = null
   try {
     await ready()
-    connection = await locks.reserve()
+    connection = await reserve()
     // So the database lets go of the lock soon after this laptop sleeps or
     // drops off (TCP keepalives don't reach through Dokploy's proxy):
     // `isLeader` asks over the connection every few seconds while it lives.

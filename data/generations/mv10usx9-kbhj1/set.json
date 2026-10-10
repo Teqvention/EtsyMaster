@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.869Z",
- "updatedAt": "2026-10-09T15:17:12.203Z",
+ "updatedAt": "2026-10-09T20:58:28.789Z",
  "original": {
   "status": "done",
   "file": "source-mv10uvdh.jpg",
@@ -105,12 +105,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Tea Time Treat Poster",
    "brief": "A steaming teacup with a floral pattern and a slice of lemon-drizzle cake on a checkered tablecloth. The scene is set by a window showing the silhouette of a potted plant. A red circular emblem in the top-left corner contains the hand-carved text 'TEA TIME TREAT' in all-caps red lettering. Use the original palette of cream, teal, burnt red, and dark navy for outlines. The rendering must feature a distressed linocut texture with grainy ink coverage and slight registration shifts between the color blocks.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:22.529Z"
   },
   {
    "status": "done",
@@ -120,12 +121,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Stovetop Moka Morning",
    "brief": "A vintage moka pot sits on a gas stove burner with thick, stylized steam rising in curls toward a rectangular text box at the top. The background features a simple grid pattern suggesting kitchen tiles. The composition is a centered, medium-shot view with a new palette of sage green, terracotta, and mustard yellow on a cream background. The style remains a rough woodblock print with heavy, uneven outlines and flat color application. The text inside the top frame reads 'RISE AND GRIND' in a chunky, hand-cut serif font.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:27.398Z"
   },
   {
    "status": "done",
@@ -135,12 +137,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Savor the Slow Breakfast",
    "brief": "A vibrant top-down flat-lay illustration of a breakfast spread including a French press, a bowl of halved strawberries, and a linen napkin. The rendering style moves to a grainy risograph aesthetic with overlapping translucent inks and fine halftone dots. The palette uses electric cobalt blue, bright coral, and lemon yellow on a pale peach background. There is no border or text emblem, focusing instead on the graphic interplay of geometric shapes and textures. Lighting is bright and even, creating a modern and energetic morning atmosphere.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:28.789Z"
   }
  ],
  "layout": "single",

@@ -1,0 +1,209 @@
+{
+ "id": "mv18xan7-2mlh2",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4384612089,
+  "title": "Japanese Lotus Art Print, Minimalist Zen Wall Art, Vintage Botanical Poster, Asian Inspired Home Decor, Serene Nature Illustration",
+  "image": "https://i.etsystatic.com/24426965/r/il/4d3c64/7321396803/il_fullxfull.7321396803_1vst.jpg",
+  "url": "https://www.etsy.com/listing/4384612089/japanese-lotus-art-print-minimalist-zen",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "japanese art",
+   "zen print",
+   "japandi wall art",
+   "minimalist decor",
+   "nature poster",
+   "tree artwork",
+   "calm wall art",
+   "oriental print",
+   "water reflection art",
+   "botanical art",
+   "serene decor",
+   "modern poster",
+   "tranquil artwork"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.075Z",
+ "updatedAt": "2026-10-09T21:13:25.766Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv19xd4z.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv19xhfs.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "Japanese lotus illustration",
+   "analysis": {
+    "summary": "A minimalist Japanese-style illustration of stylized teal and green lotus pods cascading vertically on delicate threads against a textured cream background.",
+    "subject": "Stylized lotus pods or pads",
+    "setting": "A minimalist void suggesting a serene pond or hanging garden",
+    "action": "Cascading downwards in a rhythmic, vertical arrangement",
+    "style": "Modern Japanese woodblock aesthetic, intricate labyrinthine linework within organic circles, flat color fills with gold-toned outlines, textured washi paper background",
+    "palette": [
+     "#f2efe8",
+     "#006d77",
+     "#2d6a4f",
+     "#005f73",
+     "#ae2012"
+    ],
+    "composition": "Vertical orientation with heavy negative space, asymmetrical balance, subjects clustered at the top and trailing off towards the bottom left, framed by a light wood border.",
+    "typography": "Hand-painted black Japanese calligraphy and red hanko seal stamps in the corners.",
+    "mood": "Serene, meditative, sophisticated, and organic.",
+    "audience": "Interior designers and homeowners looking for Zen-inspired decor for bedrooms, yoga studios, or minimalist living spaces.",
+    "hook": "The captivating contrast between the complex, maze-like internal patterns of the circles and the extreme simplicity of the overall composition creates a 'visual breathing room'.",
+    "swaps": {
+     "subjects": [
+      "Ginkgo biloba leaves",
+      "Stylized Koi fish",
+      "Cherry blossom clusters",
+      "Abstracted Bonsai silhouettes",
+      "Red-crowned cranes",
+      "Geometric bamboo stalks"
+     ],
+     "settings": [
+      "Misty mountain peak",
+      "Zen rock garden",
+      "Tea house window frame",
+      "Moonlit pond surface",
+      "Bamboo forest clearing",
+      "Shoji screen backdrop"
+     ],
+     "props": [
+      "Ceramic tea bowl",
+      "Smoking incense burner",
+      "Stone garden lantern",
+      "Silk folding fan",
+      "Calligraphy brush and ink stone",
+      "Zabuton meditation cushion"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv19xnnt-g7vzn-mv1a2012.jpg",
+   "batch": "mv18xan7-6lcto",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:03:35.560Z",
+   "id": "mv19xnnt-g7vzn",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Cascading Lotus Study",
+   "brief": "A vertical arrangement of teal and green labyrinth-patterned circles cascading from the top edge of a cream washi paper background. The pods are connected by thin black vertical lines, mirroring the original layout with tiny variations in the maze-like internal linework. Gold-toned outlines define the edges of each organic circle. Red hanko seals appear in the lower left and right corners to balance the composition. The lighting is flat and even, highlighting the textured paper.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:13:11.701Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19xnnt-2aydk-mv1a8lfp.jpg",
+   "batch": "mv18xan7-6lcto",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:03:35.560Z",
+   "id": "mv19xnnt-2aydk",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Suspended Emerald Pods",
+   "brief": "A series of textured teal and green pods suspended by delicate threads, clustered toward the top-right corner. The arrangement follows a gentle diagonal curve towards the bottom-center, featuring a slightly higher count of pods than the reference. The pods vary in size, each filled with intricate, maze-like patterns and trimmed in gold. The cream background remains prominent, providing 'visual breathing room' around the new diagonal path. Black calligraphy is placed vertically in the upper left corner.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:13:14.448Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19xnnt-8zrrq-mv1af2qv.jpg",
+   "batch": "mv18xan7-6lcto",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:03:35.560Z",
+   "id": "mv19xnnt-8zrrq",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Horizontal Lotus Drift",
+   "brief": "Stylized lotus pods are arranged in a horizontal band across the middle third of the frame, drifting from left to right. The teal and green circles hang at varying heights from a single horizontal thread that spans the width of the cream textured paper. The palette uses deep teal, forest green, and dark cyan with gold-toned outlines. Intricate, labyrinthine linework fills each sphere. Red calligraphy stamps are positioned at the far bottom right to ground the horizontal movement.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:13:18.773Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19xnnt-6z3i8-mv1a14c4.jpg",
+   "batch": "mv18xan7-6lcto",
+   "review": "approved",
+   "createdAt": "2026-10-09T18:03:35.560Z",
+   "id": "mv19xnnt-6z3i8",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Ascending Teal Blooms",
+   "brief": "A close-up, bottom-heavy composition where large teal and green pods appear to rise from the lower margin. Several pods are cropped by the side edges of the frame to create a sense of scale and proximity. The maze-like internal patterns are rendered with high detail against the flat cream washi texture. Small, scattered circular seeds in the same style float between the larger pods. The red hanko seal is placed near the top right, contrasting with the dense grouping at the bottom.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:13:20.336Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv19xnnt-kur8d-mv1a4m05.jpg",
+   "batch": "mv18xan7-6lcto",
+   "review": "approved",
+   "createdAt": "2026-10-09T18:03:35.560Z",
+   "id": "mv19xnnt-kur8d",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Lotus Ripple Path",
+   "brief": "The teal and green pods are arranged in a wide, organic spiral that mimics the shape of a ripple on water, centered in the frame. Negative space entirely surrounds the spiral, emphasizing the cream paper texture. Each pod features the signature labyrinthine internal patterns and gold-toned outlines. The threads connect the pods in a continuous, curving line rather than vertical drops. A single red hanko stamp sits prominently in the dead center of the spiral for a bold, meditative focal point.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:13:25.766Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xan7-6lcto",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.075Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

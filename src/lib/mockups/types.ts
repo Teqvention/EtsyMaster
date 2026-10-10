@@ -85,7 +85,10 @@ export type Scene = {
   order: number
   /** Set of mockups it belongs to; matched case-insensitively. */
   category?: string
+  /** Where its picture came from, e.g. the file a room was drawn in. */
   source?: string
+  /** The Etsy shop it was stolen from, by name. */
+  shop?: string
   width: number
   height: number
   layers: Layer[]
@@ -145,8 +148,8 @@ export type Motion = {
 export type Clip = Motion & {
   id: string
   name: string
-  /** Rendered with the listing export. */
-  listing: boolean
+  /** Saved as a video ("Save as video"): only these can be a chain's listing video. */
+  video: boolean
   /** Hover video in the scene folder, named after what it shows. */
   preview?: string
 }
@@ -158,13 +161,13 @@ export type Template = Motion & {
   builtIn?: boolean
 }
 
-export type ClipSummary = Pick<Clip, "id" | "name" | "duration" | "listing"> & {
+export type ClipSummary = Pick<Clip, "id" | "name" | "duration" | "video"> & {
   preview: string | null
 }
 
 export type SceneSummary = Pick<
   Scene,
-  "id" | "name" | "order" | "width" | "height" | "category"
+  "id" | "name" | "order" | "width" | "height" | "category" | "shop"
 > & { thumb: string | null; clips: ClipSummary[] }
 
 export type CategorySummary = { name: string; count: number }

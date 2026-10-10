@@ -27,9 +27,9 @@ import { STAGES, type JobItem, type UploadJob } from "./types"
 // doing the background work (see db/workers.ts); the others' passes do
 // nothing, and a new job waits at most a tick for the leader's next one. Each pass starts
 // what may start: items in line or done waiting, oldest job first and in each
-// job's upload order, while the resource their stage needs is free: two
-// print file makers, two mockup renders, one Gelato create per store, one
-// Etsy stage per account. A Gelato create also waits for the account's
+// job's upload order, while the resource their stage needs is free: three
+// print file makers, three mockup renders, one Gelato create per store, two
+// Etsy stages per account. A Gelato create also waits for the account's
 // earlier posters in its job, so listings appear in the planned order.
 //
 // A stage that throws is tried again after a growing pause, five tries in
@@ -45,7 +45,7 @@ const MAX_BACKOFF = 30 * 60 * 1000
 const QUOTA_WAIT = 15 * 60 * 1000
 
 /** How many stages may hold a resource at once, by its kind (before the colon). */
-const LIMITS: Record<string, number> = { copy: 8, cpu: 2, render: 2, gelato: 1, etsy: 1 }
+const LIMITS: Record<string, number> = { copy: 8, cpu: 3, render: 3, gelato: 1, etsy: 2 }
 
 type Worker = {
   started: boolean
@@ -141,7 +141,8 @@ function resourceOf(item: JobItem, job: UploadJob, account: Account) {
     case "media":
       return "render"
     case "gelato":
-      return job.dryRun ? null : `gelato:${account.gelato?.storeId ?? account.id}`
+      // Only the create holds the store; watching Gelato publish a product made holds nothing.
+      return job.dryRun || item.gelatoProductId ? null : `gelato:${account.gelato?.storeId ?? account.id}`
     default:
       return job.dryRun ? null : `etsy:${account.id}`
   }

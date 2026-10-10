@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.862Z",
- "updatedAt": "2026-10-09T15:20:06.519Z",
+ "updatedAt": "2026-10-09T20:55:22.375Z",
  "original": {
   "status": "done",
   "file": "source-mv10ut57.jpg",
@@ -107,12 +107,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.862Z",
    "title": "The Honking Goose Sibling",
    "brief": "A central illustration of a white and orange goose captured mid-honk with its wings spread wide. Use heavy, textured oil pastel strokes in Cobalt Blue for the outlines and Bright Orange for the body feathers. A row of six colorful, hand-drawn arch shapes in Pink, Yellow, and Green forms a border across the top of the frame. The background is a flat, warm Cream paper texture with visible grain. The lighting is flat and graphic, emphasizing the bold, messy crayon application.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:17.338Z"
   },
   {
    "status": "done",
@@ -122,12 +123,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.862Z",
    "title": "Quirky Giraffe Reach",
    "brief": "A whimsical, long-necked giraffe reaches upward toward a single, oversized flower in the top corner. The giraffe is rendered in Mustard Yellow with Terracotta spots and thick, expressive Deep Teal outlines. The background is a muted Sage Green paper with a rough, toothy texture. A large, scribbly yellow sun sits in the upper left, while the flower has a thick, bright Pink stem. The strokes are deliberate and chunky, mimicking a child's energetic drawing style.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:20.239Z"
   },
   {
    "status": "done",
@@ -137,12 +139,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.862Z",
    "title": "Maximalist Breakfast Table",
    "brief": "A top-down, flattened perspective of a breakfast table featuring a large, lumpy Electric Blue teapot and a plate of vibrant Tomato Red strawberries. The table is covered in a Mint Green cloth with a simple Lilac checkerboard pattern. Everything is painted in thick, opaque gouache with wiggly, imperfect edges and no black outlines. Small, hand-painted crumbs and spilled tea droplets are scattered across the surface to add a sense of messy playfulness. The composition is a busy, edge-to-edge maximalist display of bold color and flat shape.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:55:22.375Z"
   }
  ],
  "layout": "single",

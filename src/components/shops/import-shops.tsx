@@ -14,9 +14,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { analyseShops } from "@/hooks/use-shop-analysis"
+import { analyseShops, hasAllListings } from "@/hooks/use-shop-analysis"
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
-import { recordShopVisit } from "@/hooks/use-shop-history"
+import { getShopVisit, recordShopVisit } from "@/hooks/use-shop-history"
 import { formatNumber } from "@/lib/etsy/format"
 import type { ListingShop } from "@/lib/etsy/types"
 
@@ -135,12 +135,25 @@ export function ImportShops() {
   )
 }
 
-/** Fetches every listing of the shops, then says how it went. */
+/**
+ * Fetches the listings the shops don't have yet (shops that have them all are
+ * left out), then says how it went.
+ */
 export function getAllListings(shops: ListingShop[]) {
-  toast(`Getting all listings of ${formatNumber(shops.length)} ${shops.length === 1 ? "shop" : "shops"}`, {
-    description: "Two at a time, over both analysis accounts.",
+  const missing = shops.filter((s) => !hasAllListings(getShopVisit(s.id)?.analysis, s.activeListings))
+  const complete = shops.length - missing.length
+  if (missing.length === 0) {
+    toast(
+      shops.length === 1
+        ? `${shops[0].name} has all its listings already`
+        : `All ${formatNumber(shops.length)} shops have all their listings already`
+    )
+    return
+  }
+  toast(`Getting the missing listings of ${formatNumber(missing.length)} ${missing.length === 1 ? "shop" : "shops"}`, {
+    description: `${complete ? `${formatNumber(complete)} already ${complete === 1 ? "has" : "have"} all of theirs. ` : ""}Only listings not held yet are fetched, two shops at a time.`,
   })
-  analyseShops(shops).then((batch) => {
+  analyseShops(missing).then((batch) => {
     // Added to a batch already under way: that one reports.
     if (!batch) return
     const ok = batch.done - batch.failed.length

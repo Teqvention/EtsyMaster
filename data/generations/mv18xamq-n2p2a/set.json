@@ -1,0 +1,209 @@
+{
+ "id": "mv18xamq-n2p2a",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 1078055878,
+  "title": "Japanese Cat Poster, Japanese Cat Art Print, Black Cat, Animal Wall Art Decor, Animal Art Print, Cat Lovers Gift, Oriental Art, A1/A2/A3/A4",
+  "image": "https://i.etsystatic.com/24426965/r/il/b1ad54/3404799019/il_fullxfull.3404799019_45zl.jpg",
+  "url": "https://www.etsy.com/listing/1078055878/japanese-cat-poster-japanese-cat-art",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "cat",
+   "cat poster",
+   "japanese art",
+   "japanese print",
+   "cat print",
+   "cat lovers",
+   "cat present",
+   "cat gift",
+   "minimalist art",
+   "minimalist animal",
+   "minimal art",
+   "minimalist poster",
+   "gift idea"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.058Z",
+ "updatedAt": "2026-10-09T21:07:26.773Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv18xbj0.jpg",
+  "width": 2400,
+  "height": 2400
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv18xkiz.jpg",
+   "width": 803,
+   "height": 1071,
+   "label": "japanese black cat print",
+   "analysis": {
+    "summary": "A stoic, fluffy black cat sits against a textured gold background under elegant Japanese calligraphy.",
+    "subject": "A round, fluffy black cat with wide yellow eyes",
+    "setting": "A textured, olive-gold background divided into faint panels, reminiscent of traditional Japanese screens.",
+    "action": "Sitting perfectly still and staring directly forward with a blank, intense expression.",
+    "style": "Japanese woodblock print (Sosaku-hanga style) featuring bold black silhouettes, fine line work for whiskers, and a heavy washi paper texture.",
+    "palette": [
+     "#0a0a0a",
+     "#9a8c54",
+     "#e8e4d1",
+     "#fef9c3",
+     "#3d3d3d"
+    ],
+    "composition": "Symmetrical and centered; the cat occupies the lower two-thirds, while calligraphy balances the top; a rough, hand-drawn border frames the inner image.",
+    "typography": "Hand-brushed Japanese kanji characters in a vertical, calligraphic style.",
+    "mood": "Serene, slightly humorous, and culturally sophisticated.",
+    "audience": "Modern homeowners looking for 'Japandi' decor, cat owners, and collectors of minimalist animal art.",
+    "hook": "The 'chonky' cat's intense, slightly derpy stare creates a charming contrast against the high-brow, traditional Japanese aesthetic.",
+    "swaps": {
+     "subjects": [
+      "A round Shiba Inu",
+      "A fluffy Red Panda",
+      "A portly Tanuki",
+      "A wide-eyed Snowy Owl",
+      "A grumpy Calico cat",
+      "A plump Rabbit"
+     ],
+     "settings": [
+      "A Zen rock garden",
+      "A minimalist Tatami room",
+      "Beneath a weeping cherry blossom tree",
+      "A misty bamboo forest",
+      "A traditional tea house porch",
+      "A snowy mountain peak"
+     ],
+     "props": [
+      "A single red camellia flower",
+      "A steaming bowl of ramen",
+      "A folded paper fan",
+      "A small, gnarled bonsai tree",
+      "A ceramic sake bottle",
+      "A floating paper lantern"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv18xqin-b8qdw-mv19a09x.jpg",
+   "batch": "mv18xamq-zkqm7",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:39.647Z",
+   "id": "mv18xqin-b8qdw",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Stoic Guardian Cat",
+   "brief": "A direct redrawing of the central, fluffy black cat sitting forward with a symmetrical silhouette and wide, pale yellow eyes (#fef9c3). The subject remains centered against a textured gold background (#9a8c54) that features faint, grid-like creases. Hand-brushed charcoal kanji (#3d3d3d) are positioned in two vertical columns at the top. The entire image is framed by a rough, hand-drawn black border (#0a0a0a) on cream-colored washi paper (#e8e4d1). The lighting is flat, emphasizing the bold woodblock print texture.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:01.698Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xqin-voqfl-mv196ftc.jpg",
+   "batch": "mv18xamq-zkqm7",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:39.647Z",
+   "id": "mv18xqin-voqfl",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Duo of Inky Felines",
+   "brief": "This version features two slightly smaller, identical fluffy black cats sitting side-by-side in the lower third of the frame. The calligraphy is shifted into a single vertical column placed centrally between the cats' heads. The gold background and charcoal border remain consistent with the original style. The cats' yellow eyes (#fef9c3) are the only source of bright color against the deep black silhouettes (#0a0a0a). Texture is heavily emphasized with visible wood grain and fibrous paper effects.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:17.706Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xqin-qsaha-mv193vze.jpg",
+   "batch": "mv18xamq-zkqm7",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:39.647Z",
+   "id": "mv18xqin-qsaha",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Feline Gaze Landscape",
+   "brief": "Recompose the layout into a horizontal landscape orientation. The stoic black cat is placed on the far-right side of the frame, facing inward toward the left. Three short columns of vertical calligraphy occupy the left side of the composition, balancing the cat’s weight. The textured gold field (#9a8c54) fills the negative space, framed by a thick, irregular charcoal border (#3d3d3d). The rendering uses the same Sosaku-hanga style with sharp, high-contrast edges between the black fur and gold background.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:20.261Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xqin-iw9jj-mv19auqs.jpg",
+   "batch": "mv18xamq-zkqm7",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:35:39.647Z",
+   "id": "mv18xqin-iw9jj",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Minimalist Golden Void",
+   "brief": "The cat is scaled down significantly and placed at the very bottom center of the composition, looking upward. This leaves the top four-fifths of the frame as an expansive, textured gold field (#9a8c54). Large, bold charcoal calligraphy characters (#3d3d3d) are centered directly above the cat, filling the empty space. The palette is strictly limited to inky black, gold, and cream, with the cat's pale yellow eyes (#fef9c3) acting as the focal point. The rough-edged border tightly hugs the golden interior.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:25.379Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv18xqin-bdm3g-mv19dp44.jpg",
+   "batch": "mv18xamq-zkqm7",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:35:39.647Z",
+   "id": "mv18xqin-bdm3g",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Vertical Stacked Silhouette",
+   "brief": "A bold vertical arrangement featuring three fluffy black cats stacked one above the other in a 'totem' style. The cats vary slightly in size from large at the bottom to small at the top, all facing forward with intense stares. Single kanji characters are placed to the left and right of each cat in the stack, creating a rhythmic pattern against the gold background (#9a8c54). The lighting is flat and graphic, emphasizing the 'chonky' silhouettes and fine white whisker lines. The washi paper texture (#e8e4d1) is prominent in the unprinted margins.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:07:26.772Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xamq-zkqm7",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.058Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

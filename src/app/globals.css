@@ -62,6 +62,47 @@
       transform: translateX(100%);
     }
   }
+
+  /* Liking: the heart dips, overshoots and settles, while a ring and a few
+     sparks spread out from it and fade. */
+  --animate-like-pop: like-pop 480ms cubic-bezier(0.23, 1, 0.32, 1);
+  --animate-like-ring: like-ring 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  --animate-like-spark: like-spark 560ms cubic-bezier(0.23, 1, 0.32, 1) 60ms both;
+  @keyframes like-pop {
+    0% {
+      transform: scale(1);
+    }
+    18% {
+      transform: scale(0.72);
+    }
+    55% {
+      transform: scale(1.22);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes like-ring {
+    from {
+      transform: scale(0.35);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+  /* Each spark sets its own `--angle`. */
+  @keyframes like-spark {
+    from {
+      transform: rotate(var(--angle)) translateY(-6px) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: rotate(var(--angle)) translateY(-14px) scale(0);
+      opacity: 0;
+    }
+  }
 }
 
 :root {

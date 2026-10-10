@@ -8,13 +8,13 @@ import type { ShopAnalysisSummary, ShopHistory as History, ShopVisit } from "@/l
 export type { ShopAnalysisSummary, ShopVisit } from "@/lib/shops/types"
 
 // Shops looked up on the Shops page. Each entry holds the shop as last seen,
-// a summary of its last analysis and the labels it's filed under, so the list
-// renders without API calls and reopening a shop can pick up the scope it was
-// analysed with. Kept on the server (outlives restarts and browsers);
-// localStorage holds a copy so the list shows before the server answers.
+// a summary of its last analysis, the labels it's filed under and whether it's
+// liked, so the list renders without API calls and reopening a shop can pick up
+// the scope it was analysed with. Kept on the server (outlives restarts and
+// browsers); localStorage holds a copy so the list shows before the server answers.
 
 const STORAGE_KEY = "etsy-research:shops"
-/** Unlabelled shops kept; labelled ones are never dropped. */
+/** Shops kept that are neither labelled nor liked; those are never dropped. */
 const MAX_SHOPS = 2000
 const EMPTY: History = {}
 
@@ -36,10 +36,10 @@ function read(): History {
 }
 
 function write(next: History) {
-  // Oldest views fall off once the list is full, unless filed under a label.
+  // Oldest views fall off once the list is full, unless labelled or liked.
   const visits = Object.values(next).sort((a, b) => b.viewedAt.localeCompare(a.viewedAt))
-  const labelled = visits.filter((v) => v.labels?.length)
-  const kept = [...labelled, ...visits.filter((v) => !v.labels?.length).slice(0, MAX_SHOPS)]
+  const keep = (v: ShopVisit) => !!v.labels?.length || !!v.likedAt
+  const kept = [...visits.filter(keep), ...visits.filter((v) => !keep(v)).slice(0, MAX_SHOPS)]
   history = Object.fromEntries(kept.map((v) => [v.shop.id, v]))
   raw = JSON.stringify(history)
   localStorage.setItem(STORAGE_KEY, raw)
@@ -183,6 +183,24 @@ export function setShopLabel(shops: ListingShop[], label: string, on: boolean) {
     next[shop.id] = { ...visit, labels: on ? [...others, spelling] : others }
   }
   write(next)
+}
+
+// --- Likes ---
+
+export function useIsShopLiked(shopId: number) {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => !!read()[shopId]?.likedAt,
+    () => false
+  )
+}
+
+/** Likes the shop, or takes the like back. */
+export function toggleShopLike(shop: ListingShop) {
+  const current = read()
+  const now = new Date().toISOString()
+  const { likedAt, ...visit }: ShopVisit = current[shop.id] ?? { shop, viewedAt: now, analysis: null }
+  write({ ...current, [shop.id]: likedAt ? visit : { ...visit, likedAt: now } })
 }
 
 export function forgetShop(shopId: number) {

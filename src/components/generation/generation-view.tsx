@@ -13,12 +13,14 @@ import {
   FrameIcon,
   ImagesIcon,
   LoaderCircleIcon,
+  RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CompareViewer, type Viewing } from "@/components/generation/compare-viewer"
 import { GenerateDialog } from "@/components/generation/generate-dialog"
+import { RegenerateMockupDialog } from "@/components/mockups/regenerate-dialog"
 import { RetryButton } from "@/components/generation/retry-button"
 import {
   aspectOf,
@@ -294,6 +296,7 @@ const CELL = "h-44 2xl:h-52"
 
 function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) => void }) {
   const [generating, setGenerating] = React.useState(false)
+  const [regenerating, setRegenerating] = React.useState(false)
   const active = isActive(set)
   const { failed, stage, review, approved, made } = progress(set)
   const batch = batchSummary(set)
@@ -425,10 +428,22 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
           )}
           {failed > 0 && !active && <RetryButton sets={[set.id]} count={failed} label="Retry failed" size="xs" />}
           {set.sceneId && (
-            <Button variant="outline" size="xs" nativeButton={false} render={<Link href={`/mockups/${set.sceneId}`} />}>
-              <FrameIcon />
-              Open in editor
-            </Button>
+            <>
+              <Button variant="outline" size="xs" nativeButton={false} render={<Link href={`/mockups/${set.sceneId}`} />}>
+                <FrameIcon />
+                Open in editor
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={active}
+                onClick={() => setRegenerating(true)}
+                title="Paint the blank again: say what should be different"
+              >
+                <RefreshCwIcon />
+                Regenerate
+              </Button>
+            </>
           )}
           {made > 1 && (
             <Button
@@ -490,6 +505,15 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
         )}
       </div>
 
+      {set.sceneId && (
+        <RegenerateMockupDialog
+          open={regenerating}
+          onOpenChange={setRegenerating}
+          sceneId={set.sceneId}
+          name={shortTitle(set.source.title)}
+          image={set.mockup?.file && generationFileUrl(set.id, set.mockup.file)}
+        />
+      )}
       <GenerateDialog
         open={generating}
         onOpenChange={setGenerating}

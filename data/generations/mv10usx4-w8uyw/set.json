@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.864Z",
- "updatedAt": "2026-10-09T15:17:12.198Z",
+ "updatedAt": "2026-10-09T20:56:02.128Z",
  "original": {
   "status": "done",
   "file": "source-mv10utov.jpg",
@@ -107,8 +107,9 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
-   "createdAt": "2026-10-09T13:49:25.864Z"
+   "review": "approved",
+   "createdAt": "2026-10-09T13:49:25.864Z",
+   "reviewedAt": "2026-10-09T20:55:58.546Z"
   },
   {
    "status": "done",
@@ -118,12 +119,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.864Z",
    "title": "French Press Morning",
    "brief": "Paint a vibrant mustard-yellow French press next to a half-full mug of dark coffee on a light-grained wooden table. Use a high-angle perspective looking down at the objects to create a cozy breakfast scene. The style should be loose gouache with visible brush marks and slight paint spatters for a lived-in feel. The palette includes ochre, espresso brown, warm cream, and sage green for a small leaf accent. Include hand-lettered text at the bottom reading 'Just one more' in a casual, thick brush script.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:01.090Z"
   },
   {
    "status": "done",
@@ -133,12 +135,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.864Z",
    "title": "Botanical Bean Ritual",
    "brief": "Create a minimalist, mid-century modern illustration featuring a simplified branch of a coffee plant with round red berries and white blossoms. The branch is set inside a translucent, geometric carafe outline positioned in the center of the frame. Use a risograph texture with grainy overlays and slightly misaligned color blocks for an artisanal print look. The palette focuses on terracotta, sage green, toasted almond, and soft apricot against a plain cream background. This composition contains no text, focusing entirely on clean graphic shapes.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:02.128Z"
   }
  ],
  "layout": "single",

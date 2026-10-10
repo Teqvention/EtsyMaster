@@ -22,6 +22,8 @@ import { RecentShops } from "@/components/shops/recent-shops"
 import { ScopePanel } from "@/components/shops/scope-panel"
 import { ShopInsightsView } from "@/components/shops/shop-insights"
 import { ShopLabelButton } from "@/components/shops/shop-labels"
+import { ShopLikeButton } from "@/components/shops/shop-like"
+import { StealShopMockups } from "@/components/shops/steal-shop-mockups"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -159,12 +161,19 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
     <SplitView listings={view === "listings" ? bestSelling : listings}>
       <div className="flex flex-col gap-3">
         <ShopHeader shop={shop}>
-          <LibraryButton
-            shop={shop}
-            listings={settled ? listings : null}
-            analysedAt={run?.analysedAt ?? null}
-            running={run?.status === "running"}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <StealShopMockups
+              shop={shop}
+              listings={settled ? listings : null}
+              running={run?.status === "running"}
+            />
+            <LibraryButton
+              shop={shop}
+              listings={settled ? listings : null}
+              analysedAt={run?.analysedAt ?? null}
+              running={run?.status === "running"}
+            />
+          </div>
         </ShopHeader>
         {checking && !run ? (
           <Skeleton className="h-11 rounded-lg" />
@@ -413,15 +422,18 @@ function ShopHeader({ shop, children }: { shop: ListingShop; children?: React.Re
           )}
         </div>
         <div className="min-w-0">
-          <a
-            href={shop.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-base font-semibold underline-offset-2 hover:underline"
-          >
-            <span className="truncate">{shop.name}</span>
-            <ExternalLinkIcon className="size-3 shrink-0 text-muted-foreground" />
-          </a>
+          <div className="flex min-w-0 items-center gap-1">
+            <a
+              href={shop.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-w-0 items-center gap-1 text-base font-semibold underline-offset-2 hover:underline"
+            >
+              <span className="truncate">{shop.name}</span>
+              <ExternalLinkIcon className="size-3 shrink-0 text-muted-foreground" />
+            </a>
+            <ShopLikeButton shop={shop} size="icon-sm" />
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {shop.country && (
               <span className="flex items-center gap-0.5">

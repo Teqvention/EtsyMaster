@@ -1,0 +1,209 @@
+{
+ "id": "mv18xana-5ticx",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 856839568,
+  "title": "Matsumoto Hoji Art Print, Japanese Frog Poster, Frog, Matsumoto Hoji Animal Art Print, Frog Poster, Funny Animal Print, Animal Gift",
+  "image": "https://i.etsystatic.com/24426965/r/il/00fd00/3910810863/il_fullxfull.3910810863_6oxj.jpg",
+  "url": "https://www.etsy.com/listing/856839568/matsumoto-hoji-art-print-japanese-frog",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "japanese art",
+   "japanese print",
+   "frog art",
+   "animal print",
+   "funny animal art",
+   "animal gift",
+   "frogs",
+   "wildlife poster",
+   "gift idea",
+   "vintage art",
+   "ancient art",
+   "classic art",
+   "office"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.078Z",
+ "updatedAt": "2026-10-09T21:17:11.316Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1ahjtl.jpg",
+  "width": 1809,
+  "height": 2400
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv1ahnd7.jpg",
+   "width": 976,
+   "height": 1366,
+   "label": "grumpy japanese frog print",
+   "analysis": {
+    "summary": "A grumpy, textured frog hunched over a tea bowl in a minimalist Japanese woodblock aesthetic.",
+    "subject": "A large, dark-skinned frog with a prominent cream-colored belly and a deeply annoyed facial expression.",
+    "setting": "A minimalist, off-white background with a textured, washi-paper feel.",
+    "action": "Whisking matcha in a small ceramic bowl using a traditional bamboo chasen.",
+    "style": "Japanese woodblock print, ukiyo-e style, textured ink application, bold outlines, flat colors with organic paper grain, naive character design.",
+    "palette": [
+     "#F5F0E1",
+     "#2D3A3A",
+     "#FDF5D2",
+     "#B84A39",
+     "#D3D3D3"
+    ],
+    "composition": "Centered character, vertical portrait orientation, ample negative space, asymmetrical balance provided by a red seal in the upper left corner.",
+    "typography": "Japanese characters '問一' inside a red rectangular seal, rendered with a hand-stamped, ink-bleed appearance.",
+    "mood": "Whimsical, grumpy, relatable, and zen-ironic.",
+    "audience": "Tea lovers, frog enthusiasts, and Gen Z/Millennial home decorators looking for quirky, 'weird' art for kitchens or home offices.",
+    "hook": "The juxtaposition of a traditional, elegant art form with a character that looks deeply annoyed by its peaceful task; it captures a 'mood' that feels modern and relatable.",
+    "swaps": {
+     "subjects": [
+      "A judgmental tanuki",
+      "A skeptical long-eared rabbit",
+      "A bored, slouching monkey",
+      "A grumpy calico cat",
+      "A stoic, wide-eyed owl",
+      "A very annoyed crane"
+     ],
+     "settings": [
+      "Inside a steaming onsen",
+      "At a tiny ramen stall",
+      "Under a drooping willow tree",
+      "On a single tatami mat",
+      "In a dense bamboo grove",
+      "Crossing a red arched bridge"
+     ],
+     "props": [
+      "Slurping a giant bowl of ramen",
+      "Holding a tiny paper umbrella in the rain",
+      "Pouring a cup of sake",
+      "Attempting to play a shamisen",
+      "Balancing a stack of mochi on its head",
+      "Holding a single steaming dumpling with chopsticks"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv1ahv5k-pd0ia-mv1apio5.jpg",
+   "batch": "mv18xana-wds2j",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:19:18.391Z",
+   "id": "mv1ahv5k-pd0ia",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Grumpy Tea Frog Redux",
+   "brief": "A hunched, grumpy frog sits centered in a vertical portrait, holding a bamboo whisk in a grey tea bowl. The frog features a dark charcoal-teal body (#2D3A3A) with a large cream-colored belly (#FDF5D2) and a deep scowling mouth. A single red rectangular seal (#B84A39) containing the characters '問一' is placed in the upper left corner. The background is a flat, warm cream (#F5F0E1) with a visible organic paper grain. The rendering uses heavy, stippled ink textures on the frog’s skin and bold, slightly irregular outlines to mimic a traditional woodblock print.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:17:03.855Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ahv5k-uh72g-mv1at9xv.jpg",
+   "batch": "mv18xana-wds2j",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:19:18.391Z",
+   "id": "mv1ahv5k-uh72g",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Disgruntled Tea Master",
+   "brief": "The grumpy frog is redrawn in the same centered vertical layout, but now angled slightly to the side with one hand resting on its knee while the other whisks the tea. Two thin, simple dark lines represent wisps of steam rising from the grey bowl (#D3D3D3). The red seal is moved to the top right corner for a subtle shift in balance. The palette remains strictly #F5F0E1, #2D3A3A, #FDF5D2, and #B84A39. Textures include uneven ink absorption and a coarse wood-grain effect in the negative space.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:17:06.335Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ahv5k-1nv56-mv1an3ki.jpg",
+   "batch": "mv18xana-wds2j",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:19:18.391Z",
+   "id": "mv1ahv5k-1nv56",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Low Angle Grump",
+   "brief": "A wider, lower-angle composition showing the grumpy frog’s full splayed webbed feet at the bottom of the frame. The tea bowl is placed in the immediate foreground to create a sense of depth, with the frog looming behind it. The red seal is relocated to the bottom right corner, balancing the large dark mass of the frog’s body. The flat, naive character design and bold teal outlines are maintained against the textured cream background. Lighting is flat and diffuse, characteristic of ukiyo-e prints.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:17:08.368Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ahv5k-u0389-mv1as2va.jpg",
+   "batch": "mv18xana-wds2j",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:19:18.391Z",
+   "id": "mv1ahv5k-u0389",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Petal in the Tea",
+   "brief": "A medium-shot profile view focuses on the frog's face and upper torso as it glares down at a tea bowl held in both hands. A single red cherry blossom petal, matching the seal color (#B84A39), is shown falling into the bowl. The character is pushed to the left side of the frame, leaving large negative space on the right. The texture is heavily distressed, featuring the signature stippled dark teal ink (#2D3A3A) and the organic paper grain of the cream background (#F5F0E1).",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:17:09.834Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ahv5k-6kni8-mv1azkqq.jpg",
+   "batch": "mv18xana-wds2j",
+   "review": "approved",
+   "createdAt": "2026-10-09T18:19:18.391Z",
+   "id": "mv1ahv5k-6kni8",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "The Tea Ceremony Scroll",
+   "brief": "An extreme vertical composition shows the frog from a high bird's-eye perspective, looking down into an oversized tea bowl. The frog’s body is at the very bottom of the frame, clutching the bowl's rim with its webbed fingers. Three red rectangular seals are stacked vertically in the upper left corner, emphasizing the height of the print. The color palette is limited to the reference's teal, cream, grey, and red. The rendering utilizes flat color planes with rich, mottled ink textures on the frog's skin.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:17:11.316Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xana-wds2j",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.078Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

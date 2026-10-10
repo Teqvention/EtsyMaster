@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.869Z",
- "updatedAt": "2026-10-09T15:17:12.205Z",
+ "updatedAt": "2026-10-09T20:58:04.142Z",
  "original": {
   "status": "done",
   "file": "source-mv10uvph.jpg",
@@ -105,12 +105,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Artisan Pillar Circles",
    "brief": "A vertical column of soft pink rectangular blocks is stacked off-center against a mossy green background. Instead of star motifs, each block contains a unique hand-carved circular symbol like a spiral or concentric rings in deep magenta ink. A faint, ghosted column of empty square outlines sits on the far left of the composition. The style is a distressed linocut print with bleeding ink edges and a heavy washi paper grain visible throughout. The mood is rhythmic and artisanal, intended to be hung as a pair with the original star-motif print.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:01.811Z"
   },
   {
    "status": "done",
@@ -120,12 +121,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Earth Tone Tile Grid",
    "brief": "This piece features a three-by-three grid of organic, hand-stamped square tiles centered on a warm cream canvas. Each tile is rendered in a deep terracotta hue and contains a single, stylized golden ochre leaf silhouette. The tiles are intentionally wobbly and spaced unevenly to emphasize a wabi-sabi aesthetic. The rendering uses a grainy woodblock print texture with uneven ink coverage that lets the underlying cream paper show through in patches. The overall palette shifts to terracotta, ochre, and cream for a grounded, rustic feel.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:03.240Z"
   },
   {
    "status": "done",
@@ -135,12 +137,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.869Z",
    "title": "Torn Paper Horizon",
    "brief": "A minimalist abstract landscape composed of large, flat organic shapes. A large, imperfectly round sun made of layered dusty-peach paper segments sits in the upper half of the frame. Below it, three wide horizontal bands in sage green, charcoal, and dusty navy represent a stylized shoreline. The rendering mimics a paper collage with rough, deckled edges and subtle drop shadows between the layers to create a sense of physical depth. The composition is spacious and calm, targeting the same minimalist interior design enthusiasts with a fresh, collage-based style.",
    "width": 1610,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:58:04.142Z"
   }
  ],
  "layout": "single",

@@ -10,7 +10,6 @@ import sharp from "sharp"
 import { chainPhotoName, type MockupChain } from "@/lib/mockups/chain-types"
 import { getChain, getDefaultChain } from "@/lib/mockups/chains"
 import { getScene } from "@/lib/mockups/storage"
-import { BUILT_IN } from "@/lib/mockups/templates"
 import { EXPORT_EDGE } from "@/lib/mockups/types"
 
 import { localPathUnder, writeFileUnder } from "./files"
@@ -20,10 +19,11 @@ import type { RenderJob, RenderResult } from "./render-job"
 // Chrome on the /render page: the Mockups page's own WebGL export and
 // WebCodecs encoder, so a pipeline photo is what the editor would export.
 // One browser for the whole server (on globalThis, so a reload doesn't
-// start a second), two pages at a time, closed after a few idle minutes.
+// start a second), three pages at a time, closed after a few idle minutes.
 // The poster goes in by intercepting the page's request for it; the files
-// come back base64, one at a time. If the browser can't encode H.264, the
-// video is made with ffmpeg from the first photo instead.
+// come back base64, one at a time. Only a chain with a video picked gets
+// one; if the browser can't encode H.264, it's made with ffmpeg from the
+// first photo instead.
 
 export type RenderedMedia = {
   /** Paths under pipeline/ in storage, in listing order. */
@@ -35,12 +35,10 @@ export type RenderedMedia = {
 
 const CHROME = process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const FFMPEG = process.env.FFMPEG_PATH ?? "/opt/homebrew/bin/ffmpeg"
-const PARALLEL = 2
+const PARALLEL = 3
 const IDLE_MS = 3 * 60 * 1000
 /** A chain of ten 4K scenes and a video takes a few minutes; past this something hangs. */
 const TIMEOUT_MS = 15 * 60 * 1000
-/** A chain without a video of its own gets this one, on its first scene. */
-const DEFAULT_MOTION = "push-in"
 const POSTER_PATH = "/__pipeline/poster"
 
 const baseUrl = () => process.env.PIPELINE_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
@@ -101,6 +99,25 @@ async function slot<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
+/** The dev server's word of changed code (next/dist/server/dev/hot-reloader-types), on which a page reloads or refetches. */
+const CODE_CHANGES = new Set([
+  "turbopack-message",
+  "serverComponentChanges",
+  "staticParamsChanged",
+  "reloadPage",
+  "addedPage",
+  "removedPage",
+])
+
+function isCodeChange(message: string | Buffer) {
+  if (typeof message !== "string") return false
+  try {
+    return CODE_CHANGES.has((JSON.parse(message) as { type?: string }).type ?? "")
+  } catch {
+    return false
+  }
+}
+
 function posterType(poster: Buffer) {
   if (poster[0] === 0x89 && poster[1] === 0x50) return "image/png"
   if (poster.subarray(8, 12).toString() === "WEBP") return "image/webp"
@@ -117,6 +134,15 @@ function render(job: Omit<RenderJob, "poster">, poster: Buffer, onProgress?: (te
       await page.route(`**${POSTER_PATH}`, (route) =>
         route.fulfill({ body: poster, contentType: posterType(poster), headers: { "Cache-Control": "no-store" } })
       )
+      // The dev server's live reload, without its code changes: one (an edit,
+      // another tab compiling) would reload the page mid-render. The socket
+      // itself stays, as the page's first render comes over it.
+      await page.routeWebSocket(/\/_next\/hmr/, (ws) => {
+        const server = ws.connectToServer()
+        server.onMessage((message) => {
+          if (!isCodeChange(message)) ws.send(message)
+        })
+      })
       if (onProgress) await page.exposeFunction("__pipelineProgress", (text: string) => onProgress(text))
       await page.goto(`${baseUrl()}/render`, { waitUntil: "load", timeout: 120_000 })
       await page.waitForFunction(() => !!window.__pipelineRender, undefined, { timeout: 120_000 })
@@ -141,17 +167,12 @@ function render(job: Omit<RenderJob, "poster">, poster: Buffer, onProgress?: (te
   })
 }
 
-/** The chain's video, or the default motion on its first scene. */
+/** The chain's video; none when it has none picked (or its clip was deleted since). */
 async function videoOf(chain: MockupChain): Promise<RenderJob["video"]> {
-  if (chain.video) {
-    const scene = await getScene(chain.video.sceneId).catch(() => null)
-    const clip = scene?.clips?.find((c) => c.id === chain.video!.clipId)
-    if (clip) return { sceneId: chain.video.sceneId, clip }
-  }
-  const motion = BUILT_IN.find((t) => t.id === DEFAULT_MOTION)
-  if (!motion || !chain.scenes.length) return null
-  const { duration, shake, keys, name } = motion
-  return { sceneId: chain.scenes[0], clip: { id: motion.id, name, duration, shake, keys, listing: true } }
+  if (!chain.video) return null
+  const scene = await getScene(chain.video.sceneId).catch(() => null)
+  const clip = scene?.clips?.find((c) => c.id === chain.video!.clipId)
+  return clip ? { sceneId: chain.video.sceneId, clip } : null
 }
 
 /** The chain (the default one when null or deleted) with this poster, written into `dir` under pipeline/. */

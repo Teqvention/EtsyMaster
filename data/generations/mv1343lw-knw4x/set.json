@@ -26,7 +26,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T14:52:38.852Z",
- "updatedAt": "2026-10-09T15:06:10.777Z",
+ "updatedAt": "2026-10-09T21:18:24.367Z",
  "original": {
   "status": "done",
   "file": "source-mv13548v.jpg",
@@ -91,7 +91,7 @@
    "status": "done",
    "file": "out-mv135ezi-fv5ei-mv139p12.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-fv5ei",
    "poster": 0,
@@ -101,13 +101,14 @@
    "title": "Cassette Tape Lyric Ribbon",
    "brief": "A minimalist graphic of a cassette tape where the lyrics form the two internal reels and the connecting magnetic ribbon. The text for the reels is tightly packed in circular spirals, while the ribbon text flows in straight horizontal lines along the bottom of the cassette shell. A bold sans-serif song title sits at the top, and technical 'Side A' details are written in a small monospace font. Palette is a soft eggshell white background with matte charcoal text. The style is flat vector with sharp, clean lines and no shading.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:43.076Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-44wpl-mv13bu29.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-44wpl",
    "poster": 0,
@@ -117,13 +118,14 @@
    "title": "Vertical Soundwave Lyric Map",
    "brief": "A horizontal soundwave visualization where each vertical bar is composed of individual columns of song lyrics. The height of the text columns varies to match the amplitude of the song's chorus, creating a jagged but rhythmic silhouette across the middle of the frame. The song title is placed in a large, thin serif font in the bottom left corner, overlapping the soundwave slightly. Palette uses a light cool-gray background with deep navy blue lettering. The rendering is precise and digital, emphasizing clean typographic alignment.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:44.620Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-53k1v-mv13bgy9.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-53k1v",
    "poster": 0,
@@ -133,13 +135,14 @@
    "title": "Concentric Square Lyric Block",
    "brief": "Lyrics arranged in a tight square spiral, moving from the outer edges toward a hollow square center to resemble a modern art print. The typography is all-caps sans-serif, maintaining perfectly uniform spacing between the lines of text to create a grid-like texture. The header features the song title in a heavy bold font, while the artist and date are in a delicate italicized serif on the right. Palette consists of a warm parchment background and dark espresso-colored text. The composition is centered with wide margins for a sophisticated, gallery-like feel.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:46.018Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-ef6co-mv13an7x.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-ef6co",
    "poster": 0,
@@ -149,13 +152,14 @@
    "title": "Minimalist Turntable Lyric View",
    "brief": "A top-down graphic illustration of a vintage turntable platter where the lyrics form the circular vinyl record. A single, fine-line drawing of a tonearm and needle rests on the outer edge of the lyric-disc, rendered in a minimalist architectural style. The song title is printed in a large, modern sans-serif at the bottom, balanced by small cursive credits in the top right corner. Palette features a muted sage green background with cream-colored text and metallic gold lines for the turntable parts. The lighting is flat and even, highlighting the geometric shapes.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:47.350Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-ezmtf-mv13bwyw.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-ezmtf",
    "poster": 0,
@@ -165,13 +169,14 @@
    "title": "Celestial Lyric Constellation",
    "brief": "A night sky visualization where the song lyrics act as the connecting lines between shimmering geometric stars, forming a custom constellation. Each word is oriented to follow the angles of the lines, creating a delicate, web-like structure across the canvas. A large, elegant serif font for the song title floats in the upper third, while geographic coordinates and the date are placed in a tiny sans-serif footer. Palette uses a deep midnight-black background, crisp white text, and pale gold star points. The style is ethereal and clean, with a subtle soft-focus glow around the star icons.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:48.673Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-40vvr-mv13li3a.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-40vvr",
    "poster": 0,
@@ -180,13 +185,14 @@
    "title": "The Retro Mixtape",
    "brief": "A minimalist typographic print where the text forms the outline and internal components of a vintage cassette tape. The lyrics wrap around the rectangular outer edge and spiral tightly into two circular reels in the center. The header features 'MIX TITLE' in bold, heavy sans-serif at the top left, with a delicate script date below. The palette is strictly off-white #F2F0E9 for the background and charcoal black #1A1A1A for all text and graphic lines. The composition is centered with wide margins, creating a sophisticated gallery-wall aesthetic.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:50.337Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-ibtua-mv13c17n.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "approved",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-ibtua",
    "poster": 0,
@@ -195,13 +201,14 @@
    "title": "The Growth Rings",
    "brief": "A sentimental anniversary poster where a couple’s shared history or vows are arranged in concentric, organic circles to mimic the growth rings of a tree cross-section. The text lines are slightly irregular and wavy to enhance the natural wood-grain appearance. A bold 'FAMILY NAME' header is placed at the top in a clean Swiss-style font, balanced by a script 'EST. YEAR' underneath. The palette uses a warm cream #F2F0E9 background with high-contrast black #000000 ink. The rendering is flat, sharp, and highly legible despite the curved paths.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:57.455Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-k4ie7-mv13cc7m.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-k4ie7",
    "poster": 0,
@@ -210,13 +217,14 @@
    "title": "The Nautical Compass",
    "brief": "A travel-inspired poster featuring text transformed into a detailed nautical compass rose. The narrative of a trip forms the circular degree markings and the eight sharp triangular points of the star. Top-aligned typography displays the 'DESTINATION' in massive bold uppercase, while the specific coordinates are listed in a cursive font on the right side. The design is perfectly symmetrical and centered on a textured cream #F2F0E9 field. The style is clean, technical, and architectural, using only solid black #1A1A1A for all elements.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:04:58.909Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-u57nx-mv13cyh4.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-u57nx",
    "poster": 0,
@@ -225,13 +233,14 @@
    "title": "The Coffee Ring",
    "brief": "A minimalist tribute to a first date, where the story of the meeting is shaped into two overlapping circles resembling coffee cup stains on a table. The text follows the thick, slightly uneven edges of the 'stains,' with small splatters of tiny words surrounding them. The top header shows 'CAFE NAME' in a bold, modern sans-serif, with the specific 'TIME & DATE' in an elegant, thin script. The palette is a clean cream #F2F0E9 background with jet black #000000 text. The composition utilizes significant white space to maintain a high-end, minimalist feel.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:05:08.368Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-jw4at-mv13ffy1.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-jw4at",
    "poster": 0,
@@ -240,13 +249,14 @@
    "title": "The Great Wave",
    "brief": "A dynamic composition where the text of a song is shaped into the silhouette of a stylised, breaking ocean wave. The lines of text curve upward into a large crest, with individual words breaking off at the top like foam. A massive 'SONG TITLE' is placed in the upper left corner in a heavy, blocky font, while the 'ARTIST' is in script on the right. The rendering is purely graphic and flat, using black #1A1A1A ink on a cream #F2F0E9 background. The layout follows a strict grid, balancing the fluid shape of the wave with rigid, minimalist headers.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:18:21.806Z"
   },
   {
    "status": "done",
    "file": "out-mv135ezi-pkwq4-mv13dh66.jpg",
    "batch": "mv1343lw-5o3hn",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T14:53:40.254Z",
    "id": "mv135ezi-pkwq4",
    "poster": 0,
@@ -255,7 +265,8 @@
    "title": "The Camera Aperture",
    "brief": "A wedding-themed gift where the vows are arranged into six geometric blades that form a circular camera lens aperture. The text segments overlap at sharp angles, leaving a perfect circle of negative space in the very center. The top of the poster features 'THE WEDDING OF' in a large, bold sans-serif, while the bottom contains a personalized footer message. The palette is limited to #F2F0E9 for the paper and #000000 for the ink. The aesthetic is sharp, modern, and high-contrast, designed to look like a piece of technical art.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:18:24.367Z"
   }
  ],
  "extraction": {

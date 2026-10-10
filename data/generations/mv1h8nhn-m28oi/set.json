@@ -1,0 +1,46 @@
+{
+ "id": "mv1h8nhn-m28oi",
+ "kind": "mockup",
+ "folder": "monet",
+ "source": {
+  "listingId": 999837009,
+  "title": "William Morris Print, William Morris Exhibition Print, William Morris Poster, Vintage Wall Art, Textiles Art, Vintage Poster, A1/A2/A3/A4",
+  "image": "https://i.etsystatic.com/24426965/r/il/b2137b/3765648262/il_fullxfull.3765648262_jsrn.jpg",
+  "url": "https://www.etsy.com/listing/999837009/william-morris-print-william-morris",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "morris print",
+   "william morris print",
+   "william morris art",
+   "william morris",
+   "floral print",
+   "floral art",
+   "floral decor",
+   "mid century art",
+   "textile print",
+   "botanical art",
+   "art print",
+   "william morris decor",
+   "flowers"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T21:28:05.867Z",
+ "updatedAt": "2026-10-09T21:32:51.455Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1hamsg.jpg",
+  "width": 1809,
+  "height": 2400
+ },
+ "posters": [],
+ "outputs": [],
+ "mockup": {
+  "status": "done",
+  "file": "mockup-mv1herul.jpg",
+  "width": 1792,
+  "height": 2400
+ },
+ "batches": [],
+ "sceneId": "william-morris-print"
+}

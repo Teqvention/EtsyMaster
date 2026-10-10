@@ -43,8 +43,20 @@ export type AnalysisPlan = {
 export function reviewsSince(window: ReviewWindow) {
   const days = REVIEW_WINDOWS.find((w) => w.value === window)?.days
   if (!days) return undefined
-  const since = Date.now() - days * DAY_MS
-  return Math.floor(since / DAY_MS) * (DAY_MS / 1000)
+  return dayStart(Date.now() - days * DAY_MS)
+}
+
+/**
+ * Unix seconds to fetch reviews from when every review in the window up to
+ * `heldAt` (ISO 8601) is held already: the start of that day, or of the
+ * window if that's later.
+ */
+export function newReviewsSince(window: ReviewWindow, heldAt: string) {
+  return Math.max(reviewsSince(window) ?? 0, dayStart(Date.parse(heldAt)))
+}
+
+function dayStart(ms: number) {
+  return Math.floor(ms / DAY_MS) * (DAY_MS / 1000)
 }
 
 /**

@@ -154,8 +154,8 @@ export function clipFrom(template: Motion & { name: string }, scene: Scene): Cli
     duration: template.duration,
     shake: template.shake,
     keys: structuredClone(template.keys),
-    // Etsy plays one video per listing; the first clip is it.
-    listing: !scene.clips?.some((c) => c.listing),
+    // A video only once it's saved as one.
+    video: false,
   }
 }
 

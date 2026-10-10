@@ -130,6 +130,7 @@ function Generated({ current, onPicked }: { current?: string; onPicked: () => vo
   const groups = React.useMemo(
     () =>
       (sets ?? []).flatMap((set) => {
+        if (set.kind !== "poster") return []
         const outputs = set.outputs
           .filter((o) => o.status === "done" && o.file && o.review !== "rejected")
           .toSorted((a, b) => Number(b.review === "approved") - Number(a.review === "approved"))

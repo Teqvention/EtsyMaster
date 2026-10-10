@@ -113,7 +113,7 @@ export function ScenePicker({
                     >
                       {place > 0 ? place : ""}
                     </span>
-                    {scene.clips.length > 0 && (
+                    {scene.clips.some((c) => c.video) && (
                       <span className="absolute right-1.5 bottom-1.5 flex h-5 items-center rounded-full bg-black/55 px-1.5 text-white backdrop-blur-sm [&_svg]:size-2.5 [&_svg]:fill-current">
                         <PlayIcon />
                       </span>
@@ -145,7 +145,7 @@ export function ScenePicker({
   )
 }
 
-/** Every clip of every mockup, playing on hover; picking one sets the chain's video. */
+/** Every clip saved as a video, playing on hover; picking one sets the chain's video. */
 export function VideoPicker({
   chain,
   scenes,
@@ -155,7 +155,7 @@ export function VideoPicker({
   scenes: SceneSummary[]
   onPick: (video: ChainVideo | null) => void
 }) {
-  const withClips = scenes.filter((s) => s.clips.length > 0)
+  const withClips = scenes.filter((s) => s.clips.some((c) => c.video))
   // Mockups already in the chain first: their video matches the photos.
   const ordered = [
     ...withClips.filter((s) => chain.scenes.includes(s.id)),
@@ -172,12 +172,12 @@ export function VideoPicker({
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 py-1">
         {ordered.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            No mockup has an animation yet. Open a mockup and add one under Motion.
+            No videos yet. Open a mockup, animate it under Animate and click Save as video.
           </p>
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
             {ordered.flatMap((scene) =>
-              scene.clips.map((clip) => (
+              scene.clips.filter((clip) => clip.video).map((clip) => (
                 <li key={`${scene.id}:${clip.id}`}>
                   <ClipOption
                     scene={scene}

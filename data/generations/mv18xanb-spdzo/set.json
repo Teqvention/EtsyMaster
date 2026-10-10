@@ -1,0 +1,209 @@
+{
+ "id": "mv18xanb-spdzo",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4391321241,
+  "title": "Japanese Owl Art Print, Vintage Woodblock Style, Mid Century Animal Poster, Minimalist Bird Illustration, Rustic Nature Wall Decor",
+  "image": "https://i.etsystatic.com/24426965/r/il/186ec6/7312650782/il_fullxfull.7312650782_j87k.jpg",
+  "url": "https://www.etsy.com/listing/4391321241/japanese-owl-art-print-vintage-woodblock",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "owl wall art",
+   "bird print",
+   "woodblock style",
+   "japanese art",
+   "animal poster",
+   "mid century art",
+   "minimalist decor",
+   "nature artwork",
+   "vintage print",
+   "modern wall art",
+   "scandi decor",
+   "rustic poster",
+   "asian art print"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.079Z",
+ "updatedAt": "2026-10-09T21:16:34.905Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv1aqvp0.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv1aqzxy.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "Japanese owl woodblock print",
+   "analysis": {
+    "summary": "A stoic, stylized owl stands beside a black skeleton key in a vintage Japanese woodblock-inspired composition.",
+    "subject": "A barn-owl-like bird with large dark eyes, a white heart-shaped face, and a patterned tan and black body.",
+    "setting": "A flat, textured sage-green background reminiscent of aged washi paper.",
+    "action": "Standing still and staring directly at the viewer with a mysterious, knowing expression.",
+    "style": "Japanese woodblock print, Sosaku Hanga style, bold graphic outlines, flat color fields, visible wood grain texture, slightly naive proportions, and a rustic folk-art aesthetic.",
+    "palette": [
+     "#8da399",
+     "#eae2d1",
+     "#a63a2b",
+     "#1a1a1a",
+     "#b59563"
+    ],
+    "composition": "Centralized subject with asymmetrical balance provided by large red kanji in the upper right and a vertical column of black calligraphy on the left; a small red hanko seal and a black key prop anchor the bottom left.",
+    "typography": "Large red block-style kanji in the top right, a vertical column of black hand-painted characters on the left, and a red square artist seal in the bottom left corner.",
+    "mood": "Mysterious, scholarly, vintage, and stoic.",
+    "audience": "Mid-century modern enthusiasts, bird lovers, and collectors of Japanese-inspired minimalist decor for studies, libraries, or entryways.",
+    "hook": "The juxtaposition of a wise, intense animal with cryptic calligraphy and a symbolic prop (the key) suggests a hidden story or ancient wisdom, wrapped in a trendy vintage texture.",
+    "swaps": {
+     "subjects": [
+      "A wide-eyed ginger cat",
+      "A long-necked white crane",
+      "A rotund tanuki (raccoon dog)",
+      "A watchful red fox",
+      "A hunched green frog",
+      "A pensive snow monkey"
+     ],
+     "settings": [
+      "A misty bamboo forest",
+      "A snow-covered pine branch",
+      "A moonlit tiled roof",
+      "A minimalist tatami room",
+      "A rocky mountain peak",
+      "A calm lotus pond"
+     ],
+     "props": [
+      "A glowing paper lantern",
+      "An unrolled ancient scroll",
+      "A steaming ceramic tea bowl",
+      "A patterned wagasa (oil-paper umbrella)",
+      "A folding decorative fan",
+      "A small brass temple bell"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv1ar7n4-ziwwf-mv1aun9j.jpg",
+   "batch": "mv18xanb-cr2sj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:26:34.480Z",
+   "id": "mv1ar7n4-ziwwf",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Stoic Owl with Key",
+   "brief": "A stylized owl with large red-rimmed black eyes and ochre-patterned feathers stands facing forward against a sage-green background. A single black skeleton key sits upright to the left of its feet. The composition follows the original layout with a vertical column of black calligraphy on the left and large red block kanji in the upper right. A red square artist seal anchors the bottom left corner. The rendering features flat color fields and a heavy, visible woodblock grain texture throughout.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:22.389Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ar7n4-jvrgg-mv1az3n0.jpg",
+   "batch": "mv18xanb-cr2sj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:26:34.480Z",
+   "id": "mv1ar7n4-jvrgg",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "The Key Keeper",
+   "brief": "The composition features a slightly closer crop of the owl, now looking toward the right edge. Two black skeleton keys are crossed at its feet in the center foreground. The large red kanji is moved to the top center, and the vertical black calligraphy column is positioned along the right side. The color palette uses sage for the background, cream for the face, and burnt red for the beak and feet. The wood grain texture is particularly prominent in the black ink areas.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:24.031Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ar7n4-722c1-mv1awve2.jpg",
+   "batch": "mv18xanb-cr2sj",
+   "review": "approved",
+   "createdAt": "2026-10-09T18:26:34.480Z",
+   "id": "mv1ar7n4-722c1",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Bird and Iron Lock",
+   "brief": "This print recomposes the scene into a narrow vertical format. The owl is positioned high in the frame, while the black skeleton key is oversized and stands vertically at the bottom center. The vertical black calligraphy is split into two shorter columns on either side of the owl. A large red artist seal is placed prominently in the top left corner, while the red kanji are grouped in a square block at the bottom right. The style remains a rustic Sosaku Hanga woodblock with bold graphic outlines.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:28.261Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ar7n4-h8c1p-mv1b4slp.jpg",
+   "batch": "mv18xanb-cr2sj",
+   "review": "approved",
+   "createdAt": "2026-10-09T18:26:34.480Z",
+   "id": "mv1ar7n4-h8c1p",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Owl on a Red Branch",
+   "brief": "The owl is shown in a smaller scale, perched on a single horizontal burnt red branch that spans the width of the lower third of the print. A series of three black skeleton keys hang from the branch like charms. The background is a flat sage green with a distressed wood texture. The calligraphy is arranged in a scattered manner, with red kanji in the top corners and black characters flowing vertically between the keys. The lighting is flat and even across all cream and ochre elements.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:32.697Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv1ar7n4-a854j-mv1aw9ry.jpg",
+   "batch": "mv18xanb-cr2sj",
+   "review": "rejected",
+   "createdAt": "2026-10-09T18:26:34.480Z",
+   "id": "mv1ar7n4-a854j",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Abstract Owl Symmetry",
+   "brief": "A bold, symmetrical reinterpretation where two identical owls face each other, framing a large black skeleton key in the center. The owls' cream-colored faces create a striking graphic contrast against the sage background. Large red kanji form a decorative border along the top and bottom edges of the print. Vertical black calligraphy is contained within a central ochre-colored rectangular panel. The entire piece features a coarse, hand-carved texture with visible wood fibers and slight ink bleeds.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:16:34.905Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xanb-cr2sj",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.079Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

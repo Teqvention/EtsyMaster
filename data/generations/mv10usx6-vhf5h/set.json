@@ -11,7 +11,7 @@
  },
  "status": "done",
  "createdAt": "2026-10-09T13:49:25.866Z",
- "updatedAt": "2026-10-09T15:17:12.200Z",
+ "updatedAt": "2026-10-09T20:56:21.310Z",
  "original": {
   "status": "done",
   "file": "source-mv10utzq.jpg",
@@ -107,12 +107,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "low",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.866Z",
    "title": "Marigolds on the Sill",
    "brief": "A linocut-style illustration of two tall yellow marigolds in a long rectangular planter box on a wooden windowsill. To the left, a pair of striped gardening gloves rests next to a small metal trowel. The composition remains frontal and eye-level, framed by a thick navy blue border along the bottom and right edges. The palette uses cream, marigold yellow, terracotta orange, and dark forest green with heavy black outlines. The text 'Patience brings progress' is written in a chunky, hand-stamped black font at the top. The image features visible ink grain and slight color overlaps typical of risograph printing.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:15.097Z"
   },
   {
    "status": "done",
@@ -122,12 +123,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "medium",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.866Z",
    "title": "The Potting Bench",
    "brief": "A top-down bird's-eye view of a wooden potting bench cluttered with terracotta pots, a spilled bag of soil, and small green sprouts emerging from seed trays. A pair of garden shears and a ball of twine sit in the corner, creating a busy but organized composition. The art style uses flat, textured color blocks with grainy gradients and jagged linocut-style edges. The palette focuses on sage green, lavender, ochre, and charcoal grey on a speckled off-white paper background. Centered at the bottom, the words 'Roots before leaves' are rendered in a bold, irregular woodblock typeface. Soft, diffused indoor lighting is suggested through overlapping semi-transparent color layers.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:20.016Z"
   },
   {
    "status": "done",
@@ -137,12 +139,13 @@
    "batch": "first",
    "mode": "variant",
    "creativity": "high",
-   "review": null,
+   "review": "rejected",
    "createdAt": "2026-10-09T13:49:25.866Z",
    "title": "The Sun Always Returns",
    "brief": "A stylized, folk-art inspired landscape showing a giant, geometric sun rising over rolling hills covered in abstract leaf patterns and wild blooms. The composition uses a circular motif, with the sun's rays acting as dividers for different botanical textures like ferns, petals, and berries. The style is a clean-edge paper collage with visible fiber textures and high-contrast color overlays. The palette consists of burnt orange, mustard yellow, deep teal, and cream, avoiding black outlines for a softer feel. The text 'The sun always returns' follows the curve of the horizon in a clean, modern serif font. This piece emphasizes cyclical nature and resilience rather than a domestic garden scene.",
    "width": 1792,
-   "height": 2400
+   "height": 2400,
+   "reviewedAt": "2026-10-09T20:56:21.310Z"
   }
  ],
  "layout": "single",

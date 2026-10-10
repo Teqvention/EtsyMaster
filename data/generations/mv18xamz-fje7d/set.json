@@ -1,0 +1,210 @@
+{
+ "id": "mv18xamz-fje7d",
+ "kind": "poster",
+ "folder": "Japanese",
+ "source": {
+  "listingId": 4386422817,
+  "title": "Japanese Cloud Art Poster, Blue and Gold Sky Print, Traditional Woodblock Style, Elegant Japanese Decor, Zen Minimalist Wall Art",
+  "image": "https://i.etsystatic.com/24426965/r/il/95f562/7283558778/il_fullxfull.7283558778_4n5f.jpg",
+  "url": "https://www.etsy.com/listing/4386422817/japanese-cloud-art-poster-blue-and-gold",
+  "shop": "TheWorldGallery",
+  "tags": [
+   "japanese art",
+   "cloud poster",
+   "blue wall art",
+   "japanese decor",
+   "woodblock print",
+   "sky artwork",
+   "gold wall art",
+   "oriental art",
+   "zen wall art",
+   "japanese print",
+   "elegant decor",
+   "asian art",
+   "minimalist poster"
+  ]
+ },
+ "status": "done",
+ "createdAt": "2026-10-09T17:35:19.067Z",
+ "updatedAt": "2026-10-09T21:11:43.271Z",
+ "original": {
+  "status": "done",
+  "file": "source-mv199jtd.jpg",
+  "width": 2400,
+  "height": 2261
+ },
+ "posters": [
+  {
+   "index": 0,
+   "status": "done",
+   "file": "poster-1-mv199nm1.jpg",
+   "width": 1247,
+   "height": 1746,
+   "label": "Japanese cloud art",
+   "analysis": {
+    "summary": "Intricate, swirling clouds with gold-leaf accents drift across a textured, deep-blue sky in a traditional Japanese woodblock aesthetic.",
+    "subject": "Stylized, layered clouds with internal spiral patterns.",
+    "setting": "A vast, textured blue sky suggesting an ethereal or celestial realm.",
+    "action": "Floating and swirling in a rhythmic, decorative arrangement.",
+    "style": "Japanese woodblock print (Ukiyo-e) style, fine ink linework, gold foil detailing, washi paper texture, flat color with subtle gradients.",
+    "palette": [
+     "#2b5d82",
+     "#f5e6e8",
+     "#d4af37",
+     "#8ba8c1",
+     "#2f2f2f",
+     "#c5d5e2"
+    ],
+    "composition": "Vertical orientation, organic all-over pattern, layered depth through overlapping shapes, balanced negative space in the blue sky, no border.",
+    "typography": null,
+    "mood": "Serene, meditative, elegant, and timeless.",
+    "audience": "Interior designers, fans of Japanese culture, and homeowners seeking Zen-inspired decor for bedrooms or living rooms.",
+    "hook": "The fusion of ancient Ukiyo-e motifs with a luxurious gold-and-blue color palette that feels both traditional and modern-minimalist.",
+    "swaps": {
+     "subjects": [
+      "Leaping koi fish",
+      "Soaring red-crowned cranes",
+      "Coiling golden dragon",
+      "Blooming cherry blossom branches",
+      "Rising full moon",
+      "Stylized ocean waves"
+     ],
+     "settings": [
+      "Misty mountain peaks",
+      "Bamboo forest at dusk",
+      "Zen rock garden",
+      "Imperial palace courtyard",
+      "Still lake at midnight",
+      "Snow-covered pine forest"
+     ],
+     "props": [
+      "Glowing paper lanterns",
+      "Silk folding fans",
+      "Ceramic tea bowls",
+      "Floating lotus flowers",
+      "Intricate kimono patterns",
+      "Falling maple leaves"
+     ]
+    }
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "status": "done",
+   "file": "out-mv199u4k-wkloe-mv19ihqd.jpg",
+   "batch": "mv18xamz-wfrt2",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:45:04.196Z",
+   "id": "mv199u4k-wkloe",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "minimal",
+   "styleId": null,
+   "title": "Azure Cloud Drift",
+   "brief": "An intricate arrangement of swirling clouds with gold-leaf accents drifts across a textured deep-blue sky in a traditional Ukiyo-e aesthetic. The composition is a vertical, all-over pattern with dense, overlapping shapes of pale pink and slate blue clouds filling the frame. Fine charcoal ink linework defines the spirals, while gold foil highlights the edges and creates small sparkling dust particles in the negative spaces. The texture mimics aged washi paper with subtle color gradients in the blue background.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:09:43.393Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199u4k-eqfbu-mv19ovh0.jpg",
+   "batch": "mv18xamz-wfrt2",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:45:04.196Z",
+   "id": "mv199u4k-eqfbu",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "subtle",
+   "styleId": null,
+   "title": "Golden Horizon Swirls",
+   "brief": "This composition features the same traditional Japanese clouds but arranged with a stronger diagonal flow from the bottom-left to the top-right corner. A few larger, light-sky-blue cloud clusters are placed at the top, leaving slightly more open space for the deep-blue textured background to show through in the center. Gold foil detailing remains prominent on the swirling ridges of the pale pink clouds. The rendering uses flat color zones with fine black ink spirals and a soft, diffused lighting effect on the metallic accents.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:38.416Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199u4k-tmd26-mv19f4oq.jpg",
+   "batch": "mv18xamz-wfrt2",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:45:04.196Z",
+   "id": "mv199u4k-tmd26",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "low",
+   "styleId": null,
+   "title": "Zen Sky Pillar",
+   "brief": "A vertical composition that centers the clouds into a tall, narrow pillar-like arrangement, leaving wide columns of deep-blue negative space on the left and right sides. The clouds at the base are larger and darker in slate blue, while the clouds at the top are smaller, wispy, and pale cream. Intricate charcoal linework follows the characteristic woodblock spiral motifs, and gold leaf highlights are concentrated on the central-most cloud tips. The washi paper texture is highly visible in the open blue areas, providing a tactile, matte finish.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:39.488Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199u4k-83qdq-mv1a7ad3.jpg",
+   "batch": "mv18xamz-wfrt2",
+   "review": "approved",
+   "createdAt": "2026-10-09T17:45:04.196Z",
+   "id": "mv199u4k-83qdq",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "medium",
+   "styleId": null,
+   "title": "Rising Golden Sunburst",
+   "brief": "A large, flat gold-leaf circle representing a sun is positioned in the upper third of the frame, partially obscured by overlapping Ukiyo-e clouds. The clouds form a circular frame around this central element, using a palette of slate blue, pale pink, and light sky blue. Fine ink linework details every curve of the clouds, which appear to radiate outwards from the golden center. The background is a gradient of deep blue to light sky blue, textured with the grain of traditional handmade paper.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:41.577Z"
+  },
+  {
+   "status": "done",
+   "file": "out-mv199u4k-b15tv-mv19lyp6.jpg",
+   "batch": "mv18xamz-wfrt2",
+   "review": "rejected",
+   "createdAt": "2026-10-09T17:45:04.196Z",
+   "id": "mv199u4k-b15tv",
+   "poster": 0,
+   "mode": "variant",
+   "creativity": "high",
+   "styleId": null,
+   "title": "Celestial Cloud Cascade",
+   "brief": "In a bold vertical layout, a dense cascade of golden-edged clouds tumbles down the center of the frame like a waterfall against a deep-blue background. At the bottom, these clouds transition into stylized Ukiyo-e wave patterns, maintaining the same swirling linework and charcoal ink details. The palette is strictly deep blue, slate blue, pale pink, and gold, with gold foil used heavily to define the 'splash' points where the cloud-water meets. The composition leaves large, balanced areas of textured negative space in the upper corners to emphasize the downward movement.",
+   "width": 1792,
+   "height": 2400,
+   "reviewedAt": "2026-10-09T21:11:43.271Z"
+  }
+ ],
+ "extraction": {
+  "status": "done",
+  "file": null
+ },
+ "batches": [
+  {
+   "id": "mv18xamz-wfrt2",
+   "options": {
+    "variants": {
+     "count": 5,
+     "creativity": [
+      "minimal",
+      "subtle",
+      "low",
+      "medium",
+      "high"
+     ],
+     "styleId": null
+    },
+    "ideas": {
+     "count": 0,
+     "creativity": [
+      "medium"
+     ]
+    }
+   },
+   "createdAt": "2026-10-09T17:35:19.067Z",
+   "expanded": true
+  }
+ ],
+ "layout": "single"
+}

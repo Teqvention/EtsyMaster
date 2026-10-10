@@ -39,6 +39,8 @@ export async function auth() {
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: `${unsigned}.${signature}`,
     }),
+    // Everything waits on this: a stalled answer mustn't hold it forever.
+    signal: AbortSignal.timeout(30_000),
   })
   const body = await response.json()
   if (!body.access_token) throw new Error(`Google auth: ${body.error_description ?? body.error}`)
@@ -167,9 +169,24 @@ function nearestRatio(width: number, height: number) {
   return RATIOS.reduce((best, s) => (Math.abs(value(s) - r) < Math.abs(value(best) - r) ? s : best))
 }
 
-const BLANK_PROMPT = `Recreate this exact photo as a 1:1 replica: same camera angle, framing, composition, room, furniture, frame, mat, lighting and colours. Do not move, resize or crop anything.
+export const BLANK_PROMPT = `Recreate this exact photo as a 1:1 replica: same camera angle, framing, composition, room, furniture, frame, mat, lighting and colours. Do not move, resize or crop anything.
 The only change: the artwork inside every frame becomes a completely blank, plain white sheet of paper. Remove every trace of the printed design — no text, no illustration, no colour from the old print. Borders, margins and lines printed on the artwork are part of the design and become white too; only a real mat (passe-partout) or the frame stays.
 Keep everything that lies on top of the artwork exactly as it is: glass reflections, glare, highlights, the shadow cast by the frame onto the paper, light falloff and any objects in front of the frame. These should now be visible over the white paper.`
+
+/**
+ * A blank mockup made again, the way the user asked: from the photo (the
+ * first image), with the earlier attempt (the second, if given) to improve on.
+ */
+export function blankAgainPrompt(feedback: string | undefined, previous: boolean) {
+  return [
+    BLANK_PROMPT,
+    previous &&
+      "The second image is an earlier attempt at this. Make a new one from the first image; keep what the earlier attempt got right and fix what it got wrong.",
+    feedback && `What should be different this time, in the user's words: ${feedback}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
 
 /** The reference mockup redrawn with a blank white sheet in the frame. */
 export async function blankReplica(reference: Buffer) {
@@ -241,7 +258,11 @@ export function imageOf(parts: Part[] | undefined) {
 export async function askJson<T>(
   prompt: string,
   images: Buffer[] = [],
-  { schema, temperature = 0.7 }: { schema?: object; temperature?: number } = {}
+  {
+    schema,
+    temperature = 0.7,
+    quick = false,
+  }: { schema?: object; temperature?: number; /** Hardly any thinking, for plain yes/no looks. */ quick?: boolean } = {}
 ): Promise<T> {
   const parts = await generate(
     VISION_MODEL,
@@ -249,6 +270,7 @@ export async function askJson<T>(
     {
       responseMimeType: "application/json",
       ...(schema && { responseSchema: schema }),
+      ...(quick && { thinkingConfig: { thinkingLevel: "MINIMAL" } }),
       temperature,
     }
   )
