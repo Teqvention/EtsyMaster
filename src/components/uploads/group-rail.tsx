@@ -28,7 +28,7 @@ export function countGroup(group: UploadGroup, uploads: PosterUploads): GroupCou
     if (status === "live") counts.live++
     else if (status === "uploading") counts.uploading++
     else if (status === "failed") counts.failed++
-    else if (canUpload(uploads, key, p.state)) counts.toGo++
+    else if (canUpload(uploads, key, p)) counts.toGo++
   }
   return counts
 }

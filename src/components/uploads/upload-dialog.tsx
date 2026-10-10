@@ -151,7 +151,7 @@ function freeKeys(groups: UploadGroup[], uploads: PosterUploads) {
   for (const g of groups) {
     for (const p of g.posters) {
       const key = posterKey(g.id, p.outputId)
-      if (canUpload(uploads, key, p.state)) keys.add(key)
+      if (canUpload(uploads, key, p)) keys.add(key)
     }
   }
   return keys
@@ -363,7 +363,7 @@ function Form({
     try {
       const { skipped } = await startUpload(plan)
       const count = plural(posters.length - skipped, "poster")
-      const left = skipped ? ` ${plural(skipped, "poster")} left out: on Etsy or on its way already.` : ""
+      const left = skipped ? ` ${plural(skipped, "poster")} left out: on Etsy, on its way or no longer approved.` : ""
       toast(testRun ? `Test run of ${count} started` : `Uploading ${count}`, {
         description: testRun
           ? "Everything is made here; nothing is sent to Etsy or Gelato."

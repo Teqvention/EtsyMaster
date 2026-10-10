@@ -198,7 +198,7 @@ export function UploadsView() {
                       chains={state.chains}
                       upload={uploads.real.get(key)}
                       uploadStatus={statusOf(uploads, key, stands)}
-                      uploadable={canUpload(uploads, key, stands)}
+                      uploadable={canUpload(uploads, key, posters.get(key))}
                       onUpload={() => setUpload(key)}
                     />
                   </li>

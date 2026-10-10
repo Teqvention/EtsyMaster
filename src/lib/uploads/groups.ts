@@ -57,6 +57,7 @@ export function buildGroups(sets: GenerationSet[], drafts: Draft[]): UploadGroup
         title: draft?.title || output.title || set.source.title,
         motif: [output.title, firstSentence(output.brief ?? analysis?.summary ?? "")].filter(Boolean).join(". "),
         state: stateOf(draft),
+        approved: isApproved(output),
       })
     }
     if (!posters.length) continue
@@ -138,8 +139,9 @@ export function statusOf(uploads: PosterUploads, key: string, state: PosterState
  * Whether a poster may go into a new job: never twice to Etsy, and not while
  * a real upload of it is underway or failed (that one is retried instead, so
  * a half made listing never gets a twin). An upload cancelled before Gelato
- * got anything doesn't count. The same rule as the server's (createJob).
+ * got anything doesn't count. The same rule as the server's (createJob); and
+ * only an approved poster whose set is still there.
  */
-export function canUpload(uploads: PosterUploads, key: string, state: PosterState) {
-  return state !== "uploaded" && !uploads.taken.has(key)
+export function canUpload(uploads: PosterUploads, key: string, poster: GroupPoster | undefined) {
+  return !!poster?.approved && poster.state !== "uploaded" && !uploads.taken.has(key)
 }

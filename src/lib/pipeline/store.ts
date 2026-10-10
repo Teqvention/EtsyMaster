@@ -11,7 +11,7 @@ import type { Draft } from "@/lib/uploads/types"
 import { accountMissing, storageBlocker } from "./blockers"
 import { PlanError } from "./errors"
 import { distribute, uploadOrder, type Assignment } from "./plan"
-import type { JobItem, UploadJob, UploadPlan } from "./types"
+import type { JobItem, PlanGroup, UploadJob, UploadPlan } from "./types"
 
 // Jobs and their items in one document ("pipeline/jobs"), read from memory
 // (see db/documents.ts). Every change goes through `change`, one after
@@ -133,8 +133,8 @@ export async function itemForListing(listingId: number): Promise<JobItem | null>
  * the default one, else (no chain at all) the poster alone.
  */
 export async function createJob(plan: UploadPlan): Promise<{ job: UploadJob; skipped: number }> {
-  const groups = Array.isArray(plan?.groups) ? plan.groups : []
-  if (!groups.some((g) => Array.isArray(g?.outputs) && g.outputs.length)) throw new PlanError("The plan has no posters")
+  const asked = Array.isArray(plan?.groups) ? plan.groups : []
+  if (!asked.some((g) => Array.isArray(g?.outputs) && g.outputs.length)) throw new PlanError("The plan has no posters")
   const dryRun = plan.dryRun === true
 
   const accounts = new Map((await listAccounts()).map((a) => [a.id, a]))
@@ -144,10 +144,13 @@ export async function createJob(plan: UploadPlan): Promise<{ job: UploadJob; ski
     return account
   }
 
+  // A poster deleted or no longer approved since the dialog opened is left
+  // out (counted in `skipped`); the rest still goes.
+  const groups: PlanGroup[] = []
+  const seen = new Set<string>()
   const landscape = new Map<string, boolean>()
-  for (const group of groups) {
-    const set = await getSet(group.groupId).catch(() => null)
-    if (!set) throw new PlanError("A group of the plan is gone")
+  let dropped = 0
+  for (const group of asked) {
     const distribution = group.distribution
     if (distribution?.mode === "account") uploadAccount(distribution.account)
     else if (distribution?.mode === "split") {
@@ -155,13 +158,24 @@ export async function createJob(plan: UploadPlan): Promise<{ job: UploadJob; ski
       distribution.accounts.forEach(uploadAccount)
     } else if (distribution?.mode === "each") Object.values(distribution.accounts ?? {}).forEach(uploadAccount)
     else throw new PlanError("A group of the plan doesn't say where its posters go")
+    const set = await getSet(group.groupId).catch(() => null)
+    const outputs: string[] = []
     for (const outputId of group.outputs ?? []) {
       const key = posterKey(group.groupId, outputId)
-      if (landscape.has(key)) throw new PlanError("A poster is in the plan twice")
-      const output = set.outputs.find((o) => o.id === outputId)
-      if (!output || !isApproved(output)) throw new PlanError("A poster of the plan isn't approved (any more)")
+      if (seen.has(key)) throw new PlanError("A poster is in the plan twice")
+      seen.add(key)
+      const output = set?.outputs.find((o) => o.id === outputId)
+      if (!output || !isApproved(output)) {
+        dropped++
+        continue
+      }
       landscape.set(key, (output.width ?? 0) > (output.height ?? 0))
+      outputs.push(outputId)
     }
+    if (outputs.length) groups.push({ ...group, outputs })
+  }
+  if (!groups.length) {
+    throw new PlanError(seen.size === 1 ? "The poster isn't approved any more" : "No poster of the plan is approved any more")
   }
 
   let order: Assignment[]
@@ -257,7 +271,7 @@ export async function createJob(plan: UploadPlan): Promise<{ job: UploadJob; ski
     job.items = taking.map((i) => i.id)
     data.jobs.push(job)
     data.items.push(...taking)
-    return { job, skipped: items.length - taking.length }
+    return { job, skipped: dropped + items.length - taking.length }
   })
 }
 

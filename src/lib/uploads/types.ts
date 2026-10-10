@@ -154,6 +154,8 @@ export type GroupPoster = {
   /** What it shows, in a few words: tells alike motifs apart when posters are spread over the accounts. */
   motif: string
   state: PosterState
+  /** Approved and finished: may go up. A draft stays when its poster is rejected later, this goes false. */
+  approved: boolean
 }
 
 /** The posters drawn from one reference photo (a generation set): what Uploads spreads over the accounts. */
