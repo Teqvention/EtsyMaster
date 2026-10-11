@@ -3,7 +3,7 @@ import { hostname } from "node:os"
 
 import type postgres from "postgres"
 
-import { LOCK_SILENCE, ready, reserve, sql } from "./sql"
+import { LOCK_SILENCE, locks, ready, reserve, sql } from "./sql"
 
 // Several dev servers share one database, but some work must happen once:
 // the upload worker, Artikel's bulk actions, the daily sync, the copywriter.
@@ -108,6 +108,18 @@ export async function isLeader() {
     console.log("Background work moved to another server")
     return false
   }
+}
+
+/**
+ * Gives up the lead and closes the database connections, so a stopping
+ * server lets another take over at once. Open connections would otherwise
+ * keep the process alive, half stopped and still leading.
+ */
+export async function closeDatabase() {
+  const lead = state.lead
+  state.lead = null
+  if (lead) await lead`select pg_advisory_unlock_all()`.catch(() => {})
+  await Promise.allSettled([sql.end({ timeout: 5 }), locks.end({ timeout: 5 })])
 }
 
 /** Runs `start` now if this server leads, and each time it becomes the leader. */

@@ -5,7 +5,7 @@ import { getSet } from "@/lib/generation/storage"
 import { listChains } from "@/lib/mockups/chains"
 import { NotFoundError } from "@/lib/mockups/storage"
 import { getProfile } from "@/lib/pricing/store"
-import { isApproved, leavesFree, posterKey } from "@/lib/uploads/groups"
+import { canRetry, isApproved, leavesFree, posterKey } from "@/lib/uploads/groups"
 import type { Draft } from "@/lib/uploads/types"
 
 import { accountMissing, storageBlocker } from "./blockers"
@@ -317,14 +317,42 @@ export function retryItem(id: string) {
     const job = data.jobs.find((j) => j.id === item.jobId)!
     if (item.status !== "failed" && item.status !== "waiting") throw new PlanError("Only a failed or waiting poster can be retried")
     if (job.status === "cancelled" && !item.steps?.gelatoSent) throw new PlanError("Its upload was cancelled")
-    const now = iso()
-    Object.assign(item, { status: "queued", attempts: 0, error: undefined, note: undefined, wakeAt: undefined, updatedAt: now })
-    // Another rewrite of the copy, another full wait for Gelato and the print route.
-    if (item.steps) for (const step of ["copyRewrite", "publishSince", "verifySince", "reproveSince"]) delete item.steps[step]
-    if (job.status === "done") Object.assign(job, { status: "running", finishedAt: undefined })
-    job.updatedAt = now
+    requeue(item, job, iso())
     return item
   })
+}
+
+/**
+ * Runs every failed item of `ids` again at once, as retryItem does one;
+ * those no longer failed, or whose upload was cancelled before Gelato got
+ * them, are left as they are. Answers how many went back in line.
+ */
+export function retryItems(ids: unknown) {
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+    throw new PlanError("items must be a list of item ids")
+  }
+  const wanted = new Set(ids)
+  return change((data) => {
+    const jobs = new Map(data.jobs.map((j) => [j.id, j]))
+    const now = iso()
+    let count = 0
+    for (const item of data.items) {
+      const job = jobs.get(item.jobId)
+      if (!wanted.has(item.id) || !job || !canRetry({ item, job })) continue
+      requeue(item, job, now)
+      count++
+    }
+    return count
+  })
+}
+
+/** Back in line with a fresh set of tries; a done job runs again for it. */
+function requeue(item: JobItem, job: UploadJob, now: string) {
+  Object.assign(item, { status: "queued", attempts: 0, error: undefined, note: undefined, wakeAt: undefined, updatedAt: now })
+  // Another rewrite of the copy, another full wait for Gelato and the print route.
+  if (item.steps) for (const step of ["copyRewrite", "publishSince", "verifySince", "reproveSince"]) delete item.steps[step]
+  if (job.status === "done") Object.assign(job, { status: "running", finishedAt: undefined })
+  job.updatedAt = now
 }
 
 /** Takes an item out of its job, as long as nothing of it has gone to Gelato. */

@@ -5,10 +5,12 @@
 // writing to its own shop, with the shop owner's OAuth token) or goes to the
 // analysis pool: public reads (search, shops, listings) are served by the
 // analysis account with the most quota left, so both wear down evenly and the
-// upload accounts keep theirs for uploads. Requests per key are spaced out
-// here, and every public read above this is wrapped in `use cache`.
+// upload accounts keep theirs for uploads. A public read may name its own pool
+// instead ("Get all listings" with the accounts picked for it); upload
+// accounts in it keep RESERVE spare. Requests per key are spaced out here, and
+// every public read above this is wrapped in `use cache`.
 
-import { accountsByRole, getKey, getTokens } from "@/lib/accounts/store"
+import { accountsByRole, getKey, getTokens, listAccounts } from "@/lib/accounts/store"
 
 import { accessToken, dropAccessToken } from "./oauth"
 import { blockAccount, recordCall, recordUsage, usageOf } from "./usage"
@@ -52,6 +54,8 @@ export type EtsyRequest = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   /** The account whose key (and, with `auth`, whose shop) the request uses; the analysis pool when absent. */
   account?: string
+  /** Without `account`: the accounts a public read may use, in place of the analysis accounts. */
+  pool?: string[]
   /** Sends the shop owner's OAuth token: own-shop reads and every write. */
   auth?: boolean
   params?: Params
@@ -65,21 +69,36 @@ type Credentials = { account: string; key: string }
 
 const ENV_ACCOUNT = "env"
 
-/** The analysis account with the most quota left; .env's key while none is set up. */
-async function poolAccount(exclude: Set<string>): Promise<Credentials> {
-  const pool = (await accountsByRole("analysis")).filter((a) => !exclude.has(a.id))
+/**
+ * The analysis account (or the account of `chosen`) with the most quota left;
+ * .env's key while no analysis account is set up.
+ */
+async function poolAccount(exclude: Set<string>, chosen?: string[]): Promise<Credentials> {
+  const candidates = chosen
+    ? (await listAccounts()).filter((a) => chosen.includes(a.id))
+    : await accountsByRole("analysis")
+  const pool = candidates.filter((a) => !exclude.has(a.id))
   const ranked: { id: string; key: string; left: number }[] = []
   for (const a of pool) {
     const key = await getKey(a.id)
     if (!key) continue
     const usage = await usageOf(a.id)
     if (usage?.blockedUntil) continue
-    ranked.push({ id: a.id, key: `${key.keystring}:${key.secret}`, left: usage?.remainingToday ?? 5000 })
+    const left = usage?.remainingToday ?? 5000
+    // An upload account lent to research keeps what its uploads need.
+    if (a.role === "upload" && left <= RESERVE) continue
+    ranked.push({ id: a.id, key: `${key.keystring}:${key.secret}`, left })
   }
   // The emptier key rests; equal ones take turns through the send queue.
   ranked.sort((a, b) => b.left - a.left || (slots.get(a.id) ?? 0) - (slots.get(b.id) ?? 0))
   if (ranked[0]) return { account: ranked[0].id, key: ranked[0].key }
 
+  if (chosen) {
+    throw new EtsyApiError(
+      429,
+      candidates.length ? "The accounts picked are out of Etsy quota for now" : "None of the accounts picked exists any more"
+    )
+  }
   const key = process.env.ETSY_KEY_STRING
   const secret = process.env.ETSY_SECRET
   if (pool.length === 0 && key && secret && !exclude.has(ENV_ACCOUNT)) {
@@ -126,7 +145,7 @@ export async function etsyRequest<T>(path: string, request: EtsyRequest = {}): P
   let refreshed = false
 
   for (let attempt = 0; ; attempt++) {
-    const creds = request.account ? await credentials(request.account) : await poolAccount(tried)
+    const creds = request.account ? await credentials(request.account) : await poolAccount(tried, request.pool)
     const usage = request.account ? await usageOf(creds.account) : null
     if (usage?.blockedUntil) {
       throw new EtsyApiError(429, `${creds.account} is out of Etsy quota until ${usage.blockedUntil}`, creds.account)
@@ -175,7 +194,7 @@ export async function etsyRequest<T>(path: string, request: EtsyRequest = {}): P
       const daily = /daily/i.test(message) || Number(res.headers.get("x-remaining-today")) === 0 || wait > 60
       if (daily) {
         await blockAccount(creds.account, Date.now() + Math.max(wait, 600) * 1000)
-        // A public read moves on to the other analysis account.
+        // A public read moves on to another account of its pool.
         if (!request.account) {
           tried.add(creds.account)
           continue
@@ -208,9 +227,9 @@ function errorMessage(text: string) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** A public read, served by the analysis pool. */
-export function etsyGet<T>(path: string, params: Params = {}): Promise<T> {
-  return etsyRequest<T>(path, { params })
+/** A public read, served by the analysis pool, or by the accounts in `pool`. */
+export function etsyGet<T>(path: string, params: Params = {}, pool?: string[]): Promise<T> {
+  return etsyRequest<T>(path, { params, pool })
 }
 
 /** Whether `account` holds an OAuth grant (doesn't check it with Etsy). */

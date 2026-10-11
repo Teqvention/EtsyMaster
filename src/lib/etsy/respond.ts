@@ -13,3 +13,12 @@ export async function respond(load: () => Promise<unknown>) {
     return Response.json({ error: message }, { status })
   }
 }
+
+/**
+ * The accounts a public read is to use (`?accounts=acc1,acc2`), sorted so the
+ * cache key holds still; undefined leaves it to the analysis accounts.
+ */
+export function poolParam(search: URLSearchParams) {
+  const ids = (search.get("accounts") ?? "").split(",").filter((id) => /^[\w-]{1,40}$/.test(id))
+  return ids.length ? [...new Set(ids)].sort() : undefined
+}

@@ -100,6 +100,10 @@ export function leavesFree(item: JobItem, job: UploadJob | undefined) {
   return stopped && !item.steps?.gelatoSent && !item.gelatoProductId && !item.etsyListingId
 }
 
+/** A failed item that may run again: not one whose upload was cancelled before Gelato got it. The server's rule too (retryItem). */
+export const canRetry = ({ item, job }: PosterUpload) =>
+  item.status === "failed" && (job.status !== "cancelled" || !!item.steps?.gelatoSent)
+
 export type PosterUploads = {
   /** Per poster key, its newest item in a real upload. */
   real: Map<string, PosterUpload>

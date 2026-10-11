@@ -10,6 +10,7 @@ import {
   LoaderCircleIcon,
   SendIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import {
+  cancelBatchJobs,
   sendAllOpenGenerations,
   stopWaitingGenerations,
   useGenerations,
@@ -61,7 +63,19 @@ function useSeen() {
   return [seen, markSeen] as const;
 }
 
+// Routes with dynamic params (e.g. /generation/[id]) only know the pathname at
+// request time, so the widget streams in; it shows nothing until then anyway.
 export function NavBatch(
+  props: React.ComponentPropsWithoutRef<typeof SidebarGroup>,
+) {
+  return (
+    <React.Suspense fallback={null}>
+      <BatchWidget {...props} />
+    </React.Suspense>
+  );
+}
+
+function BatchWidget(
   props: React.ComponentPropsWithoutRef<typeof SidebarGroup>,
 ) {
   const sets = useGenerations();
@@ -246,6 +260,10 @@ function BatchList({
 }) {
   const [stopping, setStopping] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  // The job being cancelled, or "all"; cancelling them all asks once more.
+  const [cancelling, setCancelling] = React.useState<string | null>(null);
+  const [confirmAll, setConfirmAll] = React.useState(false);
+  const anyRunning = jobs.some(({ job }) => job.status === "running");
   const sorted = [...jobs].sort(
     (a, b) =>
       Number(b.job.status === "running") - Number(a.job.status === "running") ||
@@ -267,6 +285,31 @@ function BatchList({
       toast.error(`Couldn't stop: ${(error as Error).message}`);
     } finally {
       setStopping(false);
+    }
+  }
+
+  React.useEffect(() => {
+    if (!confirmAll) return;
+    const timer = setTimeout(() => setConfirmAll(false), 4_000);
+    return () => clearTimeout(timer);
+  }, [confirmAll]);
+
+  async function cancel(name?: string) {
+    setCancelling(name ?? "all");
+    try {
+      const ended = await cancelBatchJobs(name ? [name] : undefined);
+      toast.success(
+        `Cancelled ${formatNumber(ended)} ${ended === 1 ? "job" : "jobs"}`,
+        {
+          description:
+            "What was painted comes in; the rest is marked cancelled. Retry a set to ask for it again.",
+        },
+      );
+    } catch (error) {
+      toast.error(`Couldn't cancel: ${(error as Error).message}`);
+    } finally {
+      setCancelling(null);
+      setConfirmAll(false);
     }
   }
 
@@ -304,10 +347,11 @@ function BatchList({
             const failed = outs.filter((o) => o.status === "error").length;
             const end = job.finishedAt ? Date.parse(job.finishedAt) : now;
             return (
-              <li key={job.name}>
+              // One job can paint for several sets: it's listed once per set.
+              <li key={`${set.id}:${job.name}`} className="flex items-center hover:bg-muted">
                 <Link
                   href={`/generation/${set.id}`}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted [&_svg]:size-3.5 [&_svg]:shrink-0"
+                  className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 text-xs [&_svg]:size-3.5 [&_svg]:shrink-0"
                 >
                   {job.status === "running" ? (
                     <LoaderCircleIcon className="animate-spin text-emerald-500" />
@@ -333,6 +377,25 @@ function BatchList({
                     {duration(end - Date.parse(job.submittedAt))}
                   </span>
                 </Link>
+                {job.status === "running" ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="mx-1 text-muted-foreground hover:text-destructive"
+                    onClick={() => void cancel(job.name)}
+                    disabled={cancelling !== null}
+                    aria-label={`Cancel the batch job for ${set.source.title}`}
+                    title="Cancel this job: what's painted comes in, the rest can be retried"
+                  >
+                    {cancelling === job.name ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : (
+                      <XIcon />
+                    )}
+                  </Button>
+                ) : (
+                  <span className="w-3" />
+                )}
               </li>
             );
           })}
@@ -372,6 +435,27 @@ function BatchList({
           Send all
         </Button>
       </div>
+      {anyRunning && (
+        <div className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground [&_svg]:size-3.5">
+          <span className="flex-1">
+            End every job: what&apos;s painted comes in, the rest can be
+            retried
+          </span>
+          <Button
+            variant={confirmAll ? "destructive" : "outline"}
+            size="xs"
+            onClick={() => (confirmAll ? void cancel() : setConfirmAll(true))}
+            disabled={cancelling !== null}
+          >
+            {cancelling === "all" ? (
+              <LoaderCircleIcon className="animate-spin" />
+            ) : (
+              <XIcon />
+            )}
+            {confirmAll ? "Sure?" : "Cancel all"}
+          </Button>
+        </div>
+      )}
     </>
   );
 }

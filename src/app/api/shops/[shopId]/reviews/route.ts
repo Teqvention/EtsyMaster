@@ -1,7 +1,8 @@
-import { respond } from "@/lib/etsy/respond"
+import { poolParam, respond } from "@/lib/etsy/respond"
 import { getShopReviews } from "@/lib/etsy/shops"
 
-// One page of a shop's reviews, for the shop analysis. `since` is Unix seconds.
+// One page of a shop's reviews, for the shop analysis. `since` is Unix seconds;
+// `accounts` names the Etsy accounts to fetch with (see `poolParam`).
 export async function GET(
   request: Request,
   { params }: RouteContext<"/api/shops/[shopId]/reviews">
@@ -13,5 +14,5 @@ export async function GET(
   const search = new URL(request.url).searchParams
   const offset = Number(search.get("offset")) || 0
   const since = Number(search.get("since")) || undefined
-  return respond(() => getShopReviews(id, offset, since))
+  return respond(() => getShopReviews(id, offset, since, poolParam(search)))
 }

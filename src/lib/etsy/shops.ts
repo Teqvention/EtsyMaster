@@ -43,21 +43,23 @@ function parseShopInput(input: string): { id: number } | { name: string } | null
 
 /**
  * One page of a shop's reviews, newest first, optionally only those since
- * `since` (Unix seconds — round it so the cache key holds still).
+ * `since` (Unix seconds — round it so the cache key holds still). `pool`
+ * names the accounts to fetch with (the analysis accounts when absent).
  */
 export async function getShopReviews(
   shopId: number,
   offset = 0,
-  since?: number
+  since?: number,
+  pool?: string[]
 ): Promise<ShopReviewPage> {
   "use cache"
   cacheLife("hours")
 
-  const page = await etsyGet<ApiPage<ApiReview>>(`/shops/${shopId}/reviews`, {
-    limit: MAX_PAGE_SIZE,
-    offset,
-    min_created: since,
-  })
+  const page = await etsyGet<ApiPage<ApiReview>>(
+    `/shops/${shopId}/reviews`,
+    { limit: MAX_PAGE_SIZE, offset, min_created: since },
+    pool
+  )
 
   const next = offset + page.results.length
   return {

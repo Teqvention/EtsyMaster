@@ -4,6 +4,7 @@ import * as React from "react"
 import { ListPlusIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { getAllListings } from "@/components/shops/get-all-listings"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,9 +15,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { analyseShops, hasAllListings } from "@/hooks/use-shop-analysis"
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
-import { getShopVisit, recordShopVisit } from "@/hooks/use-shop-history"
+import { recordShopVisit } from "@/hooks/use-shop-history"
 import { formatNumber } from "@/lib/etsy/format"
 import type { ListingShop } from "@/lib/etsy/types"
 
@@ -133,42 +133,4 @@ export function ImportShops() {
       </Dialog>
     </>
   )
-}
-
-/**
- * Fetches the listings the shops don't have yet (shops that have them all are
- * left out), then says how it went.
- */
-export function getAllListings(shops: ListingShop[]) {
-  const missing = shops.filter((s) => !hasAllListings(getShopVisit(s.id)?.analysis, s.activeListings))
-  const complete = shops.length - missing.length
-  if (missing.length === 0) {
-    toast(
-      shops.length === 1
-        ? `${shops[0].name} has all its listings already`
-        : `All ${formatNumber(shops.length)} shops have all their listings already`
-    )
-    return
-  }
-  toast(`Getting the missing listings of ${formatNumber(missing.length)} ${missing.length === 1 ? "shop" : "shops"}`, {
-    description: `${complete ? `${formatNumber(complete)} already ${complete === 1 ? "has" : "have"} all of theirs. ` : ""}Only listings not held yet are fetched, two shops at a time.`,
-  })
-  analyseShops(missing).then((batch) => {
-    // Added to a batch already under way: that one reports.
-    if (!batch) return
-    const ok = batch.done - batch.failed.length
-    if (batch.failed.length) {
-      toast.error(`Got all listings of ${formatNumber(ok)} of ${formatNumber(batch.total)} shops`, {
-        description: `Failed: ${batch.failed.join(", ")}`,
-        duration: 10_000,
-      })
-    } else {
-      toast.success(
-        batch.done < batch.total
-          ? `Stopped after ${formatNumber(batch.done)} of ${formatNumber(batch.total)} shops`
-          : `Got all listings of ${formatNumber(batch.total)} ${batch.total === 1 ? "shop" : "shops"}`,
-        { duration: 10_000 }
-      )
-    }
-  })
 }

@@ -196,6 +196,7 @@ export type PipelineState = {
 //   POST   /api/pipeline/jobs               UploadPlan → PipelineState
 //   PATCH  /api/pipeline/jobs/[id]          { status: "paused" | "running" | "cancelled" } → PipelineState
 //   POST   /api/pipeline/items/[id]/retry   → PipelineState
+//   POST   /api/pipeline/retry              { items: string[] } runs every failed one again → PipelineState
 //   DELETE /api/pipeline/items/[id]         cancels a not yet uploaded item → PipelineState
 //   GET    /api/pipeline/items/[id]         → JobItem, payloads included
 //   GET    /api/pipeline/items/[id]/files/[...path]   a file it made, relative to its folder: media/01.jpg, media/video.mp4, print/r1414.jpg

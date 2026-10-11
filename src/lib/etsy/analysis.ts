@@ -1,4 +1,3 @@
-import { withReviewCount } from "./estimate"
 import { formatCurrency } from "./format"
 import type { Listing, ListingShop, ShopListingSort, ShopReview } from "./types"
 
@@ -76,25 +75,16 @@ function expectedReviewPages(window: ReviewWindow, shop: ListingShop) {
   return Math.max(1, Math.ceil((shop.reviewCount * share) / PER_REQUEST))
 }
 
-/** A sensible first plan: the whole shop if it's small, and the deepest review window that stays cheap. */
+/**
+ * A sensible first plan: the whole shop if it's small, and every review it
+ * ever got, which the estimates are calibrated on (see `calibrate.ts`).
+ */
 export function defaultPlan(shop: ListingShop): AnalysisPlan {
   const limit = shop.activeListings <= 500 ? shop.activeListings : 500
-  const reviews =
-    (["all", "1y", "90d"] as const).find((w) => expectedReviewPages(w, shop) <= 20) ?? "none"
-  return { limit: Math.max(limit, 1), sort: "created", reviews }
+  return { limit: Math.max(limit, 1), sort: "created", reviews: "all" }
 }
 
 // --- Reviews ---
-
-/**
- * With every review the shop has, each listing's review count is exact, and
- * the estimates are redone with it — the strongest signal there is. A partial
- * window would undercount, so it only feeds the "recent" numbers.
- */
-export function applyReviews(listings: Listing[], reviews: ShopReview[]) {
-  const counts = countByListing(reviews)
-  return listings.map((l) => withReviewCount(l, counts.get(l.id) ?? 0))
-}
 
 export function countByListing(reviews: ShopReview[]) {
   const counts = new Map<number, number>()

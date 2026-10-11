@@ -21,7 +21,7 @@ import { LibraryButton } from "@/components/shops/library-button"
 import { RecentShops } from "@/components/shops/recent-shops"
 import { ScopePanel } from "@/components/shops/scope-panel"
 import { ShopInsightsView } from "@/components/shops/shop-insights"
-import { ShopLabelButton } from "@/components/shops/shop-labels"
+import { ShopTagButton } from "@/components/shops/shop-tags"
 import { ShopLikeButton } from "@/components/shops/shop-like"
 import { StealShopMockups } from "@/components/shops/steal-shop-mockups"
 import { Button } from "@/components/ui/button"
@@ -147,7 +147,10 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
 
   const reviews = run && run.plan.reviews !== "none" ? run.reviews : null
   const sharpened = run !== null && isSharpened(run)
-  const listings = React.useMemo(() => (run ? analysedListings(run) : []), [run])
+  // Estimated and ranked on the shop's own rates once every review is in.
+  const calibrated = React.useMemo(() => (run ? analysedListings(run, shop) : null), [run, shop])
+  const listings = calibrated?.listings ?? NO_LISTINGS
+  const calibration = calibrated?.calibration ?? null
 
   const recentReviews = React.useMemo(() => (reviews ? countByListing(reviews) : null), [reviews])
   const insights = React.useMemo(() => analyse(listings, currency), [listings, currency])
@@ -186,8 +189,10 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
             onStart={() => start(plan)}
             onUpdate={() => {
               if (!run) return
-              setPlan(run.plan)
-              start(run.plan, { fresh: true })
+              // Every review, always: the estimates are calibrated on them.
+              const next: AnalysisPlan = { ...run.plan, reviews: "all" }
+              setPlan(next)
+              start(next, { fresh: true })
             }}
             onStop={stop}
           />
@@ -219,6 +224,7 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
                 reviewWindow={run!.plan.reviews}
                 recentReviews={recentReviews}
                 sharpened={sharpened}
+                calibration={calibration}
                 currency={currency}
                 activeTag={tag}
                 onTag={setTag}
@@ -234,6 +240,7 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
             <TabsContent value="listings">
               <ListingGallery
                 listings={bestSelling}
+                calibration={calibration}
                 loading={run?.status === "running"}
                 sort={gallerySortKey}
                 onSortChange={setGallerySortKey}
@@ -245,6 +252,8 @@ function ShopAnalysis({ shop, currency }: { shop: ListingShop; currency: string 
     </SplitView>
   )
 }
+
+const NO_LISTINGS: Listing[] = []
 
 type ShopView = "analytics" | "listings"
 
@@ -262,11 +271,11 @@ function useShopView() {
   return [view, setView] as const
 }
 
-/** The scope the shop was last analysed with, fitted to its current size. */
+/** The scope the shop was last analysed with, fitted to its current size, with every review. */
 function lastPlan(shop: ListingShop): AnalysisPlan | null {
   const plan = getShopVisit(shop.id)?.analysis?.plan
   if (!plan) return null
-  return { ...plan, limit: Math.max(1, Math.min(plan.limit, shop.activeListings)) }
+  return { ...plan, limit: Math.max(1, Math.min(plan.limit, shop.activeListings)), reviews: "all" }
 }
 
 // --- Lookup ---
@@ -448,7 +457,7 @@ function ShopHeader({ shop, children }: { shop: ListingShop; children?: React.Re
                 {shop.reviewAverage.toFixed(2)} ({formatCompact(shop.reviewCount)})
               </span>
             )}
-            <ShopLabelButton shop={shop} />
+            <ShopTagButton shop={shop} />
           </div>
         </div>
       </div>
@@ -480,7 +489,7 @@ type SortKey = "revenue" | "sales" | "recent" | "favorites" | "price" | "newest"
 const SORTS: { value: SortKey; label: string; by: (l: Listing, recent: Map<number, number> | null) => number }[] = [
   { value: "revenue", label: "Revenue / mo", by: (l) => l.estimate.revenuePerMonthCents },
   { value: "sales", label: "Sales / mo", by: (l) => l.estimate.salesPerMonth },
-  { value: "recent", label: "Recent reviews", by: (l, recent) => recent?.get(l.id) ?? 0 },
+  { value: "recent", label: "Reviews, 12 mo", by: (l, recent) => l.rank?.reviews.year ?? recent?.get(l.id) ?? 0 },
   { value: "favorites", label: "Favorites", by: (l) => l.favorites },
   { value: "price", label: "Price", by: (l) => l.priceCents },
   { value: "newest", label: "Newest", by: (l) => -l.ageDays },

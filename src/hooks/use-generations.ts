@@ -111,6 +111,16 @@ export async function stopWaitingGenerations() {
   return stopped
 }
 
+/** Ends batch jobs for good (all running ones, or those named): what's painted comes in, the rest can be retried. */
+export async function cancelBatchJobs(names?: string[]) {
+  const { jobs } = await call<{ jobs: number }>("/api/generations/batch/cancel", {
+    method: "POST",
+    body: JSON.stringify({ names }),
+  })
+  await refreshGenerations()
+  return jobs
+}
+
 /** Everything open (running jobs and failed images) goes out again in one batch job. */
 export async function sendAllOpenGenerations() {
   const result = await call<{ jobs: number; retried: number }>("/api/generations/batch", { method: "POST" })

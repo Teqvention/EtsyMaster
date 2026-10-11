@@ -1,28 +1,30 @@
-import { formatCompact, formatNumber } from "@/lib/etsy/format"
+import { formatCompact, formatNumber, formatPercent } from "@/lib/etsy/format"
 import type { Listing, SignalSource } from "@/lib/etsy/types"
 
 // Shows the fuzzy math: what each public counter implies on its own (gray
-// bars), and where the blended estimate lands (the brand-coloured rule). A log
-// scale, because the signals routinely disagree by 10×.
+// bars), the rate it's turned into sales with and how much it counts, and
+// where the blended estimate lands (the brand-coloured rule). A log scale,
+// because the signals routinely disagree by 10×. In a shop analysis the rates
+// are the shop's own.
 
 const SOURCES: Record<
   SignalSource,
-  { label: string; input: (l: Listing) => string; ratio: string }
+  { label: string; input: (l: Listing) => string; ratio: (per: number | undefined) => string }
 > = {
   reviews: {
     label: "Reviews",
-    input: (l) => formatNumber(l.reviewCount ?? 0),
-    ratio: "÷ 15% review rate",
+    input: (l) => formatNumber(l.rank?.reviews.all ?? l.reviewCount ?? 0),
+    ratio: (per) => (per ? `÷ ${formatPercent(per)} who review` : "÷ review rate"),
   },
   favorites: {
     label: "Favorites",
     input: (l) => formatNumber(l.favorites),
-    ratio: "÷ 14 per sale",
+    ratio: (per) => (per ? `÷ ${per.toFixed(1)} per sale` : "÷ favorites per sale"),
   },
   views: {
     label: "Views",
     input: (l) => formatNumber(l.views),
-    ratio: "÷ 360 per sale",
+    ratio: (per) => (per ? `÷ ${formatCompact(per)} per sale` : "÷ views per sale"),
   },
 }
 
@@ -41,7 +43,11 @@ export function EstimateBreakdown({
   return (
     <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-xs">
       {rows.map((row) => (
-        <Row key={row.source} label={row.label} detail={`${row.input(listing)} ${row.ratio}`}>
+        <Row
+          key={row.source}
+          label={row.label}
+          detail={`${row.input(listing)} ${row.ratio(row.per)}${row.weight === undefined ? "" : ` · counts ${Math.round(row.weight * 100)}%`}`}
+        >
           <Bar value={row.sales} position={position(row.sales)} estimate={position(estimate.sales)} />
         </Row>
       ))}

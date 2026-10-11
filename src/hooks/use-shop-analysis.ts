@@ -5,14 +5,15 @@ import * as React from "react"
 import { notifyEtsyRequest } from "@/hooks/use-etsy-usage"
 import { recordShopAnalysis, type ShopAnalysisSummary } from "@/hooks/use-shop-history"
 import {
-  applyReviews,
   defaultPlan,
   newReviewsSince,
   planCost,
   reviewsSince,
   type AnalysisPlan,
 } from "@/lib/etsy/analysis"
+import { calibrateShop, type Calibrated } from "@/lib/etsy/calibrate"
 import type {
+  CountSnapshot,
   Listing,
   ListingIdPage,
   ListingShop,
@@ -53,6 +54,8 @@ export type AnalysisRun = {
   analysedAt: string | null
   /** Shown from the server's copy, not fetched in this visit. */
   stored: boolean
+  /** Favorites and views at earlier analyses, as the server keeps them. */
+  snapshots?: CountSnapshot[]
 }
 
 export type ShopRun = { shop: ListingShop; run: AnalysisRun }
@@ -137,6 +140,7 @@ export function storedRun(stored: StoredAnalysis): AnalysisRun {
     error: null,
     analysedAt: stored.analysedAt,
     stored: true,
+    snapshots: stored.snapshots,
   }
 }
 
@@ -158,7 +162,16 @@ function storeRun(shop: ListingShop, run: AnalysisRun) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).catch((error) => console.error(`Storing the analysis of ${shop.name}:`, error))
+  })
+    .then((res) => (res.ok ? (res.json() as Promise<{ snapshots?: CountSnapshot[] }>) : null))
+    .then((saved) => {
+      // The server adds the analysis this one replaced to the snapshots.
+      const entry = entries.get(shop.id)
+      if (!saved?.snapshots || entry?.run !== run) return
+      entry.run = { ...run, snapshots: saved.snapshots }
+      emit()
+    })
+    .catch((error) => console.error(`Storing the analysis of ${shop.name}:`, error))
 }
 
 function show(shop: ListingShop, run: AnalysisRun, abort: AbortController | null = null) {
@@ -172,7 +185,40 @@ function show(shop: ListingShop, run: AnalysisRun, abort: AbortController | null
 // when the run finished while you were on another page.
 function remember(shop: ListingShop, run: AnalysisRun) {
   if (run.listings.length === 0 || run.status === "running" || run.status === "idle") return
-  recordShopAnalysis(shop, summarise(run))
+  recordShopAnalysis(shop, summarise(run, shop))
+}
+
+/** Pages fetched at once in a run; the server spaces requests out per Etsy key. */
+const IN_PARALLEL = 3
+
+/** Runs `run` over `items`, a few at a time; the first failure stops it, once those under way are done. */
+async function inParallel<T>(items: T[], run: (item: T) => Promise<unknown>) {
+  let next = 0
+  let failed: { error: unknown } | null = null
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const item = items[next++]
+      try {
+        await run(item)
+      } catch (error) {
+        failed ??= { error }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(IN_PARALLEL, items.length) }, worker))
+  if (failed) throw (failed as { error: unknown }).error
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** A held listing with the favorites and views a fresh page of ids says, and its age as of now. */
+function freshen(listing: Listing, counts: { favorites: number; views: number }): Listing {
+  return {
+    ...listing,
+    favorites: counts.favorites,
+    views: counts.views || listing.views,
+    ageDays: Math.max(0, (Date.now() - Date.parse(listing.createdAt)) / DAY_MS),
+  }
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -186,8 +232,11 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
 /**
  * Fetches the shop with `plan`, or shows the session's copy of that run.
  * `fresh` fetches again even then (the server's page cache still applies).
- * `from`, an earlier run of the shop, is built on: its listings aren't fetched
- * again, nor its reviews when it had them all for the plan's window.
+ * It builds on `from` (by default the run on show: this session's, or the
+ * stored one): listings held already aren't fetched in full again, only
+ * brought up to date with the favorites and views their page of ids carries,
+ * and of reviews held for the window only the newer ones are fetched.
+ * `accounts` are the Etsy accounts to fetch with; the analysis accounts when absent.
  */
 export async function startAnalysis(
   shop: ListingShop,
@@ -196,8 +245,11 @@ export async function startAnalysis(
     fresh = false,
     quiet = false,
     from = null,
-  }: { fresh?: boolean; quiet?: boolean; from?: AnalysisRun | null } = {}
+    accounts,
+  }: { fresh?: boolean; quiet?: boolean; from?: AnalysisRun | null; accounts?: string[] } = {}
 ) {
+  // What's on show is built on, unless told otherwise.
+  from ??= entries.get(shop.id)?.run.listings.length ? entries.get(shop.id)!.run : null
   stopAnalysis(shop.id)
   const shopId = shop.id
   const cached = fresh ? null : cachedRun(shopId, plan)
@@ -226,6 +278,8 @@ export async function startAnalysis(
     error: null,
     analysedAt: null,
     stored: false,
+    // Favorites gained are counted from the snapshots the shop already has.
+    snapshots: from?.snapshots ?? entries.get(shopId)?.run.snapshots,
   }
   const entry = show(shop, current, abort)
   // A run superseded by a newer one of the same shop no longer writes to the store.
@@ -239,36 +293,41 @@ export async function startAnalysis(
 
   const seen = new Set<number>()
   let listed = false
+  const pool = accounts?.length ? `&accounts=${accounts.map(encodeURIComponent).join(",")}` : ""
   try {
-    // Listings, in the plan's order, up to its limit: a page of ids, then in
-    // full the ones not held yet.
-    for (let offset: number | null = 0; offset !== null; ) {
-      const remaining = plan.limit - current.listings.length
-      if (remaining <= 0) break
-      const params = new URLSearchParams({
-        offset: String(offset),
-        limit: String(Math.min(PAGE, remaining)),
-        sort: plan.sort,
-      })
-      const page: ListingIdPage = await getJson<ListingIdPage>(
-        `/api/shops/${shopId}/listing-ids?${params}`,
-        abort.signal
-      )
+    // Listings, in the plan's order, up to its limit: pages of ids (a few at
+    // once), each followed by the listings not held yet in full. Held ones
+    // take the favorites and views their page brings.
+    const pages = new Map<number, number[]>()
+    const listingsSoFar = () => {
+      const ordered = [...pages].sort(([a], [b]) => a - b).flatMap(([, ids]) => ids)
       // Offset paging over a live shop can repeat a listing across pages.
-      const ids = page.ids.filter((id) => !seen.has(id))
-      const missing = ids.filter((id) => !held.has(id))
+      const unique = [...new Set(ordered)]
+      // Ones Etsy no longer has in full are left out.
+      return unique.flatMap((id) => held.get(id) ?? []).slice(0, plan.limit)
+    }
+    const listingPage = async (offset: number, limit: number) => {
+      const params = new URLSearchParams({ offset: String(offset), limit: String(limit), sort: plan.sort })
+      const page = await getJson<ListingIdPage>(`/api/shops/${shopId}/listing-ids?${params}${pool}`, abort.signal)
+      for (const [id, counts] of Object.entries(page.counts ?? {})) {
+        const listing = held.get(Number(id))
+        if (listing) held.set(listing.id, freshen(listing, counts))
+      }
+      const missing = page.ids.filter((id) => !held.has(id))
       if (missing.length > 0) {
-        const fetched = await getJson<Listing[]>(`/api/listings/batch?ids=${missing.join(",")}`, abort.signal)
+        const fetched = await getJson<Listing[]>(`/api/listings/batch?ids=${missing.join(",")}${pool}`, abort.signal)
         fetched.forEach((l) => held.set(l.id, l))
       }
-      ids.forEach((id) => seen.add(id))
-      update({
-        // Ones Etsy no longer has in full are left out.
-        listings: [...current.listings, ...ids.flatMap((id) => held.get(id) ?? [])].slice(0, plan.limit),
-        listingTotal: page.total,
-      })
-      offset = page.nextOffset
+      page.ids.forEach((id) => seen.add(id))
+      pages.set(offset, page.ids)
+      update({ listings: listingsSoFar(), listingTotal: page.total })
+      return page
     }
+    const first = await listingPage(0, Math.min(PAGE, plan.limit))
+    const listingTarget = Math.min(plan.limit, first.total)
+    const offsets: number[] = []
+    for (let offset = PAGE; first.nextOffset !== null && offset < listingTarget; offset += PAGE) offsets.push(offset)
+    await inParallel(offsets, (offset) => listingPage(offset, Math.min(PAGE, listingTarget - offset)))
     listed = true
 
     // Then every review in the window, newest first: those held already are
@@ -284,19 +343,23 @@ export async function startAnalysis(
             )
           : []
       const since = heldUntil ?? window
-      const fetched: ShopReview[] = []
+      const fetched = new Map<number, ShopReview[]>()
       update({ reviews: older })
-      for (let offset: number | null = 0; offset !== null; ) {
+      const reviewPage = async (offset: number) => {
         const params = new URLSearchParams({ offset: String(offset) })
         if (since) params.set("since", String(since))
-        const page: ShopReviewPage = await getJson<ShopReviewPage>(
-          `/api/shops/${shopId}/reviews?${params}`,
-          abort.signal
-        )
-        fetched.push(...page.reviews)
-        update({ reviews: [...fetched, ...older], reviewTotal: page.total + older.length })
-        offset = page.nextOffset
+        const page = await getJson<ShopReviewPage>(`/api/shops/${shopId}/reviews?${params}${pool}`, abort.signal)
+        fetched.set(offset, page.reviews)
+        const all = [...fetched].sort(([a], [b]) => a - b).flatMap(([, reviews]) => reviews)
+        update({ reviews: [...all, ...older], reviewTotal: page.total + older.length })
+        return page
       }
+      const firstReviews = await reviewPage(0)
+      const reviewOffsets: number[] = []
+      for (let offset = firstReviews.reviews.length; firstReviews.nextOffset !== null && offset < firstReviews.total; offset += PAGE) {
+        reviewOffsets.push(offset)
+      }
+      await inParallel(reviewOffsets, reviewPage)
     }
 
     update({ status: "done", reviewsAt, analysedAt: new Date().toISOString() })
@@ -390,14 +453,15 @@ export function onBackgroundSettle(notify: (settled: ShopRun) => void) {
 
 // --- Many shops at once ---
 
-// "Get all listings" for a list of shops: every active listing of each, two
-// shops at a time, so the server spreads them over both analysis accounts.
-// Nothing is fetched twice: a shop that has all its listings already is left
-// out, and the rest build on what's held of them. The runs are ordinary ones
-// (header, recent shops, stored copy); only the batch as a whole ends with a
-// toast.
+// "Get all listings" for a list of shops: every active listing of each, with
+// the Etsy accounts picked for it (the analysis accounts unless told), a shop
+// per account at a time (two at least, four at most), so the server spreads
+// them over the accounts. Nothing is fetched twice: a shop that has all its
+// listings already is left out, and the rest build on what's held of them.
+// The runs are ordinary ones (header, recent shops, stored copy); only the
+// batch as a whole ends with a toast.
 
-const BATCH_CONCURRENCY = 2
+const BATCH_CONCURRENCY = { min: 2, max: 4 }
 
 export type Batch = {
   total: number
@@ -405,6 +469,8 @@ export type Batch = {
   failed: string[]
   /** Shops being fetched right now. */
   current: ListingShop[]
+  /** The Etsy accounts it fetches with; the analysis accounts when absent. */
+  accounts?: string[]
 }
 
 let batch: Batch | null = null
@@ -430,8 +496,8 @@ export function useBatch() {
 }
 
 /**
- * Whether an analysis holds every listing of a shop with `activeListings`:
- * nothing for "Get all listings" to add.
+ * Whether an analysis holds every listing of a shop with `activeListings`,
+ * and every review it ever got: nothing for "Get all listings" to add.
  */
 export function hasAllListings(
   analysis: Pick<ShopAnalysisSummary, "plan" | "complete" | "listings"> | null | undefined,
@@ -439,41 +505,43 @@ export function hasAllListings(
 ) {
   return (
     !!analysis &&
+    analysis.plan.reviews === "all" &&
     analysis.plan.limit >= activeListings &&
     (analysis.complete || analysis.listings >= activeListings)
   )
 }
 
 /**
- * Every active listing, in the order and with the review window `from` had
- * (or the cheap one the shop's default plan picks).
+ * Every active listing, in the order `from` had, and every review the shop
+ * ever got: the estimates are calibrated on them.
  */
 export function allListingsPlan(shop: ListingShop, from?: AnalysisRun | null): AnalysisPlan {
   const plan = { ...defaultPlan(shop), limit: Math.max(shop.activeListings, from?.listingTotal ?? 0, 1) }
-  return from ? { ...plan, sort: from.plan.sort, reviews: from.plan.reviews } : plan
+  return from ? { ...plan, sort: from.plan.sort } : plan
 }
 
 /**
  * About how many Etsy requests "Get all listings" makes for the shop: none
- * once it has every listing; otherwise a page of ids per 100 listings, the
- * ones not held yet in full, and the reviews newer than those held.
+ * once it has every listing and review; otherwise a page of ids per 100
+ * listings, the ones not held yet in full, and the reviews: only those newer
+ * than the ones held when it had them all, else every one.
  */
 export function allListingsCost(shop: ListingShop, analysis: ShopAnalysisSummary | null | undefined) {
   if (hasAllListings(analysis, shop.activeListings)) return 0
   const total = Math.max(shop.activeListings, 1)
   const missing = Math.max(total - (analysis?.listings ?? 0), 0)
-  const plan = analysis?.plan ?? defaultPlan(shop)
-  const reviews = plan.reviews !== "none" && analysis?.complete ? 1 : planCost({ ...plan, limit: 0 }, shop)
+  const allReviews = analysis?.plan.reviews === "all" && analysis.complete
+  const reviews = allReviews ? 1 : planCost({ ...defaultPlan(shop), limit: 0 }, shop)
   return Math.ceil(total / PAGE) + Math.ceil(missing / PAGE) + reviews
 }
 
 /**
- * Fetches every listing of each shop, a couple at a time. Shops already in
- * the batch are skipped; adding to a running batch queues them behind it.
- * Resolves with the batch once it's through, or null when this call only
- * added to one already under way.
+ * Fetches every listing of each shop, a couple at a time, with `accounts`.
+ * Shops already in the batch are skipped; adding to a running batch queues
+ * them behind it (with the accounts it runs on). Resolves with the batch once
+ * it's through, or null when this call only added to one already under way.
  */
-export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> {
+export async function analyseShops(shops: ListingShop[], accounts?: string[]): Promise<Batch | null> {
   const queued = new Set([...batchQueue, ...(batch?.current ?? [])].map((s) => s.id))
   const fresh = shops.filter((s) => !queued.has(s.id))
   if (fresh.length === 0) return null
@@ -484,11 +552,11 @@ export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> 
   }
 
   batchStopped = false
-  setBatch({ total: fresh.length, done: 0, failed: [], current: [] })
+  setBatch({ total: fresh.length, done: 0, failed: [], current: [], accounts })
   const worker = async () => {
     for (let shop = batchQueue.shift(); shop && !batchStopped; shop = batchQueue.shift()) {
       setBatch({ ...batch!, current: [...batch!.current, shop] })
-      const status = await getMissingListings(shop)
+      const status = await getMissingListings(shop, accounts)
       setBatch({
         ...batch!,
         done: batch!.done + 1,
@@ -497,7 +565,8 @@ export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> 
       })
     }
   }
-  await Promise.all(Array.from({ length: BATCH_CONCURRENCY }, worker))
+  const workers = Math.min(Math.max(accounts?.length ?? 0, BATCH_CONCURRENCY.min), BATCH_CONCURRENCY.max)
+  await Promise.all(Array.from({ length: workers }, worker))
   const settled = batch
   batchQueue = []
   setBatch(null)
@@ -507,7 +576,7 @@ export async function analyseShops(shops: ListingShop[]): Promise<Batch | null> 
 // One shop of the batch, built on what's held of it. One that turns out to
 // have every listing already (the recent shops list hadn't caught up) is left
 // as it is. Resolves with how its run ended.
-async function getMissingListings(shop: ListingShop) {
+async function getMissingListings(shop: ListingShop, accounts?: string[]) {
   const from = await heldRun(shop)
   const total = Math.max(shop.activeListings, from?.listingTotal ?? 0)
   if (from && hasAllListings({ plan: from.plan, complete: from.status === "done", listings: from.listings.length }, total)) {
@@ -515,7 +584,7 @@ async function getMissingListings(shop: ListingShop) {
     return null
   }
   if (batchStopped) return null
-  await startAnalysis(shop, allListingsPlan(shop, from), { quiet: true, from })
+  await startAnalysis(shop, allListingsPlan(shop, from), { quiet: true, from, accounts })
   return currentRun(shop.id)?.status ?? null
 }
 
@@ -538,19 +607,26 @@ export function stopBatch() {
 
 // --- Reading a run ---
 
-/** Exact review counts need every review there is, all of them loaded. */
+/** Every review the shop ever got is in: the estimates can be calibrated on the shop. */
 export function isSharpened(run: AnalysisRun) {
   return run.plan.reviews === "all" && run.status === "done"
 }
 
-/** The run's listings, their estimates redone from exact review counts when it has them. */
-export function analysedListings(run: AnalysisRun) {
-  return isSharpened(run) ? applyReviews(run.listings, run.reviews) : run.listings
+/**
+ * The run's listings estimated and ranked on the shop's own rates (measured
+ * once every review is in, typical ones until then), see `calibrate.ts`.
+ */
+export function analysedListings(run: AnalysisRun, shop: ListingShop): Calibrated {
+  return calibrateShop(run.listings, run.reviews, shop, {
+    reviewsComplete: isSharpened(run),
+    analysedAt: run.analysedAt,
+    snapshots: run.snapshots,
+  })
 }
 
 // What the recent shops list shows of a run.
-function summarise(run: AnalysisRun): ShopAnalysisSummary {
-  const listings = analysedListings(run)
+function summarise(run: AnalysisRun, shop: ListingShop): ShopAnalysisSummary {
+  const { listings } = analysedListings(run, shop)
   const top = [...listings]
     .sort((a, b) => b.estimate.revenuePerMonthCents - a.estimate.revenuePerMonthCents)
     .slice(0, 3)

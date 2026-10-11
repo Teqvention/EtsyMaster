@@ -3,13 +3,15 @@
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { ArrowDownToLineIcon, FolderIcon, FolderInputIcon, LayoutGridIcon } from "lucide-react"
+import { ArrowDownToLineIcon, FolderIcon, FolderInputIcon, LayoutGridIcon, Rows3Icon } from "lucide-react"
 
 import { useListingSelection } from "@/components/listings/split-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
 import { SelectionBar, SelectMark } from "@/components/selection"
 import { steal } from "@/components/steal/steal"
 import { StealDialog } from "@/components/steal/steal-dialog"
+import { ListingTable } from "@/components/shops/listing-table"
+import { FLAGS, FlagMarks, TierBadge, TIERS, TrendMark } from "@/components/shops/rank-badges"
 import { TagFilter, withAnyTag } from "@/components/shops/tag-filter"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,16 +29,40 @@ import { refreshCategories } from "@/hooks/use-categories"
 import { useSaved, useSavedFolder } from "@/hooks/use-saved"
 import { useSelection } from "@/hooks/use-selection"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatCompact, formatCompactCurrency, formatCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import type { ShopCalibration } from "@/lib/etsy/calibrate"
+import {
+  formatCompact,
+  formatCompactCurrency,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  formatRate,
+} from "@/lib/etsy/format"
 import type { Listing } from "@/lib/etsy/types"
 import { cn } from "@/lib/utils"
 
-// A shop's listings as pictures, best sellers first: few numbers, big photos.
-// Click picks listings (Shift for a run, ⌘A for all), then "Steal" (or S)
-// files them into categories on the Saved page; right-click files them into
-// one straight away. Double-click opens the details.
+// A shop's listings, best sellers first: as big photos, or as a table of
+// every number the ranking is made of. The chips above narrow them to what
+// to look at first (the top tiers, rising, new, sleeping). Click picks
+// listings (Shift for a run, ⌘A for all), then "Steal" (or S) files them into
+// categories on the Saved page; right-click files them into one straight
+// away. Double-click (a click, in the table) opens the details.
 
-export type GallerySort = "sales" | "revenue" | "lifetime" | "favorites" | "views"
+export type GallerySort =
+  | "sales"
+  | "revenue"
+  | "trend"
+  | "lifetime"
+  | "reviews"
+  | "favorites"
+  | "favoritesPace"
+  | "gained"
+  | "views"
+  | "price"
+  | "newest"
+
+const perMonth = (l: Listing) => l.favorites / (Math.max(l.ageDays, 30) / 30)
 
 /** Ways to rank the whole shop, best first; `value` is what a tile shows. */
 const SORTS: {
@@ -47,7 +73,7 @@ const SORTS: {
 }[] = [
   {
     value: "sales",
-    label: "Sales / mo",
+    label: "Rank · sales / mo",
     by: (l) => l.estimate.salesPerMonth,
     show: (l) => <Metric value={formatRate(l.estimate.salesPerMonth, true)} unit="/ mo" />,
   },
@@ -58,10 +84,22 @@ const SORTS: {
     show: (l) => <Metric value={formatCompactCurrency(l.estimate.revenuePerMonthCents, l.currency)} unit="/ mo" />,
   },
   {
+    value: "trend",
+    label: "Trend",
+    by: (l) => l.rank?.trend ?? -1,
+    show: (l) => <TrendMark rank={l.rank} />,
+  },
+  {
     value: "lifetime",
     label: "Sales, all time",
     by: (l) => l.estimate.sales,
     show: (l) => <Metric value={formatRate(l.estimate.sales, true)} unit="sold" />,
+  },
+  {
+    value: "reviews",
+    label: "Reviews, 12 mo",
+    by: (l) => l.rank?.reviews.year ?? l.reviewCount ?? 0,
+    show: (l) => <Metric value={formatNumber(l.rank?.reviews.year ?? l.reviewCount ?? 0)} unit="reviews" />,
   },
   {
     value: "favorites",
@@ -70,12 +108,83 @@ const SORTS: {
     show: (l) => <Metric value={formatCompact(l.favorites)} unit="favs" />,
   },
   {
+    value: "favoritesPace",
+    label: "Favorites / mo",
+    by: perMonth,
+    show: (l) => <Metric value={formatRate(perMonth(l))} unit="favs / mo" />,
+  },
+  {
+    value: "gained",
+    label: "Favorites gained",
+    by: (l) => l.rank?.favoritesGained?.count ?? -1,
+    show: (l) => <Metric value={`+${formatNumber(l.rank?.favoritesGained?.count ?? 0)}`} unit="favs since" />,
+  },
+  {
     value: "views",
     label: "Views",
     by: (l) => l.views,
     show: (l) => <Metric value={formatCompact(l.views)} unit="views" />,
   },
+  {
+    value: "price",
+    label: "Price",
+    by: (l) => l.priceCents,
+    show: (l) => <Metric value={formatCurrency(l.priceCents, l.currency)} unit="" />,
+  },
+  {
+    value: "newest",
+    label: "Newest",
+    by: (l) => -l.ageDays,
+    show: (l) => <Metric value={formatCompact(Math.round(l.ageDays))} unit="days old" />,
+  },
 ]
+
+// --- What to look at first ---
+
+type Focus = "all" | "top1" | "top10" | "top25" | "rising" | "new" | "sleeping"
+
+const FOCUS: { value: Focus; label: string; hint: string; matches: (l: Listing) => boolean }[] = [
+  { value: "all", label: "All", hint: "Every analysed listing", matches: () => true },
+  { value: "top1", label: TIERS.top1.label, hint: TIERS.top1.hint, matches: (l) => l.rank?.tier === "top1" },
+  {
+    value: "top10",
+    label: TIERS.top10.label,
+    hint: TIERS.top10.hint,
+    matches: (l) => l.rank?.tier === "top1" || l.rank?.tier === "top10",
+  },
+  {
+    value: "top25",
+    label: TIERS.top25.label,
+    hint: TIERS.top25.hint,
+    matches: (l) => !!l.rank && l.rank.tier !== "rest",
+  },
+  { value: "rising", label: FLAGS.rising.label, hint: FLAGS.rising.hint, matches: (l) => !!l.rank?.flags.includes("rising") },
+  { value: "new", label: FLAGS.new.label, hint: FLAGS.new.hint, matches: (l) => !!l.rank?.flags.includes("new") },
+  { value: "sleeping", label: FLAGS.sleeping.label, hint: FLAGS.sleeping.hint, matches: (l) => !!l.rank?.flags.includes("sleeping") },
+]
+
+type Layout = "grid" | "table"
+const LAYOUT_KEY = "etsy-research:shop-listings-layout"
+
+/** Grid or table, as last picked in this browser. */
+function useLayout() {
+  const [layout, setLayout] = React.useState<Layout>(() => {
+    try {
+      return localStorage.getItem(LAYOUT_KEY) === "table" ? "table" : "grid"
+    } catch {
+      return "grid"
+    }
+  })
+  const change = React.useCallback((next: Layout) => {
+    setLayout(next)
+    try {
+      localStorage.setItem(LAYOUT_KEY, next)
+    } catch {
+      // Not remembered; the grid opens next time.
+    }
+  }, [])
+  return [layout, change] as const
+}
 
 /** Every listing ranked by `sort`, best first; ties go to estimated sales a month, then revenue. */
 export function gallerySort(listings: Listing[], sort: GallerySort) {
@@ -105,12 +214,14 @@ const PRELOAD_MARGIN = "0px 0px 1200px 0px"
 
 export function ListingGallery({
   listings: all,
+  calibration,
   loading,
   sort,
   onSortChange,
 }: {
   /** Every analysed listing in gallery order, see `gallerySort`. */
   listings: Listing[]
+  calibration: ShopCalibration | null
   loading: boolean
   sort: GallerySort
   onSortChange: (sort: GallerySort) => void
@@ -118,10 +229,21 @@ export function ListingGallery({
   const router = useRouter()
   const { select: openDetails } = useListingSelection()
   const [shown, setShown] = React.useState(STEP)
-  // Keywords narrow the grid; a tile keeps its rank in the whole shop.
+  const [layout, setLayout] = useLayout()
+  // Keywords and the focus narrow the grid; a tile keeps its rank in the whole shop.
   const [keywords, setKeywords] = React.useState<string[]>([])
+  const [focus, setFocus] = React.useState<Focus>("all")
   const ranks = React.useMemo(() => new Map(all.map((l, i) => [l.id, i + 1])), [all])
-  const listings = React.useMemo(() => withAnyTag(all, keywords), [all, keywords])
+  const tagged = React.useMemo(() => withAnyTag(all, keywords), [all, keywords])
+  const focusCounts = React.useMemo(
+    () => new Map(FOCUS.map((f) => [f.value, tagged.filter(f.matches).length])),
+    [tagged]
+  )
+  const listings = React.useMemo(
+    () => tagged.filter(FOCUS.find((f) => f.value === focus)!.matches),
+    [tagged, focus]
+  )
+  const sorts = SORTS.filter((s) => s.value !== "gained" || all.some((l) => l.rank?.favoritesGained))
   const ids = React.useMemo(() => listings.map((l) => l.id), [listings])
   const selection = useSelection(ids)
   const saved = useSaved()
@@ -253,24 +375,40 @@ export function ListingGallery({
           }}
         />
         <span className="text-xs text-muted-foreground tabular-nums">
-          {keywords.length > 0
+          {listings.length < all.length
             ? `${formatNumber(listings.length)} of ${formatNumber(all.length)} listings`
             : `${formatNumber(all.length)} listings`}
         </span>
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          spacing={0}
+          value={[layout]}
+          onValueChange={(value) => value[0] && setLayout(value[0] as Layout)}
+          aria-label="Show as"
+          className="ml-auto"
+        >
+          <ToggleGroupItem value="grid" aria-label="Photos" title="Photos">
+            <LayoutGridIcon />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="table" aria-label="Table" title="Table: every number">
+            <Rows3Icon />
+          </ToggleGroupItem>
+        </ToggleGroup>
         <Select
           value={sort}
-          items={SORTS}
+          items={sorts}
           onValueChange={(value) => {
             if (!value) return
             onSortChange(value as GallerySort)
             setShown(STEP)
           }}
         >
-          <SelectTrigger size="sm" className="ml-auto w-40" aria-label="Rank by">
+          <SelectTrigger size="sm" className="w-44" aria-label="Rank by">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SORTS.map((s) => (
+            {sorts.map((s) => (
               <SelectItem key={s.value} value={s.value}>
                 {s.label}
               </SelectItem>
@@ -278,9 +416,38 @@ export function ListingGallery({
           </SelectContent>
         </Select>
       </div>
+      {all.some((l) => l.rank) && (
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          spacing={1}
+          value={[focus]}
+          onValueChange={(value) => {
+            if (!value[0]) return
+            setFocus(value[0] as Focus)
+            setShown(STEP)
+          }}
+          aria-label="Show first"
+          className="w-full flex-wrap"
+        >
+          {FOCUS.filter((f) => f.value === "all" || f.value === focus || focusCounts.get(f.value)).map((f) => (
+            <ToggleGroupItem key={f.value} value={f.value} title={f.hint} className="gap-1.5">
+              {f.value === "rising" || f.value === "new" || f.value === "sleeping" ? (
+                <FlagMarks flags={[f.value]} />
+              ) : null}
+              {f.label}
+              <span className="text-xs text-muted-foreground tabular-nums">{formatNumber(focusCounts.get(f.value) ?? 0)}</span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      )}
+      {calibration && <CalibrationNote calibration={calibration} />}
+
       <div className="flex min-h-7 items-center justify-between gap-2 text-xs text-muted-foreground">
         <p className={cn("transition-opacity duration-150", selection.count > 0 && "opacity-0")}>
-          Click to select, then steal them into categories. Right-click to steal in one go
+          {layout === "table"
+            ? "Click a row to open it, tick the box to steal it. Hover a number to see how it's worked out"
+            : "Click to select, then steal them into categories. Right-click to steal in one go"}
         </p>
         <div className="flex items-center gap-1">
           {lastFiled >= 0 && (
@@ -308,6 +475,20 @@ export function ListingGallery({
         </div>
       </div>
 
+      {layout === "table" ? (
+        <ListingTable
+          listings={ranked.slice(0, shown).map((r) => r.listing)}
+          calibration={calibration}
+          sort={sort}
+          onSort={(next) => {
+            onSortChange(next)
+            setShown(STEP)
+          }}
+          isSelected={(id) => selection.has(id)}
+          onToggle={(id, range) => selection.toggle(id, { range })}
+          onOpen={openDetails}
+        />
+      ) : (
       <ContextMenu
         open={menuOpen}
         onOpenChange={(open) => {
@@ -362,6 +543,7 @@ export function ListingGallery({
           </ContextMenuGroup>
         </ContextMenuContent>
       </ContextMenu>
+      )}
       {more && <div ref={sentinel} aria-hidden className="h-px" />}
 
       <SelectionBar
@@ -456,6 +638,12 @@ function GalleryTile({
           )}
         />
         <SelectMark selected={selected} selecting={selecting} />
+        {listing.rank && (listing.rank.tier !== "rest" || listing.rank.flags.length > 0) && (
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/90 py-0.5 pr-1.5 pl-0.5 shadow-sm backdrop-blur-sm empty:hidden">
+            <TierBadge tier={listing.rank.tier} />
+            <FlagMarks flags={listing.rank.flags} />
+          </span>
+        )}
 
         {folder && (
           <span className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-[11px] font-medium shadow-sm backdrop-blur-sm transition-[opacity,transform] duration-200 ease-out-strong starting:scale-95 starting:opacity-0">
@@ -473,5 +661,33 @@ function GalleryTile({
         </span>
       </span>
     </button>
+  )
+}
+
+/** What the numbers rest on: the shop's own rates, and the share of its sales these listings made. */
+function CalibrationNote({ calibration: c }: { calibration: ShopCalibration }) {
+  if (!c.measured.reviewRate) {
+    return (
+      <p className="text-xs text-pretty text-muted-foreground">
+        Estimated with typical rates (9% of buyers leave a review, a sale brings about 10 favorites and 100 views)
+        {c.reviewsComplete ? ": the shop hides its sales, so its own can't be measured." : ". Fetch every review to calibrate on this shop."}
+      </p>
+    )
+  }
+  return (
+    <p className="text-xs text-pretty text-muted-foreground">
+      Calibrated on this shop: <strong className="font-medium text-foreground">1 in {Math.round(1 / c.reviewRate)}</strong>{" "}
+      buyers leaves a review ({formatPercent(c.reviewRate)}), and a sale brings about{" "}
+      <strong className="font-medium text-foreground">{c.favoritesPerSale.toFixed(1)} favorites</strong> and{" "}
+      <strong className="font-medium text-foreground">{formatCompact(c.viewsPerSale)} views</strong>.
+      {c.coveredShare !== null && (
+        <>
+          {" "}
+          These listings made <strong className="font-medium text-foreground">{formatPercent(c.coveredShare)}</strong> of
+          its sales.
+        </>
+      )}{" "}
+      Reviews count as they add up: one barely moves a listing, dozens decide it.
+    </p>
   )
 }

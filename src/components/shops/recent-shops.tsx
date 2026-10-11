@@ -9,6 +9,7 @@ import {
   ArrowUpIcon,
   ArrowUpNarrowWideIcon,
   CheckIcon,
+  CornerDownRightIcon,
   DownloadIcon,
   HeartIcon,
   ListChecksIcon,
@@ -23,16 +24,17 @@ import {
 } from "lucide-react"
 
 import { SelectionBar } from "@/components/selection"
-import { getAllListings } from "@/components/shops/import-shops"
-import { LabelBadges, LabelDialog, ShopLabelIconButton } from "@/components/shops/shop-labels"
+import { GetAllListingsPopover } from "@/components/shops/get-all-listings"
+import { ShopTagIconButton, TagBadge, TagDialog } from "@/components/shops/shop-tags"
 import { ShopLikeButton } from "@/components/shops/shop-like"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { allListingsCost, hasAllListings, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
-import { forgetShop, hasLabel, useShopLabels, type ShopVisit } from "@/hooks/use-shop-history"
+import { hasAllListings, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
+import { forgetShop, hasPrimaryTag, hasSecondaryTag, useShopTags, type ShopVisit } from "@/hooks/use-shop-history"
+import { useAccounts } from "@/hooks/use-accounts"
 import { useSelection } from "@/hooks/use-selection"
 import { formatCompact, formatCompactCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
 import { timeAgo } from "@/lib/shops/time-ago"
@@ -42,9 +44,10 @@ import { cn } from "@/lib/utils"
 // analysis found, so the list doubles as a quick comparison. The column heads
 // (or the sort menu, where they're hidden) reorder it, and the bar above
 // narrows it by name, liked, country, analysis and sales. Shops can be liked
-// and filed under labels from their row: the chips filter by label, and Select
-// picks shops to label in one go. All but the search live in the URL
-// (`?label=&liked&country=&status=&sales=&sort=`).
+// and tagged from their row (a primary tag, secondary tags under it): the
+// chips filter by primary tag and then by secondary tag, and Select picks
+// shops to tag in one go. All but the search live in the URL
+// (`?tag=&sub=&liked&country=&status=&sales=&sort=`).
 
 const COLUMNS =
   "grid-cols-[minmax(0,1fr)_auto] @2xl:grid-cols-[minmax(0,1fr)_7rem_6rem_5rem_4.5rem] @4xl:grid-cols-[minmax(0,1fr)_5.5rem_7rem_6rem_5rem_4.5rem]"
@@ -61,18 +64,18 @@ export function RecentShops({
   const now = useNow()
   const [searchParams, setParams] = useParams()
   const [search, setSearch] = React.useState("")
-  const filter = React.useMemo(() => labelFilter(searchParams.get("label")), [searchParams])
+  const filter = React.useMemo(() => tagFilter(searchParams.get("tag"), searchParams.get("sub")), [searchParams])
   const filters = React.useMemo(() => readFilters(searchParams), [searchParams])
   const sort = React.useMemo(() => parseSort(searchParams.get("sort")), [searchParams])
   const shown = React.useMemo(() => {
     const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return sortVisits(visits.filter((v) => filter.matches(v) && matchesFilters(v, filters, words)), sort)
   }, [visits, filter, filters, search, sort])
-  const filtering = filter.label !== null || search.trim() !== "" || hasFilters(filters)
+  const filtering = filter.primary !== null || search.trim() !== "" || hasFilters(filters)
 
   function clearFilters() {
     setSearch("")
-    setParams({ label: null, ...NO_FILTER_PARAMS })
+    setParams({ tag: null, sub: null, ...NO_FILTER_PARAMS })
   }
 
   function toggleSort(key: SortKey) {
@@ -85,7 +88,7 @@ export function RecentShops({
   const keys = React.useMemo(() => shown.map((v) => v.shop.id), [shown])
   const selection = useSelection(keys)
   const [picking, setPicking] = React.useState(false)
-  const [labelling, setLabelling] = React.useState(false)
+  const [tagging, setTagging] = React.useState(false)
   // ⌘A picks too, so the checkboxes follow the selection, not just the button.
   const selecting = picking || selection.count > 0
   const picked = shown.filter((v) => selection.has(v.shop.id)).map((v) => v.shop)
@@ -134,7 +137,7 @@ export function RecentShops({
         ) : (
           <>
             <GetAllListingsButton visits={shown} />
-            <Button variant="outline" size="sm" onClick={() => setPicking(true)} title="Pick shops to label">
+            <Button variant="outline" size="sm" onClick={() => setPicking(true)} title="Pick shops to tag or get listings of">
               <ListChecksIcon />
               Select
             </Button>
@@ -153,7 +156,11 @@ export function RecentShops({
         onClear={filtering ? clearFilters : undefined}
       />
 
-      <LabelFilter visits={visits} filter={filter} onChange={(label) => setParams({ label })} />
+      <TagFilter
+        visits={visits}
+        filter={filter}
+        onChange={(primary, secondary) => setParams({ tag: primary, sub: secondary })}
+      />
 
       {shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-3 py-8 text-center">
@@ -200,49 +207,39 @@ export function RecentShops({
         onSelectAll={selection.selectAll}
         onClear={selection.clear}
       >
-        <Button
-          variant="outline"
-          size="sm"
-          className="active:scale-[0.97]"
-          onClick={() => getAllListings(picked)}
-          title={missingListings(shown.filter((v) => selection.has(v.shop.id)))}
-        >
-          <DownloadIcon />
-          Get all listings
-        </Button>
-        <Button size="sm" className="active:scale-[0.97]" onClick={() => setLabelling(true)}>
+        <GetAllListingsPopover shops={picked} side="top" align="start">
+          <Button variant="outline" size="sm" className="data-popup-open:bg-muted active:scale-[0.97]">
+            <DownloadIcon />
+            Get all listings…
+          </Button>
+        </GetAllListingsPopover>
+        <Button size="sm" className="active:scale-[0.97]" onClick={() => setTagging(true)}>
           <TagsIcon />
-          Label…
+          Tag…
         </Button>
       </SelectionBar>
-      <LabelDialog shops={picked} open={labelling && picked.length > 0} onOpenChange={setLabelling} />
+      <TagDialog shops={picked} open={tagging && picked.length > 0} onOpenChange={setTagging} />
     </section>
   )
 }
 
 // --- Get all listings ---
 
-// What "Get all listings" would do for the shops: only the listings they don't have yet.
-function missingListings(visits: ShopVisit[]) {
-  const missing = visits.filter((v) => !hasAllListings(v.analysis, v.shop.activeListings))
-  if (missing.length === 0) {
-    return visits.length === 1 ? "This shop has all its listings already" : "Every shop here has all its listings already"
-  }
-  const requests = missing.reduce((total, v) => total + allListingsCost(v.shop, v.analysis), 0)
-  return `The listings still missing from ${formatNumber(missing.length)} of ${formatNumber(visits.length)} shops, about ${formatNumber(requests)} Etsy requests`
-}
-
-// The listings the shops listed don't have yet, two shops at a time over both
-// analysis accounts; while that runs, how far it got and a way to stop it.
+// The listings the shops listed don't have yet, with the accounts picked in
+// its popover; while that runs, how far it got and a way to stop it.
 function GetAllListingsButton({ visits }: { visits: ShopVisit[] }) {
   const batch = useBatch()
+  const accounts = useAccounts()
   if (batch) {
+    const using = batch.accounts
+      ?.map((id) => accounts?.accounts.find((a) => a.id === id)?.label ?? id)
+      .join(", ")
     return (
       <Button
         variant="outline"
         size="sm"
         onClick={stopBatch}
-        title={`Fetching ${batch.current.map((s) => s.name).join(", ")} · click to stop`}
+        title={`Fetching ${batch.current.map((s) => s.name).join(", ")} with ${using ?? "the analysis accounts"} · click to stop`}
       >
         <LoaderCircleIcon className="animate-spin" />
         <span className="tabular-nums">
@@ -253,17 +250,17 @@ function GetAllListingsButton({ visits }: { visits: ShopVisit[] }) {
     )
   }
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="text-muted-foreground"
-      disabled={visits.length === 0}
-      onClick={() => getAllListings(visits.map((v) => v.shop))}
-      title={missingListings(visits)}
-    >
-      <DownloadIcon />
-      Get all listings
-    </Button>
+    <GetAllListingsPopover shops={visits.map((v) => v.shop)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground data-popup-open:bg-muted"
+        disabled={visits.length === 0}
+      >
+        <DownloadIcon />
+        Get all listings
+      </Button>
+    </GetAllListingsPopover>
   )
 }
 
@@ -629,60 +626,127 @@ function FilterSelect({
   )
 }
 
-// --- Label filter ---
+// --- Tag filter ---
 
-// Which shops are listed: all (no `?label=`), one label's, or the ones with
-// none (`?label=` left empty).
-type Filter = { key: string; label: string | null; matches: (visit: ShopVisit) => boolean }
-
-const ALL = "all"
-const UNLABELLED = "unlabelled"
-
-function labelFilter(param: string | null): Filter {
-  if (param === null) return { key: ALL, label: null, matches: () => true }
-  if (param === "") return { key: UNLABELLED, label: "", matches: (v) => !v.labels?.length }
-  return { key: `l:${param.toLowerCase()}`, label: param, matches: (v) => hasLabel(v, param) }
+// Which shops are listed: all (no `?tag=`), one primary tag's (`?tag=City`),
+// within it one secondary tag's (`&sub=Cartoon`) or those with none under it
+// (`&sub=` left empty), or the shops without a tag (`?tag=` left empty).
+type Filter = {
+  key: string
+  primary: string | null
+  secondary: string | null
+  matches: (visit: ShopVisit) => boolean
 }
 
-function LabelFilter({
+const ALL = "all"
+const UNTAGGED = "untagged"
+
+function tagFilter(primary: string | null, secondary: string | null): Filter {
+  if (primary === null) return { key: ALL, primary: null, secondary: null, matches: () => true }
+  if (primary === "") return { key: UNTAGGED, primary: "", secondary: null, matches: (v) => !v.tag }
+  const key = `t:${primary.toLowerCase()}`
+  if (secondary === null) return { key, primary, secondary, matches: (v) => hasPrimaryTag(v, primary) }
+  return {
+    key,
+    primary,
+    secondary,
+    matches: (v) =>
+      hasPrimaryTag(v, primary) && (secondary === "" ? !v.tag!.secondary.length : hasSecondaryTag(v, secondary)),
+  }
+}
+
+type Chip = { key: string; label: string; count: number; value: string | null; icon?: boolean }
+
+function TagFilter({
   visits,
   filter,
   onChange,
 }: {
   visits: ShopVisit[]
   filter: Filter
-  onChange: (label: string | null) => void
+  onChange: (primary: string | null, secondary: string | null) => void
 }) {
-  const labels = useShopLabels()
-  const unlabelled = visits.filter((v) => !v.labels?.length).length
-  // A label nobody carries any more (or a stale link) still shows while picked.
-  const missing = filter.label && !labels.some((l) => l.name.toLowerCase() === filter.label!.toLowerCase())
+  const tags = useShopTags()
+  const untagged = visits.filter((v) => !v.tag).length
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+  // A tag nobody carries any more (or a stale link) still shows while picked.
+  const picked = filter.primary ? tags.find((t) => same(t.name, filter.primary!)) : undefined
+  const missing = !!filter.primary && !picked
 
-  if (labels.length === 0 && !missing) return null
+  if (tags.length === 0 && !missing) return null
 
-  const chips = [
+  const primaries: Chip[] = [
     { key: ALL, label: "All", count: visits.length, value: null },
-    ...labels.map((l) => ({ key: `l:${l.name.toLowerCase()}`, label: l.name, count: l.count, value: l.name })),
-    ...(missing ? [{ key: filter.key, label: filter.label!, count: 0, value: filter.label }] : []),
-    ...(unlabelled > 0 ? [{ key: UNLABELLED, label: "Unlabelled", count: unlabelled, value: "" }] : []),
+    ...tags.map((t) => ({ key: `t:${t.name.toLowerCase()}`, label: t.name, count: t.count, value: t.name, icon: true })),
+    ...(missing ? [{ key: filter.key, label: filter.primary!, count: 0, value: filter.primary, icon: true }] : []),
+    ...(untagged > 0 ? [{ key: UNTAGGED, label: "Untagged", count: untagged, value: "" }] : []),
   ]
 
+  // Within a primary tag: its secondary tags, and the shops with none of them.
+  const plain = picked ? visits.filter((v) => hasPrimaryTag(v, picked.name) && !v.tag!.secondary.length).length : 0
+  const subMissing =
+    !!filter.secondary && !!picked && !picked.secondary.some((s) => same(s.name, filter.secondary!))
+  const secondaries: Chip[] = picked
+    ? [
+        { key: "s:all", label: `All ${picked.name}`, count: picked.count, value: null },
+        ...picked.secondary.map((s) => ({ key: `s:${s.name.toLowerCase()}`, label: s.name, count: s.count, value: s.name })),
+        ...(subMissing ? [{ key: `s:${filter.secondary!.toLowerCase()}`, label: filter.secondary!, count: 0, value: filter.secondary }] : []),
+        ...(plain > 0 && picked.secondary.length > 0 ? [{ key: "s:none", label: "No secondary tag", count: plain, value: "" }] : []),
+      ]
+    : []
+  const secondaryKey =
+    filter.secondary === null ? "s:all" : filter.secondary === "" ? "s:none" : `s:${filter.secondary.toLowerCase()}`
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <ChipRow
+        chips={primaries}
+        value={filter.key}
+        label="Primary tag"
+        onPick={(chip) => onChange(chip.value, null)}
+      />
+      {secondaries.length > 1 && (
+        <div className="flex items-start gap-1.5 pl-1">
+          <CornerDownRightIcon className="mt-2 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <ChipRow
+            chips={secondaries}
+            value={secondaryKey}
+            label={`Secondary tag under ${picked!.name}`}
+            onPick={(chip) => onChange(filter.primary, chip.value)}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ChipRow({
+  chips,
+  value,
+  label,
+  onPick,
+}: {
+  chips: Chip[]
+  value: string
+  label: string
+  onPick: (chip: Chip) => void
+}) {
   return (
     <ToggleGroup
       variant="outline"
       size="sm"
       spacing={1}
-      value={[filter.key]}
-      onValueChange={(value) => {
-        const chip = chips.find((c) => c.key === value[0])
-        if (chip) onChange(chip.value)
+      value={[value]}
+      onValueChange={(next) => {
+        const chip = chips.find((c) => c.key === next[0])
+        if (chip) onPick(chip)
       }}
-      aria-label="Label"
+      aria-label={label}
       className="w-full flex-wrap"
     >
       {chips.map((chip) => (
         <ToggleGroupItem key={chip.key} value={chip.key} className="gap-1.5">
-          {chip.key !== ALL && chip.key !== UNLABELLED && <TagIcon />}
+          {chip.icon && <TagIcon />}
           {chip.label}
           <span className="text-xs text-muted-foreground tabular-nums">{chip.count}</span>
         </ToggleGroupItem>
@@ -756,7 +820,7 @@ function ShopRow({
           <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-medium">{shop.name}</span>
-              {visit.labels && <LabelBadges labels={visit.labels} />}
+              {visit.tag && <TagBadge tag={visit.tag} />}
             </span>
             <span className="flex items-center gap-2 text-muted-foreground">
               {shop.country && <span>{shop.country}</span>}
@@ -810,8 +874,8 @@ function ShopRow({
               size="icon-xs"
               aria-label={`Remove ${shop.name} from recent shops`}
               title={
-                visit.labels?.length || visit.likedAt
-                  ? "Labelled and liked shops stay in the list until removed"
+                visit.tag || visit.likedAt
+                  ? "Tagged and liked shops stay in the list until removed"
                   : undefined
               }
               onClick={() => forgetShop(shop.id)}
@@ -819,7 +883,7 @@ function ShopRow({
             >
               <XIcon />
             </Button>
-            <ShopLabelIconButton shop={shop} className={ON_HOVER} />
+            <ShopTagIconButton shop={shop} className={ON_HOVER} />
           </>
         )}
         <ShopLikeButton shop={shop} className={cn(!visit.likedAt && ON_HOVER)} />

@@ -24,7 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cancelItem, retryItem, setJobStatus, setPipelinePaused } from "@/hooks/use-pipeline"
+import { cancelItem, retryItem, retryItems, setJobStatus, setPipelinePaused } from "@/hooks/use-pipeline"
 import { SIZE_BY_KEY } from "@/lib/catalog/sizes"
 import { formatNumber } from "@/lib/etsy/format"
 import { STAGE_LABEL, STAGES, type JobItem, type PipelineState, type UploadJob } from "@/lib/pipeline/types"
@@ -220,7 +220,7 @@ function JobCard({
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => run("retry", () => Promise.all(failed.map((i) => retryItem(i.id))))}
+              onClick={() => run("retry", () => retryItems(failed.map((i) => i.id)))}
             >
               <RotateCwIcon />
               Retry {failed.length} failed

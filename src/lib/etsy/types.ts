@@ -89,8 +89,35 @@ export type SalesEstimate = {
   /** 0–100 on a log scale of sales per month; drives the heat ramp. */
   heat: number
   confidence: Confidence
-  /** What each public counter implies on its own, before blending. */
-  signals: { source: SignalSource; sales: number }[]
+  /**
+   * What each public counter implies on its own, before blending: its share of
+   * the blend (0–1), and the rate it was turned into sales with (reviews,
+   * favorites or views per sale).
+   */
+  signals: { source: SignalSource; sales: number; weight?: number; per?: number }[]
+}
+
+export type RankTier = "top1" | "top10" | "top25" | "rest"
+
+/**
+ * Where a listing stands in its shop: worked out in a shop analysis, from the
+ * shop's own rates (see `calibrate.ts`). Absent anywhere else.
+ */
+export type ListingRank = {
+  /** 1 = sells the most a month over the last 12 months. */
+  position: number
+  of: number
+  tier: RankTier
+  /** Estimated sales in the last 12 months (since it was listed, if younger). */
+  recentSales: number
+  /** The last 90 days' pace ÷ the last 12 months'; null with too little to tell. */
+  trend: number | null
+  trendFrom: "reviews" | "favorites" | null
+  reviews: { all: number; year: number; quarter: number }
+  /** Favorites gained since an earlier analysis of the shop. */
+  favoritesGained: { count: number; since: string; perDay: number } | null
+  /** Rising: selling faster lately. New: under 90 days and drawing attention fast. Sleeping: sold well once, nothing in a year. */
+  flags: ("rising" | "new" | "sleeping")[]
 }
 
 export type SignalSource = "reviews" | "favorites" | "views"
@@ -126,6 +153,8 @@ export type Listing = {
   /** Null if Etsy didn't return the shop alongside the listing. */
   shop: ListingShop | null
   estimate: SalesEstimate
+  /** In a shop analysis: its rank in the shop. */
+  rank?: ListingRank
 }
 
 export type ListingSort = "score" | "sales" | "created" | "price-asc" | "price-desc"
@@ -152,6 +181,11 @@ export type ListingPage = {
 /** One page of a shop's active listings, as ids only. */
 export type ListingIdPage = {
   ids: number[]
+  /**
+   * Each listing's favorites and views as the page has them: listings held
+   * already are brought up to date without fetching them again.
+   */
+  counts?: Record<number, { favorites: number; views: number }>
   /** Active listings Etsy reports. */
   total: number
   /** Offset for the next page, or null at the end. */
@@ -172,6 +206,9 @@ export type ShopReview = {
   /** Unix ms */
   createdAt: number
 }
+
+/** Every listing's favorites and views at an earlier analysis of the shop, by listing id. */
+export type CountSnapshot = { at: string; counts: Record<number, [favorites: number, views: number]> }
 
 export type ShopReviewPage = {
   reviews: ShopReview[]

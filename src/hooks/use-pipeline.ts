@@ -133,6 +133,11 @@ export function retryItem(id: string) {
   return call(`/api/pipeline/items/${id}/retry`, { method: "POST" })
 }
 
+/** Runs the failed ones of these items again, all in one go. */
+export function retryItems(ids: string[]) {
+  return call("/api/pipeline/retry", { method: "POST", body: JSON.stringify({ items: ids }) })
+}
+
 /** Takes an item out of its job before anything of it is on Etsy. */
 export function cancelItem(id: string) {
   return call(`/api/pipeline/items/${id}`, { method: "DELETE" })

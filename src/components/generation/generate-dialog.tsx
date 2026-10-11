@@ -34,6 +34,8 @@ import {
   type GenerateGroup,
   type GenerateOptions,
 } from "@/lib/generation/types"
+import { applyPresetOps, type PresetOp } from "@/lib/generation/preset-ops"
+import { createSyncedStore } from "@/lib/synced-store"
 import { cn } from "@/lib/utils"
 
 // What to make from the posters of one or many steals: variants (redraws at a
@@ -541,41 +543,21 @@ type PresetSettings = {
 
 type Preset = PresetSettings & { id: string; name: string }
 
-const PRESETS_KEY = "etsy-research:generate-presets"
-const presetListeners = new Set<() => void>()
-let presetsCache: { raw: string | null; presets: Preset[] } = { raw: null, presets: [] }
-
-function readPresets(): Preset[] {
-  const raw = localStorage.getItem(PRESETS_KEY)
-  if (raw !== presetsCache.raw) {
-    let presets: Preset[] = []
-    try {
-      presets = raw ? (JSON.parse(raw) as Preset[]) : []
-    } catch {}
-    presetsCache = { raw, presets }
-  }
-  return presetsCache.presets
-}
-
-function writePresets(presets: Preset[]) {
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
-  presetListeners.forEach((notify) => notify())
-}
-
 const NO_PRESETS: Preset[] = []
 
-/** Saved presets, remembered on this device. */
+// Kept in the database, every change sent as a step; presets an older
+// version kept in the browser alone are folded in once.
+const presetStore = createSyncedStore<Preset[], PresetOp<Preset>>({
+  api: "/api/generation-presets",
+  key: "etsy-research:generate-presets",
+  legacyKey: "etsy-research:generate-presets",
+  empty: NO_PRESETS,
+  apply: applyPresetOps,
+  what: "the presets",
+})
+
 function usePresets() {
-  return React.useSyncExternalStore(
-    (notify) => {
-      presetListeners.add(notify)
-      return () => {
-        presetListeners.delete(notify)
-      }
-    },
-    readPresets,
-    () => NO_PRESETS
-  )
+  return React.useSyncExternalStore(presetStore.subscribe, presetStore.read, () => NO_PRESETS)
 }
 
 /** "5 var · 3 ideas" — what a preset makes per poster. */
@@ -614,7 +596,8 @@ function PresetBar({
     setName("")
     if (!clean) return
     const settings = structuredClone(current)
-    writePresets([...presets, { ...settings, id: Math.random().toString(36).slice(2, 10), name: clean.slice(0, 32) }])
+    const preset: Preset = { ...settings, id: Math.random().toString(36).slice(2, 10), name: clean.slice(0, 32) }
+    presetStore.change({ type: "add", preset })
   }
 
   return (
@@ -642,7 +625,7 @@ function PresetBar({
             type="button"
             aria-label={`Delete preset ${preset.name}`}
             title="Delete preset"
-            onClick={() => writePresets(presets.filter((p) => p.id !== preset.id))}
+            onClick={() => presetStore.change({ type: "remove", id: preset.id })}
             className="absolute -top-1.5 -right-1.5 grid size-4 place-items-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-xs transition-opacity duration-150 group-hover/preset:opacity-100 hover:text-foreground focus-visible:opacity-100 [&_svg]:size-2.5"
           >
             <XIcon />

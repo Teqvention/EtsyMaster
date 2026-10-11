@@ -4,6 +4,8 @@ import path from "node:path"
 
 import sharp from "sharp"
 
+import { googlePaused, GooglePausedError } from "@/lib/google/pause"
+
 import type { Quad } from "./types"
 
 // Vertex AI with a service-account key: Nano Banana redraws a reference
@@ -18,7 +20,9 @@ type Key = { client_email: string; private_key: string; project_id: string; toke
 
 let token: { value: string; expires: number; key: Key } | null = null
 
+// Every call to Google signs in here first, so the pause switch stops them all.
 export async function auth() {
+  if (await googlePaused()) throw new GooglePausedError()
   if (token && token.expires > Date.now() + 60_000) return token
   const file = process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (!file) throw new Error("Set GOOGLE_APPLICATION_CREDENTIALS in .env.local")
@@ -63,8 +67,10 @@ export type Part = {
 // seconds — longer while it keeps happening, but never so long that a free
 // slot goes unused for long — and one more may go with each success. A call
 // keeps trying that way (and through dropped connections) for PATIENCE.
-const MAX_PARALLEL = 20
-const PATIENCE = 20 * 60_000
+// Kept low since 11 Oct: Google suspended an account over bursts of requests
+// (20 at a time per model, each retried for 20 minutes).
+const MAX_PARALLEL = 3
+const PATIENCE = 5 * 60_000
 const MAX_PAUSE = 20_000
 
 type Gate = { limit: number; active: number; waiting: (() => void)[]; until: number; strikes: number }

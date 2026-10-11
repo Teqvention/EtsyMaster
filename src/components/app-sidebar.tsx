@@ -6,6 +6,7 @@ import { nav } from "@/components/nav-config"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavBatch } from "@/components/nav-batch"
+import { NavGoogle } from "@/components/nav-google"
 import { NavUsage } from "@/components/nav-usage"
 import {
   Sidebar,
@@ -42,6 +43,7 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain items={nav.main} />
         <div className="mt-auto flex flex-col">
+          <NavGoogle className="pb-0" />
           <NavBatch className="pb-0" />
           <NavUsage />
         </div>

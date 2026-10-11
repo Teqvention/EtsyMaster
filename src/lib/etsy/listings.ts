@@ -98,32 +98,45 @@ export async function getShopListings(
 /**
  * One page of a shop's active listings as ids: the shop analysis fetches in
  * full only the ones it doesn't hold yet, so building on an earlier run costs
- * one request per page plus those.
+ * one request per page plus those. `pool` names the accounts to fetch with
+ * (the analysis accounts when absent).
  */
 export async function getShopListingIds(
   shopId: number,
   offset = 0,
   limit = MAX_PAGE_SIZE,
-  sort: ShopListingSort = "created"
+  sort: ShopListingSort = "created",
+  pool?: string[]
 ): Promise<ListingIdPage> {
   "use cache"
   cacheLife("hours")
 
   const page = await etsyGet<ApiPage<ApiListing>>(
     `/shops/${shopId}/listings/active`,
-    { limit: Math.min(limit, MAX_PAGE_SIZE), offset, ...SHOP_SORTS[sort] }
+    { limit: Math.min(limit, MAX_PAGE_SIZE), offset, ...SHOP_SORTS[sort] },
+    pool
   )
 
   const { total, nextOffset } = toPage(page, offset, [])
-  return { ids: page.results.map((l) => l.listing_id), total, nextOffset }
+  return {
+    ids: page.results.map((l) => l.listing_id),
+    counts: Object.fromEntries(
+      page.results.map((l) => [l.listing_id, { favorites: l.num_favorers, views: l.views ?? 0 }])
+    ),
+    total,
+    nextOffset,
+  }
 }
 
-/** Listings in full by id (at most 100), in the order given; ones Etsy no longer has are left out. */
-export async function getListingsById(ids: number[]): Promise<Listing[]> {
+/**
+ * Listings in full by id (at most 100), in the order given; ones Etsy no
+ * longer has are left out. `pool` as for `getShopListingIds`.
+ */
+export async function getListingsById(ids: number[], pool?: string[]): Promise<Listing[]> {
   "use cache"
   cacheLife("hours")
 
-  return hydrate(ids.slice(0, MAX_PAGE_SIZE).map((listing_id) => ({ listing_id })))
+  return hydrate(ids.slice(0, MAX_PAGE_SIZE).map((listing_id) => ({ listing_id })), pool)
 }
 
 /** A single listing, plus its review count — which sharpens the estimate. */
@@ -153,14 +166,18 @@ export async function getCategories(): Promise<Category[]> {
 // Search and shop endpoints return bare listings; the batch endpoint adds the
 // images and the shop (whose lifetime sales cap our estimate). One extra
 // request per page instead of one per listing.
-async function hydrate(results: Pick<ApiListing, "listing_id">[]) {
+async function hydrate(results: Pick<ApiListing, "listing_id">[], pool?: string[]) {
   if (results.length === 0) return []
 
-  const batch = await etsyGet<ApiPage<ApiListing>>("/listings/batch", {
-    listing_ids: results.map((r) => r.listing_id).join(","),
-    includes: "Images,Shop",
-    currency: DISPLAY_CURRENCY,
-  })
+  const batch = await etsyGet<ApiPage<ApiListing>>(
+    "/listings/batch",
+    {
+      listing_ids: results.map((r) => r.listing_id).join(","),
+      includes: "Images,Shop",
+      currency: DISPLAY_CURRENCY,
+    },
+    pool
+  )
 
   // The batch endpoint doesn't promise order; keep the search ranking.
   const byId = new Map(batch.results.map((l) => [l.listing_id, l]))

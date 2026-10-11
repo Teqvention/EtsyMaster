@@ -145,7 +145,12 @@ export type PaintJob = {
   size?: number
   /** Being ended early, so what's painted comes in and the rest goes out again. */
   harvest?: boolean
+  /** Cancelled by hand: what it painted still comes in, the rest is dropped (see `cancelJobs`). */
+  cancelled?: boolean
 }
+
+/** The error an output is left with when its batch job was cancelled by hand; a retry asks for it again. */
+export const CANCELLED = "Cancelled"
 
 /** An output's `job` while it waits, with others, for the batch job they'll go out in. */
 export const SENDING = "sending"

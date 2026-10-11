@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { EstimateBreakdown } from "@/components/listings/estimate-breakdown"
+import { FlagMarks, TierBadge, TrendMark } from "@/components/shops/rank-badges"
 import { HeatBar } from "@/components/listings/heat-bar"
 import { LikeButton } from "@/components/listings/like-button"
 import { ListingGrid } from "@/components/listings/listing-grid"
@@ -67,9 +68,14 @@ function useListingDetail(listingId: number, initial: Listing | null) {
     }
   }, [listingId])
 
+  // Opened from a shop analysis, its estimate and rank are the shop's
+  // calibrated ones: the fresh copy only brings the listing up to date.
+  const calibrated = initial?.rank ? initial : null
   return {
-    listing: cached ?? initial,
-    refined: cached !== undefined,
+    listing: calibrated
+      ? { ...(cached ?? calibrated), estimate: calibrated.estimate, rank: calibrated.rank, reviewCount: calibrated.reviewCount }
+      : (cached ?? initial),
+    refined: calibrated !== null || cached !== undefined,
     error: error?.id === listingId ? error.message : null,
   }
 }
@@ -195,11 +201,25 @@ function ListingBody({
             sub="at today's price"
           />
           <HeroStat
-            label="Per month"
+            label={listing.rank ? "Per month, last 12 mo" : "Per month"}
             value={`${formatRate(estimate.salesPerMonth)} sales`}
             sub={`${formatCompactCurrency(estimate.revenuePerMonthCents, listing.currency)} revenue`}
           />
         </div>
+        {listing.rank && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="font-medium tabular-nums">
+              Rank #{formatNumber(listing.rank.position)}{" "}
+              <span className="font-normal text-muted-foreground">of {formatNumber(listing.rank.of)} in the shop</span>
+            </span>
+            <TierBadge tier={listing.rank.tier} />
+            <TrendMark rank={listing.rank} className="text-xs" />
+            <FlagMarks flags={listing.rank.flags} labels />
+            <span className="text-muted-foreground tabular-nums">
+              {formatNumber(listing.rank.reviews.all)} reviews, {formatNumber(listing.rank.reviews.year)} in the last 12 months
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span>Velocity</span>
           <HeatBar heat={estimate.heat} className="h-1.5 flex-1" />

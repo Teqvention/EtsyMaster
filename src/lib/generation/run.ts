@@ -1,7 +1,9 @@
 
 import sharp from "sharp"
 
+import { watchDoc } from "@/lib/db/documents"
 import { exclusive } from "@/lib/db/sql"
+import { googlePaused, GooglePausedError, PAUSE_KEY } from "@/lib/google/pause"
 import { BLANK_PROMPT, blankAgainPrompt, paint } from "@/lib/mockups/gemini"
 import { createSceneFromBlank, fetchReference, replaceBlank, roomFile } from "@/lib/mockups/reference"
 import { getScene, NotFoundError, readSceneFile } from "@/lib/mockups/storage"
@@ -47,6 +49,7 @@ import {
   type Output,
   type OutputMode,
   type PaintJob,
+  CANCELLED,
   SENDING,
 } from "./types"
 
@@ -55,7 +58,7 @@ import {
 // and new batches only add images.
 
 /** Sets worked on at once; how many images go to Vertex at a time is up to its gate in gemini.ts. */
-const PARALLEL = 10
+const PARALLEL = 3
 
 type Queue = { waiting: string[]; running: Set<string> }
 // On globalThis, so every route (and a dev reload) shares the one queue.
@@ -72,6 +75,7 @@ export function dequeue(id: string) {
 }
 
 function pump() {
+  if (pause.on) return
   while (queue.running.size < PARALLEL) {
     // A set asked for again while it runs waits for that run to end.
     const i = queue.waiting.findIndex((id) => !queue.running.has(id))
@@ -84,6 +88,35 @@ function pump() {
     })
   }
 }
+
+// --- Google paused ---
+
+// While Google is paused (see google/pause.ts) nothing here starts a call to
+// it: the queue, the online lane, the outbox and the batch poller wait, and
+// what they hold stays as it is. Switched back on, on any server, they all go
+// again. The poller reads the switch every pass too, should word get lost.
+const pause = ((global as typeof global & { __googlePause?: { on: boolean } }).__googlePause ??= { on: false })
+
+async function pausedNow() {
+  const was = pause.on
+  try {
+    pause.on = await googlePaused()
+  } catch {
+    // The database is out of reach: keep what we knew.
+  }
+  if (was && !pause.on) resume()
+  return pause.on
+}
+
+function resume() {
+  pump()
+  lane.pull()
+  watchOutbox()
+  kickBatches(0)
+}
+
+void pausedNow()
+watchDoc(PAUSE_KEY, () => void pausedNow())
 
 // --- Requests ---
 
@@ -418,7 +451,8 @@ const lane = ((global as typeof global & { __paintLane?: Lane }).__paintLane ??=
   failed: 0,
   pull: () => {},
 })
-const LANE_PARALLEL = 24
+// Was 24; kept low since Google suspended an account over request bursts (11 Oct).
+const LANE_PARALLEL = 2
 
 /** Online while the lane has room; the rest waits in the outbox for a batch job (or room in the lane). */
 function send(parcel: Parcel) {
@@ -431,6 +465,7 @@ function send(parcel: Parcel) {
 }
 
 function pumpLane() {
+  if (pause.on) return
   while (lane.active < LANE_PARALLEL && lane.errands.length) {
     const errand = lane.errands.shift()!
     lane.active++
@@ -491,7 +526,7 @@ function watchOutbox() {
     outbox.timer = null
     if (!outbox.parcels.length) return
     try {
-      const allowed = Date.now() >= (outbox.notBefore ?? 0)
+      const allowed = Date.now() >= (outbox.notBefore ?? 0) && !pause.on
       const quiet = Date.now() - outbox.last > 5_000 && queue.running.size === 0 && queue.waiting.length === 0
       if (allowed && (quiet || Date.now() - outbox.first > GATHER)) await sendOut()
     } catch (error) {
@@ -509,14 +544,34 @@ function watchOutbox() {
  */
 const MAX_JOB = 10
 
-/** Everything in the outbox, in jobs of `MAX_JOB` at most. */
+/**
+ * Batch jobs running at once at most, across all sets. 44 sent within five
+ * minutes on 10 Oct were followed by Google suspending the account; what
+ * doesn't fit waits in the outbox until a job ends.
+ */
+const MAX_RUNNING_JOBS = 3
+
+/** What's in the outbox, in jobs of `MAX_JOB` at most, as many as `MAX_RUNNING_JOBS` leaves room for. */
 async function sendOut() {
+  const running = new Set(
+    (await listSets()).flatMap((s) => (s.jobs ?? []).filter((j) => j.status === "running").map((j) => j.name))
+  ).size
+  const room = MAX_RUNNING_JOBS - running
+  if (room <= 0) {
+    outbox.notBefore = Date.now() + 60_000
+    return
+  }
   const all = outbox.parcels.splice(0)
   const jobs: Parcel[][] = []
-  while (all.length) {
+  while (all.length && jobs.length < room) {
     let size = 0
     const count = all.findIndex((p) => (size += p.lines.length) > MAX_JOB)
     jobs.push(all.splice(0, count < 0 ? all.length : Math.max(count, 1)))
+  }
+  // The rest waits its turn.
+  if (all.length) {
+    outbox.parcels.unshift(...all)
+    outbox.notBefore = Date.now() + 60_000
   }
   await Promise.all(jobs.map(sendJob))
 }
@@ -575,8 +630,10 @@ async function paintErrand({ set, output, line }: Errand) {
   try {
     result = await paintLineNow(line)
   } catch (error) {
-    // Vertex stayed busy all along: a batch job takes it.
-    if (error instanceof StayedBusyError) return toOutbox({ set, outputs: [output], lines: [line] })
+    // Vertex stayed busy all along, or Google was paused meanwhile: a batch job takes it.
+    if (error instanceof StayedBusyError || error instanceof GooglePausedError) {
+      return toOutbox({ set, outputs: [output], lines: [line] })
+    }
     result = { key: output, error: message(error) }
   }
   if (result.image) lane.painted++
@@ -684,6 +741,8 @@ type Share = { set: string; job: PaintJob; waiting: string[] }
 
 async function pollBatches() {
   if (batches.ticking) return
+  // Paused: ask again later, so the watchdog doesn't take it for stopped.
+  if (await pausedNow()) return void kickBatches(BATCH_POLL)
   batches.ticking = true
   const pass = ++batches.pass
   batches.beat = Date.now()
@@ -742,7 +801,7 @@ const ORPHAN_AGE = 3 * 60_000
  * it costs nothing); images a stopped server still had to send go out again.
  */
 async function checkBatches() {
-  if (!(await isLeader())) return
+  if (!(await isLeader()) || (await pausedNow())) return
   batches.checkedAt = Date.now()
   const found = (problem: string) => {
     console.warn(`Batch check: ${problem}`)
@@ -762,7 +821,14 @@ async function checkBatches() {
 
     let sets = await listSets()
     const known = new Set(sets.flatMap((s) => (s.jobs ?? []).map((j) => j.name)))
-    const unknown = (await openPaintBatches()).filter((j) => j.displayName.startsWith("batch-") && !known.has(j.name))
+    const open = await openPaintBatches()
+    // Cancelled here while Google was out of reach: cancelled at Vertex too, now it's back.
+    const dropped = new Set(sets.flatMap((s) => (s.jobs ?? []).filter((j) => j.cancelled && j.status !== "running").map((j) => j.name)))
+    for (const job of open.filter((j) => dropped.has(j.name))) {
+      await cancelPaintBatch(job.name)
+      found(`job ${job.name.split("/").pop()} was cancelled by hand: cancelled at Vertex too`)
+    }
+    const unknown = open.filter((j) => j.displayName.startsWith("batch-") && !known.has(j.name))
     for (const job of unknown) {
       if (Date.now() - Date.parse(job.createdAt) < ORPHAN_AGE) continue
       const took = await adopt(job, sets)
@@ -977,8 +1043,14 @@ async function collect(name: string, shares: Share[], { state, error, output, in
   }
 
   const harvested = shares.some(({ job }) => job.harvest)
-  const again = harvested && left.size ? await inputLines(input, left) : new Map<string, string>()
-  const why = state === "failed" && !harvested ? `Batch job failed${error ? `: ${error}` : ""}` : "The batch job returned no image"
+  // Cancelled by hand: what it didn't get to is dropped, not sent again.
+  const cancelled = shares.some(({ job }) => job.cancelled)
+  const again = harvested && !cancelled && left.size ? await inputLines(input, left) : new Map<string, string>()
+  const why = cancelled
+    ? CANCELLED
+    : state === "failed" && !harvested
+      ? `Batch job failed${error ? `: ${error}` : ""}`
+      : "The batch job returned no image"
   const finishedAt = new Date().toISOString()
   for (const { set, job } of shares) {
     const resend = job.outputs.filter((o) => again.has(o))
@@ -1001,12 +1073,12 @@ async function collect(name: string, shares: Share[], { state, error, output, in
             ? [{
                 ...j,
                 outputs: kept,
-                status: state === "failed" && !harvested ? "error" : "done",
+                status: state === "failed" && !harvested && !cancelled ? "error" : "done",
                 finishedAt,
                 ready: undefined,
                 movedAt: undefined,
                 harvest: undefined,
-                ...(state === "failed" && !harvested && { error: why }),
+                ...(state === "failed" && !harvested && !cancelled && { error: why }),
               }]
             : []
       )
@@ -1057,6 +1129,85 @@ export async function sendAllOpen() {
     retried += failed
   }
   return { jobs, retried }
+}
+
+/**
+ * Ends batch jobs for good: every running one, or those `names` lists. What
+ * Vertex has painted still comes in; the rest is dropped as `CANCELLED`, to
+ * be asked for again with a retry. While Google is paused or out of reach the
+ * jobs end here at once and nothing more comes in; the batch check cancels
+ * them at Vertex too once it can. Answers how many jobs.
+ */
+export async function cancelJobs(names?: string[]) {
+  const jobs = new Map<string, Share[]>()
+  for (const set of await listSets()) {
+    for (const job of set.jobs ?? []) {
+      if (job.status !== "running" || (names && !names.includes(job.name))) continue
+      const waiting = set.outputs.filter((o) => o.job === job.name).map((o) => o.id)
+      jobs.set(job.name, [...(jobs.get(job.name) ?? []).filter((s) => s.set !== set.id), { set: set.id, job, waiting }])
+    }
+  }
+  for (const [name, shares] of jobs) {
+    const outcome = (await exclusive(`batch:${name}`, () => endJob(name, shares))) ?? "being collected"
+    console.log(`Batch ${name.split("/").pop()}: cancelled, ${outcome}`)
+  }
+  return jobs.size
+}
+
+async function endJob(name: string, shares: Share[]) {
+  let state: Awaited<ReturnType<typeof paintBatchState>>
+  try {
+    if (await pausedNow()) throw new GooglePausedError()
+    state = await paintBatchState(name)
+  } catch {
+    await dropJob(name, shares)
+    return "dropped here"
+  }
+  const painted = state.state === "running" && state.ready > 0
+  await eachShare(shares, name, (j) => ({ ...j, cancelled: true, ...(painted && { harvest: true }) }))
+  if (state.state === "running") {
+    await cancelPaintBatch(name).catch((error) => console.error(`Batch ${name}, cancel:`, error))
+    if (!painted) {
+      await dropJob(name, shares)
+      return "nothing painted, dropped"
+    }
+  }
+  // Ended: the poller brings in what it painted and drops the rest.
+  kickBatches(15_000)
+  return `${state.ready} painted, coming in`
+}
+
+/** The job ends here: its outputs not in yet fail as `CANCELLED`; it stays listed, so the batch check can cancel it at Vertex. */
+async function dropJob(name: string, shares: Share[]) {
+  const finishedAt = new Date().toISOString()
+  for (const { set } of shares) {
+    const after = await updateSet(set, (s) =>
+      settled({
+        ...s,
+        outputs: s.outputs.map((o) =>
+          o.job === name && o.status !== "done" ? { ...o, status: "error" as const, job: undefined, error: CANCELLED } : o
+        ),
+        jobs: (s.jobs ?? []).map((j) =>
+          j.name !== name
+            ? j
+            : {
+                ...j,
+                status: "error" as const,
+                error: CANCELLED,
+                cancelled: true,
+                finishedAt,
+                ready: undefined,
+                movedAt: undefined,
+                harvest: undefined,
+              }
+        ),
+      })
+    ).catch((error) => {
+      if (!(error instanceof NotFoundError)) throw error
+      return null
+    })
+    if (after?.status === "queued") enqueue(set)
+  }
 }
 
 /** The outputs `batch` asks for, waiting for a brief. */

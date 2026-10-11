@@ -3,54 +3,28 @@
 import * as React from "react"
 
 import type { Listing } from "@/lib/etsy/types"
+import { applyLikeOps, type LikeOp, type Likes } from "@/lib/likes/ops"
+import { createSyncedStore } from "@/lib/synced-store"
 
-// Liked listings live in localStorage: no account needed, and each entry keeps
-// a snapshot of the listing so the Liked page renders without any API calls.
-// Other tabs stay in sync through the `storage` event.
+export type { LikedListing } from "@/lib/likes/ops"
 
-export type LikedListing = { listing: Listing; likedAt: string }
-type Likes = Record<number, LikedListing>
+// Liked listings, kept in the database with a snapshot of each listing so the
+// Liked page renders without any API calls; every change goes there as a step
+// (see `synced-store.ts`). Likes an older version kept in the browser alone
+// are folded in once.
 
-const STORAGE_KEY = "etsy-research:liked"
-// Plenty for the detail gallery, and keeps hundreds of likes well under quota.
+// Plenty for the detail gallery, and keeps hundreds of likes small.
 const MAX_STORED_IMAGES = 4
 const EMPTY: Likes = {}
 
-const listeners = new Set<() => void>()
-let raw: string | null = null
-let likes: Likes = EMPTY
-
-function read(): Likes {
-  const next = localStorage.getItem(STORAGE_KEY)
-  if (next !== raw) {
-    raw = next
-    try {
-      likes = next ? (JSON.parse(next) as Likes) : EMPTY
-    } catch {
-      likes = EMPTY
-    }
-  }
-  return likes
-}
-
-function write(next: Likes) {
-  raw = JSON.stringify(next)
-  likes = next
-  localStorage.setItem(STORAGE_KEY, raw)
-  listeners.forEach((notify) => notify())
-}
-
-function subscribe(notify: () => void) {
-  listeners.add(notify)
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY) notify()
-  }
-  window.addEventListener("storage", onStorage)
-  return () => {
-    listeners.delete(notify)
-    window.removeEventListener("storage", onStorage)
-  }
-}
+const { read, subscribe, change } = createSyncedStore<Likes, LikeOp>({
+  api: "/api/likes",
+  key: "etsy-research:liked",
+  legacyKey: "etsy-research:liked",
+  empty: EMPTY,
+  apply: applyLikeOps,
+  what: "your likes",
+})
 
 function snapshot(listing: Listing): Listing {
   return { ...listing, images: listing.images.slice(0, MAX_STORED_IMAGES) }
@@ -69,19 +43,11 @@ export function useIsLiked(listingId: number) {
 }
 
 export function toggleLike(listing: Listing) {
-  const { [listing.id]: existing, ...rest } = read()
-  if (existing) write(rest)
-  else
-    write({
-      ...rest,
-      [listing.id]: { listing: snapshot(listing), likedAt: new Date().toISOString() },
-    })
+  if (read()[listing.id]) change({ type: "unlike", listingId: listing.id })
+  else change({ type: "like", listing: snapshot(listing), at: new Date().toISOString() })
 }
 
 /** Refreshes the stored snapshot (e.g. once reviews are known), if liked. */
 export function refreshLiked(listing: Listing) {
-  const current = read()
-  const existing = current[listing.id]
-  if (!existing) return
-  write({ ...current, [listing.id]: { ...existing, listing: snapshot(listing) } })
+  if (read()[listing.id]) change({ type: "refresh", listing: snapshot(listing) })
 }

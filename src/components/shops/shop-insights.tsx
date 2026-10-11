@@ -13,6 +13,7 @@ import {
   ShareLegend,
 } from "@/components/shops/insight-charts"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import type { ShopCalibration } from "@/lib/etsy/calibrate"
 import {
   reviewMonths,
   REVIEW_WINDOWS,
@@ -44,6 +45,7 @@ export function ShopInsightsView({
   reviewWindow,
   recentReviews,
   sharpened,
+  calibration,
   currency,
   activeTag,
   onTag,
@@ -54,8 +56,10 @@ export function ShopInsightsView({
   reviews: ShopReview[] | null
   reviewWindow: ReviewWindow
   recentReviews: Map<number, number> | null
-  /** Estimates were redone with every listing's exact review count. */
+  /** Every review the shop ever got is in. */
   sharpened: boolean
+  /** The shop's own rates the estimates rest on. */
+  calibration: ShopCalibration | null
   currency: string
   activeTag: string | null
   onTag: (tag: string | null) => void
@@ -70,6 +74,7 @@ export function ShopInsightsView({
         reviews={reviews}
         reviewWindow={reviewWindow}
         sharpened={sharpened}
+        calibration={calibration}
         currency={currency}
       />
 
@@ -102,7 +107,7 @@ export function ShopInsightsView({
         {reviews && months.length > 0 && (
           <Panel
             title="Reviews per month"
-            aside="≈ 1 in 7 buyers leaves one"
+            aside={`≈ 1 in ${Math.round(1 / (calibration?.reviewRate ?? 0.09))} buyers leaves one`}
             finding={<TrendFinding months={months} />}
           >
             <ReviewTrendChart months={months} />
@@ -133,6 +138,7 @@ function Summary({
   reviews,
   reviewWindow,
   sharpened,
+  calibration: c,
   currency,
 }: {
   shop: ListingShop
@@ -140,14 +146,21 @@ function Summary({
   reviews: ShopReview[] | null
   reviewWindow: ReviewWindow
   sharpened: boolean
+  calibration: ShopCalibration | null
   currency: string
 }) {
-  const basis = sharpened ? "exact review counts, favorites and views" : "favorites and views"
+  const measured = !!c?.measured.reviewRate
+  const basis = measured
+    ? "calibrated on the shop's own reviews, favorites and views"
+    : sharpened
+      ? "favorites, views and reviews, at typical rates (the shop hides its sales)"
+      : "favorites and views at typical rates: fetch every review to calibrate"
   const windowLabel = REVIEW_WINDOWS.find((w) => w.value === reviewWindow)?.label
   const rating =
     reviews && reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : null
+  const covered = c?.coveredShare ?? (shop.totalSales ? Math.min(insights.lifetimeSales / shop.totalSales, 1) : null)
 
   return (
     <StatStrip
@@ -155,27 +168,37 @@ function Summary({
         {
           label: "Revenue / mo",
           value: `≈ ${formatCompactCurrency(insights.revenuePerMonthCents, currency)}`,
-          hint: `Estimated from ${basis}, across the analysed listings`,
+          hint: `The analysed listings' sales a month over the last 12 months × their prices; ${basis}`,
         },
         {
           label: "Sales / mo",
           value: `≈ ${formatCompact(insights.salesPerMonth)}`,
-          hint: `Estimated from ${basis}`,
-        },
-        {
-          label: "Median price",
-          value: formatCurrency(insights.medianPriceCents, currency),
-        },
-        {
-          label: "Median sales / mo",
-          value: formatRate(insights.medianSalesPerMonth, true),
-          hint: "What a typical listing in this shop sells",
+          hint:
+            `Over the last 12 months, ${basis}` +
+            (c?.salesLastYear ? `. Shop-wide, retired listings included: ≈ ${formatNumber(c.salesLastYear)} sales in the year` : ""),
         },
         {
           label: "Lifetime sales covered",
-          value: shop.totalSales ? formatPercent(Math.min(insights.lifetimeSales / shop.totalSales, 1)) : "—",
+          value: covered === null ? "—" : formatPercent(covered),
           hint:
-            "Estimated lifetime sales of these listings ÷ the shop's reported total. Low means sold-out, retired or unanalysed listings made much of it — or the estimate runs low.",
+            c?.coveredShare != null
+              ? `${formatPercent(c.coveredShare)} of the shop's ${formatNumber(c.reviews.all)} reviews went to these listings, so they made that share of its ${formatNumber(shop.totalSales)} sales. The rest sold through listings that are no longer active.`
+              : "Estimated lifetime sales of these listings ÷ the shop's reported total. Fetch every review to measure it exactly.",
+        },
+        {
+          label: "Review rate",
+          value: c && measured ? `1 in ${Math.round(1 / c.reviewRate)}` : "≈ 1 in 11",
+          hint:
+            c && measured
+              ? `${formatNumber(c.reviews.all)} reviews on ${formatNumber(shop.totalSales)} sales: ${formatPercent(c.reviewRate)} of buyers leave one (typical: 9%). So each review stands for about ${Math.round(1 / c.reviewRate)} sales.`
+              : "Typical across shops: 9% of buyers leave a review. Fetch every review to measure this shop's.",
+        },
+        {
+          label: "Favorites / sale",
+          value: c ? c.favoritesPerSale.toFixed(1) : "≈ 10",
+          hint: c?.measured.attention
+            ? `These listings' favorites ÷ the sales their reviews account for (typical: 10). Views: about ${formatCompact(c.viewsPerSale)} per sale (typical: 100).`
+            : "Typical across shops: about 10 favorites and 100 views per sale.",
         },
         ...(reviews
           ? [
@@ -191,6 +214,7 @@ function Summary({
                     )}
                   </span>
                 ),
+                hint: c?.reviews.year ? `${formatNumber(c.reviews.year)} in the last 12 months` : undefined,
               },
             ]
           : []),
@@ -378,7 +402,7 @@ const RANKS: { value: RankKey; label: string }[] = [
   { value: "revenue", label: "Revenue" },
   { value: "sales", label: "Sales" },
   { value: "favorites", label: "Favs" },
-  { value: "recent", label: "Recent reviews" },
+  { value: "recent", label: "Reviews, 12 mo" },
 ]
 
 const TOP = 10
@@ -402,7 +426,7 @@ function TopPerformers({
           ? l.estimate.salesPerMonth
           : rank === "favorites"
             ? l.favorites
-            : (recentReviews?.get(l.id) ?? 0),
+            : (l.rank?.reviews.year ?? recentReviews?.get(l.id) ?? 0),
     [rank, recentReviews]
   )
   const top = React.useMemo(

@@ -9,6 +9,7 @@ import {
   LoaderCircleIcon,
   PackageCheckIcon,
   PenLineIcon,
+  RotateCwIcon,
   TriangleAlertIcon,
   UploadIcon,
 } from "lucide-react"
@@ -33,10 +34,18 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { uploadAccounts, useAccounts, type AccountsState } from "@/hooks/use-accounts"
-import { usePipeline } from "@/hooks/use-pipeline"
+import { retryItems, usePipeline } from "@/hooks/use-pipeline"
 import { createDrafts, isWriting, refreshUploads, rewriteDraft, useUploads } from "@/hooks/use-uploads"
 import { formatNumber } from "@/lib/etsy/format"
-import { canUpload, isFinished, posterKey, statusOf, uploadsByPoster, type PosterUploads } from "@/lib/uploads/groups"
+import {
+  canRetry,
+  canUpload,
+  isFinished,
+  posterKey,
+  statusOf,
+  uploadsByPoster,
+  type PosterUploads,
+} from "@/lib/uploads/groups"
 import type { DraftStatus, UploadGroup, UploadsState, WaitingPoster } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
 
@@ -277,11 +286,34 @@ function Launch({
   blockers: string[]
   onUpload: () => void
 }) {
+  const [retrying, setRetrying] = React.useState(false)
   const counts = groups.map((g) => countGroup(g, uploads))
   const toGo = counts.reduce((sum, c) => sum + c.toGo, 0)
   const from = counts.filter((c) => c.toGo > 0).length
   const shops = uploadAccounts(accounts)
   const ready = shops.filter((a) => a.missing.length === 0)
+  // The posters the rail counts as failed, by their failed item: each runs again where it is, never as a twin.
+  const failed = groups.flatMap((g) =>
+    g.posters.flatMap((p) => {
+      const key = posterKey(g.id, p.outputId)
+      const upload = uploads.real.get(key)
+      return upload && statusOf(uploads, key, p.state) === "failed" && canRetry(upload) ? [upload.item.id] : []
+    })
+  )
+
+  async function uploadAgain() {
+    setRetrying(true)
+    try {
+      await retryItems(failed)
+      toast(`Uploading ${formatNumber(failed.length)} failed poster${failed.length === 1 ? "" : "s"} again`, {
+        description: "Each picks up at the step it failed on.",
+      })
+    } catch (error) {
+      toast.error(`Couldn't upload them again: ${(error as Error).message}`)
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <section
@@ -370,16 +402,30 @@ function Launch({
           </ul>
         )}
       </div>
-      <Button
-        size="lg"
-        onClick={onUpload}
-        disabled={toGo === 0}
-        className="shrink-0 transition-transform duration-150 ease-out-strong active:scale-[0.97] motion-reduce:transition-none"
-      >
-        <UploadIcon />
-        Upload {toGo > 0 ? formatNumber(toGo) : ""}…
-        <Kbd className="bg-primary-foreground/15 text-primary-foreground">U</Kbd>
-      </Button>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {failed.length > 0 && (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={uploadAgain}
+            disabled={retrying}
+            className="transition-transform duration-150 ease-out-strong active:scale-[0.97] motion-reduce:transition-none"
+          >
+            {retrying ? <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" /> : <RotateCwIcon />}
+            Upload {formatNumber(failed.length)} failed again
+          </Button>
+        )}
+        <Button
+          size="lg"
+          onClick={onUpload}
+          disabled={toGo === 0}
+          className="transition-transform duration-150 ease-out-strong active:scale-[0.97] motion-reduce:transition-none"
+        >
+          <UploadIcon />
+          Upload {toGo > 0 ? formatNumber(toGo) : ""}…
+          <Kbd className="bg-primary-foreground/15 text-primary-foreground">U</Kbd>
+        </Button>
+      </div>
     </section>
   )
 }

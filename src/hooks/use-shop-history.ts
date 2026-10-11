@@ -3,186 +3,84 @@
 import * as React from "react"
 
 import type { ListingShop } from "@/lib/etsy/types"
+import {
+  applyOps,
+  fromLabels,
+  hasPrimaryTag,
+  hasSecondaryTag,
+  shopTags,
+  tagName,
+  type ShopOp,
+} from "@/lib/shops/history-ops"
 import type { ShopAnalysisSummary, ShopHistory as History, ShopVisit } from "@/lib/shops/types"
+import { createSyncedStore } from "@/lib/synced-store"
 
-export type { ShopAnalysisSummary, ShopVisit } from "@/lib/shops/types"
+export type { PrimaryTag, TagCount } from "@/lib/shops/history-ops"
+export type { ShopAnalysisSummary, ShopTag, ShopVisit } from "@/lib/shops/types"
+export { hasPrimaryTag, hasSecondaryTag, shopTags, tagName }
 
 // Shops looked up on the Shops page. Each entry holds the shop as last seen,
-// a summary of its last analysis, the labels it's filed under and whether it's
-// liked, so the list renders without API calls and reopening a shop can pick up
-// the scope it was analysed with. Kept on the server (outlives restarts and
-// browsers); localStorage holds a copy so the list shows before the server answers.
+// a summary of its last analysis, the tags it's filed under (a primary one
+// and secondary ones beneath it) and whether it's liked, so the list renders
+// without API calls and reopening a shop can pick up the scope it was
+// analysed with. The database holds it; every change goes there as a step
+// (see `history-ops.ts` and `synced-store.ts`). The list an older version
+// kept in the browser alone is folded into the server's once.
 
-const STORAGE_KEY = "etsy-research:shops"
-/** Shops kept that are neither labelled nor liked; those are never dropped. */
-const MAX_SHOPS = 2000
 const EMPTY: History = {}
 
-const listeners = new Set<() => void>()
-let raw: string | null = null
-let history: History = EMPTY
+const store = createSyncedStore<History, ShopOp>({
+  api: "/api/shops/history",
+  key: "etsy-research:shops",
+  legacyKey: "etsy-research:shops",
+  empty: EMPTY,
+  apply: applyOps,
+  fromLegacy: (legacy) => fromLabels(legacy as History),
+  what: "the shop list",
+})
 
-function read(): History {
-  const next = localStorage.getItem(STORAGE_KEY)
-  if (next !== raw) {
-    raw = next
-    try {
-      history = next ? (JSON.parse(next) as History) : EMPTY
-    } catch {
-      history = EMPTY
-    }
-  }
-  return history
-}
-
-function write(next: History) {
-  // Oldest views fall off once the list is full, unless labelled or liked.
-  const visits = Object.values(next).sort((a, b) => b.viewedAt.localeCompare(a.viewedAt))
-  const keep = (v: ShopVisit) => !!v.labels?.length || !!v.likedAt
-  const kept = [...visits.filter(keep), ...visits.filter((v) => !keep(v)).slice(0, MAX_SHOPS)]
-  history = Object.fromEntries(kept.map((v) => [v.shop.id, v]))
-  raw = JSON.stringify(history)
-  localStorage.setItem(STORAGE_KEY, raw)
-  listeners.forEach((notify) => notify())
-  if (synced) push()
-}
-
-// --- Server copy ---
-
-let synced = false
-let syncing: Promise<void> | null = null
-let pushTimer: ReturnType<typeof setTimeout> | undefined
-
-/** Sends the whole list, once changes have settled for a moment. */
-function push() {
-  clearTimeout(pushTimer)
-  pushTimer = setTimeout(() => {
-    fetch("/api/shops/history", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: raw ?? "{}",
-      keepalive: true,
-    }).catch((error) => console.error("Storing shop list:", error))
-  }, 400)
-}
-
-// Once per page load: the server's list, merged with what this browser has
-// (per shop, the one seen last), and the result sent back if they differed.
-function sync() {
-  syncing ??= fetch("/api/shops/history", { cache: "no-store" })
-    .then((res) => (res.ok ? (res.json() as Promise<History>) : Promise.reject(new Error(res.statusText))))
-    .then((server) => {
-      const local = read()
-      const merged: History = { ...server }
-      for (const [id, visit] of Object.entries(local)) {
-        const held = merged[Number(id)]
-        if (!held || visit.viewedAt > held.viewedAt) merged[Number(id)] = visit
-      }
-      synced = true
-      const changed = JSON.stringify(merged) !== JSON.stringify(server)
-      write(merged)
-      if (!changed) clearTimeout(pushTimer)
-    })
-    .catch((error) => {
-      console.error("Loading shop list:", error)
-      syncing = null
-    })
-  return syncing
-}
-
-function subscribe(notify: () => void) {
-  listeners.add(notify)
-  void sync()
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY) notify()
-  }
-  window.addEventListener("storage", onStorage)
-  return () => {
-    listeners.delete(notify)
-    window.removeEventListener("storage", onStorage)
-  }
-}
+const { read, subscribe, change } = store
 
 export function useShopHistory() {
   return React.useSyncExternalStore(subscribe, read, () => EMPTY)
 }
 
-/** The stored visit for a shop, read once (e.g. to seed state). */
+/** The visit for a shop, read once (e.g. to seed state). */
 export function getShopVisit(shopId: number): ShopVisit | null {
   return read()[shopId] ?? null
 }
 
+const now = () => new Date().toISOString()
+
 export function recordShopVisit(shop: ListingShop) {
-  const current = read()
-  write({
-    ...current,
-    [shop.id]: {
-      ...current[shop.id],
-      shop,
-      viewedAt: new Date().toISOString(),
-      analysis: current[shop.id]?.analysis ?? null,
-    },
-  })
+  change({ type: "visit", shop, at: now() })
 }
 
 export function recordShopAnalysis(shop: ListingShop, analysis: ShopAnalysisSummary) {
-  const current = read()
-  write({
-    ...current,
-    [shop.id]: {
-      ...current[shop.id],
-      shop,
-      viewedAt: current[shop.id]?.viewedAt ?? analysis.analysedAt,
-      analysis,
-    },
-  })
+  change({ type: "analysis", shop, analysis })
 }
 
-// --- Labels ---
+// --- Tags ---
 
-export type ShopLabel = { name: string; count: number }
-
-const sameLabel = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
-
-/** Every label in use, A–Z, with how many shops carry it. */
-export function shopLabels(history: History): ShopLabel[] {
-  const labels = new Map<string, ShopLabel>()
-  for (const visit of Object.values(history)) {
-    for (const name of visit.labels ?? []) {
-      const key = name.toLowerCase()
-      const label = labels.get(key) ?? { name, count: 0 }
-      labels.set(key, { ...label, count: label.count + 1 })
-    }
-  }
-  return [...labels.values()].sort((a, b) => a.name.localeCompare(b.name))
-}
-
-export function useShopLabels() {
+export function useShopTags() {
   const history = useShopHistory()
-  return React.useMemo(() => shopLabels(history), [history])
-}
-
-export function hasLabel(visit: ShopVisit, label: string) {
-  return visit.labels?.some((l) => sameLabel(l, label)) ?? false
+  return React.useMemo(() => shopTags(history), [history])
 }
 
 /**
- * Files the shops under `label`, or takes them out of it. A label that exists
- * already keeps the spelling it was first given.
+ * Files the shops under the primary tag, or (null) takes their tags off. A
+ * shop moving to another primary tag leaves its secondary ones behind; a tag
+ * in use already keeps the spelling it was first given.
  */
-export function setShopLabel(shops: ListingShop[], label: string, on: boolean) {
-  const current = read()
-  const name = label.trim().replace(/\s+/g, " ").slice(0, 32)
-  if (!name) return
-  const spelling = shopLabels(current).find((l) => sameLabel(l.name, name))?.name ?? name
-  const next = { ...current }
-  const now = new Date().toISOString()
-  for (const shop of shops) {
-    const visit = next[shop.id] ?? { shop, viewedAt: now, analysis: null }
-    const others = (visit.labels ?? []).filter((l) => !sameLabel(l, spelling))
-    next[shop.id] = { ...visit, labels: on ? [...others, spelling] : others }
-  }
-  write(next)
+export function setPrimaryTag(shops: ListingShop[], primary: string | null) {
+  if (primary !== null && !tagName(primary)) return
+  change({ type: "tag", shops, primary, at: now() })
+}
+
+/** Puts the secondary tag on the shops filed under `primary`, or takes it off them. */
+export function setSecondaryTag(shops: ListingShop[], primary: string, secondary: string, on: boolean) {
+  if (!tagName(secondary)) return
+  change({ type: "secondary", shops, primary, secondary, on, at: now() })
 }
 
 // --- Likes ---
@@ -197,14 +95,9 @@ export function useIsShopLiked(shopId: number) {
 
 /** Likes the shop, or takes the like back. */
 export function toggleShopLike(shop: ListingShop) {
-  const current = read()
-  const now = new Date().toISOString()
-  const { likedAt, ...visit }: ShopVisit = current[shop.id] ?? { shop, viewedAt: now, analysis: null }
-  write({ ...current, [shop.id]: likedAt ? visit : { ...visit, likedAt: now } })
+  change({ type: "like", shop, liked: !read()[shop.id]?.likedAt, at: now() })
 }
 
 export function forgetShop(shopId: number) {
-  const next = { ...read() }
-  delete next[shopId]
-  write(next)
+  change({ type: "forget", shopId })
 }
