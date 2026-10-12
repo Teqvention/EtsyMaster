@@ -4,7 +4,7 @@ import { CircleAlertIcon, ExternalLinkIcon, LoaderCircleIcon } from "lucide-reac
 
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { STAGE_LABEL, STAGES, type JobItem } from "@/lib/pipeline/types"
+import { STAGE_LABEL, stagesOf, type JobItem, type Stage } from "@/lib/pipeline/types"
 import type { PosterStatus, PosterUpload } from "@/lib/uploads/groups"
 import { cn } from "@/lib/utils"
 
@@ -75,8 +75,8 @@ export function UploadBadge({ status, upload }: { status?: PosterStatus; upload?
 
 type Step = "done" | "running" | "waiting" | "failed" | "cancelled" | "todo"
 
-function stepOf(item: JobItem, index: number, at: number): Step {
-  if (item.status === "done" || item.done[STAGES[index]] || index < at) return "done"
+function stepOf(item: JobItem, stages: readonly Stage[], index: number, at: number): Step {
+  if (item.status === "done" || item.done[stages[index]] || index < at) return "done"
   if (index > at) return "todo"
   return item.status === "queued" ? "todo" : item.status
 }
@@ -99,10 +99,11 @@ const STEP_WORD: Record<Step, string> = {
   todo: "",
 }
 
-/** The eight stages as a row of steps: green behind it, the current one at work, waiting or failed. */
+/** The stages as a row of steps: green behind it, the current one at work, waiting or failed. */
 export function StageSteps({ item, className }: { item: JobItem; className?: string }) {
-  const at = STAGES.indexOf(item.stage)
-  const steps = STAGES.map((stage, index) => ({ stage, step: stepOf(item, index, at) }))
+  const stages = stagesOf(item)
+  const at = stages.indexOf(item.stage)
+  const steps = stages.map((stage, index) => ({ stage, step: stepOf(item, stages, index, at) }))
   return (
     <Tooltip>
       <TooltipTrigger

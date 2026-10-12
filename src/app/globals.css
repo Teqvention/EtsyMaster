@@ -7,6 +7,14 @@
 @theme inline {
   --color-brand: var(--brand);
   --color-like: var(--like);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -110,6 +118,16 @@
   --brand: oklch(0.6728 0.1892 42.4);
   /* Liked listings. A true red, kept apart from the orange heat scale by hue. */
   --like: oklch(0.637 0.237 25.3);
+  /* Categorical chart hues, in a fixed order whose neighbours stay apart for
+     colour-blind readers (checked light and dark). Assign by entity, never by rank. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -148,6 +166,14 @@
   /* Slightly deeper orange (#E25A17) so it sits in the dark-surface lightness band */
   --brand: oklch(0.6364 0.1836 41.8);
   --like: oklch(0.66 0.23 25.3);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

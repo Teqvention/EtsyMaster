@@ -68,8 +68,10 @@ export function summary(style: Style): StyleSummary {
     incoming: style.incoming,
     createdAt: style.createdAt,
     updatedAt: style.updatedAt,
+    ...(style.kind && { kind: style.kind }),
     count: style.images.length,
     covers: style.images.slice(0, 4).map((i) => fileUrl(style.id, i.file)),
+    ...(style.city && { cityTags: style.city.tags, cityStatus: style.city.status, cityVersion: style.city.version }),
   }
 }
 

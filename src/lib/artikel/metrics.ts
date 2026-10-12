@@ -1,3 +1,4 @@
+import { cityColumns } from "@/lib/citys/artikel"
 import { itemForListing } from "@/lib/pipeline/store"
 import { MEASURED_CENTS } from "@/lib/pricing/costs"
 import { ETSY_FEES } from "@/lib/pricing/profit"
@@ -457,6 +458,14 @@ export async function artikelState(account: string | null, range: Range): Promis
   for (const l of allListings) listingCounts.set(l.account, (listingCounts.get(l.account) ?? 0) + 1)
   const ends = [...ctx.points.values()].map((p) => p.end?.at).filter((at): at is number => !!at)
 
+  // Our city shops' listings get the city columns; Artikel shows the rest without them.
+  const city = await cityColumns(built.rows).catch((error) => {
+    console.warn("Artikel city columns:", (error as Error).message)
+    return null
+  })
+  if (city) for (const row of built.rows) row.city = city.byListing.get(row.listingId)
+  const showsCity = !!city && built.rows.some((r) => r.city)
+
   const shops: ArtikelShop[] = await Promise.all(
     allShops.map(async (a) => ({
       account: a.id,
@@ -480,6 +489,7 @@ export async function artikelState(account: string | null, range: Range): Promis
     tags: ctx.tags.tags,
     sync,
     profiles: profiles.map(({ id, name, currency, prices }) => ({ id, name, currency, prices })),
+    ...(showsCity && { city: { accounts: city.accounts, classifiedAt: city.classifiedAt } }),
   }
 }
 

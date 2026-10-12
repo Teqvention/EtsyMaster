@@ -1,4 +1,5 @@
 import {
+  Building2Icon,
   ChartNoAxesCombinedIcon,
   LayoutListIcon,
   PaletteIcon,
@@ -50,6 +51,19 @@ export const nav = {
         { title: "Generation", url: "/generation" },
         { title: "Styles", url: "/styles" },
         { title: "Mockups", url: "/mockups" },
+      ],
+    },
+    {
+      title: "Citys",
+      icon: <Building2Icon />,
+      items: [
+        { title: "Ranking", url: "/citys/ranking" },
+        { title: "Stealer", url: "/citys/stealer" },
+        { title: "Styles", url: "/citys/styles" },
+        { title: "Outputs", url: "/citys/outputs" },
+        { title: "Compositions", url: "/citys/compositions" },
+        { title: "Keywords", url: "/citys/keywords" },
+        { title: "Upload", url: "/citys/upload" },
       ],
     },
     { title: "Uploads", url: "/uploads", icon: <PackageCheckIcon /> },

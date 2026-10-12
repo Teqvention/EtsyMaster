@@ -74,6 +74,8 @@ function remember(style: Style) {
     updatedAt: style.updatedAt,
     count: style.images.length,
     covers: style.images.slice(0, 4).map((i) => styleFileUrl(style.id, i.file)),
+    ...(style.kind && { kind: style.kind }),
+    ...(style.city && { cityTags: style.city.tags, cityStatus: style.city.status, cityVersion: style.city.version }),
   }
   set([summary, ...styles.filter((s) => s.id !== style.id)])
 }

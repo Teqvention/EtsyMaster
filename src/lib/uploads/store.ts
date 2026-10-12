@@ -105,7 +105,8 @@ export async function createDrafts(
 
   const made: Draft[] = []
   if ("all" in request) {
-    for (const set of await listSets()) {
+    // City posters get their drafts from Citys → Upload, with the city copywriter.
+    for (const set of (await listSets()).filter((s) => !s.city)) {
       for (const output of set.outputs ?? []) {
         if (isApproved(output) && !have.has(`${set.id}/${output.id}`)) made.push(newDraft(set, output, chainId))
       }
@@ -374,7 +375,7 @@ async function withKeywords(draft: Draft): Promise<DraftView> {
 
 /** Everything the Uploads page shows. */
 export async function uploadsState(): Promise<UploadsState> {
-  const [drafts, sets, chains, library, removedList] = await Promise.all([
+  const [allDrafts, allSets, chains, library, removedList] = await Promise.all([
     readDrafts(),
     listSets(),
     listChains().catch(() => []),
@@ -382,6 +383,9 @@ export async function uploadsState(): Promise<UploadsState> {
     readRemoved(),
   ])
 
+  // City posters go up from Citys → Upload: neither their sets nor their drafts show here.
+  const sets = allSets.filter((s) => !s.city)
+  const drafts = allDrafts.filter((d) => d.folder !== "citys")
   const have = new Set(drafts.map((d) => `${d.generationId}/${d.outputId}`))
   const waiting: WaitingPoster[] = []
   for (const set of sets) {

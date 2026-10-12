@@ -327,6 +327,14 @@ export function OutputTile({
         <span className="truncate font-medium">{name}</span>
         <CreativityMeter level={output.creativity} className="shrink-0" />
         {output.from && <span className="shrink-0 text-muted-foreground">· reworked</span>}
+        {output.model && (
+          <span
+            className="shrink-0 text-muted-foreground"
+            title="Painted by Nano Banana 2 while Nano Banana 2.1 was overloaded (twice the price)"
+          >
+            · NB 2
+          </span>
+        )}
       </figcaption>
     </figure>
   )

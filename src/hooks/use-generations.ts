@@ -128,6 +128,13 @@ export async function sendAllOpenGenerations() {
   return result
 }
 
+/** Every failed image goes, and every set left with nothing in it; finished batch jobs are put away. */
+export async function resetFailedGenerations() {
+  const result = await call<{ images: number; sets: number }>("/api/generations/batch/reset", { method: "POST" })
+  await refreshGenerations()
+  return result
+}
+
 /** More images from the set's posters, or (with `options.from`) a redo of one output. */
 export async function generateMore(id: string, options: GenerateOptions) {
   replace(

@@ -153,6 +153,8 @@ export async function createSet(
     outputs: [],
     batches: [{ id: newId(), options, createdAt: now, expanded: false }],
     ...(kind === "poster" ? { extraction: pending() } : { mockup: pending() }),
+    // What fails in it for a passing reason runs again by itself (see `heal` in run.ts).
+    heals: 0,
   }
   await writeDoc(docKey(id), { ...set, runner: instanceId })
   return set

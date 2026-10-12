@@ -50,6 +50,10 @@ export type UploadPlan = {
 
 /**
  * The stages, in order:
+ * - compose: city posters only (Citys → Upload): the city photo set in its
+ *   composition (or alone), the poster every later stage works from. Other
+ *   items start at copy. A server without it fails such an item at once,
+ *   before anything is sent.
  * - copy: title, tags and the story part of the description (the draft's copy).
  * - print: one print file per size, uploaded where Gelato can fetch it.
  * - media: the listing photos and video from the mockup chain, rendered headless.
@@ -62,10 +66,14 @@ export type UploadPlan = {
  * - live: activated with our photo order (or left inactive when the job says so).
  * - postcheck: ~90 minutes later, whatever Gelato wrote over again is put back.
  */
-export const STAGES = ["copy", "print", "media", "gelato", "listing", "verify", "live", "postcheck"] as const
+export const STAGES = ["compose", "copy", "print", "media", "gelato", "listing", "verify", "live", "postcheck"] as const
 export type Stage = (typeof STAGES)[number]
 
+/** The stages an item goes through: composing only for city posters. */
+export const stagesOf = (item: Pick<JobItem, "city">): readonly Stage[] => (item.city ? STAGES : STAGES.filter((s) => s !== "compose"))
+
 export const STAGE_LABEL: Record<Stage, string> = {
+  compose: "Composing",
   copy: "Writing copy",
   print: "Print files",
   media: "Mockups",
@@ -98,6 +106,21 @@ export type PrintFile = {
   height: number
   /** How the poster was fitted: cropped, or extended with its own border colour. */
   fit: "exact" | "crop" | "extend"
+}
+
+/** A city poster's part of a job item. */
+export type CityItem = {
+  placeId: string
+  /** The composition the photo is set in; null: the photo alone is the poster. */
+  compositionId: string | null
+  /** Path under pipeline/ of the poster composed, once made. */
+  poster?: string
+  /** The style or look it's in ("style:<id>", "real"…), for the order and the lists. */
+  style?: string
+  /** The Citys → Upload group it came with. */
+  group?: string
+  /** Our old listing whose slot it takes: deactivated once this one is live, on the user's word. */
+  replaces?: number
 }
 
 export type JobItem = {
@@ -135,6 +158,8 @@ export type JobItem = {
   media?: { photos: string[]; video: string | null; scenes?: string[] }
   gelatoProductId?: string
   etsyListingId?: number
+  /** City posters (Citys → Upload): what the poster is made of. */
+  city?: CityItem
   /** Our photos on the Etsy listing, in order. */
   imageIds?: number[]
   videoId?: number

@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { AlertCircleIcon, FolderOpenIcon, LoaderCircleIcon, PaletteIcon, PlusIcon } from "lucide-react"
+import { AlertCircleIcon, Building2Icon, ChevronRightIcon, FolderOpenIcon, LoaderCircleIcon, PaletteIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { StyleCover, Swatches } from "@/components/styles/style-cover"
 import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,9 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { createCityStyle } from "@/hooks/use-city-style"
 import { createStyle, EXPECT_READ, POLL, refreshStyles, useStyles } from "@/hooks/use-styles"
+import { cn } from "@/lib/utils"
 import type { StyleSummary } from "@/lib/styles/types"
 
 // Every style as a card: its moodboard's first images and the palette read
@@ -36,7 +39,9 @@ import type { StyleSummary } from "@/lib/styles/types"
 // posters on their way in.
 
 export function StylesView() {
-  const styles = useStyles()
+  const all = useStyles()
+  const styles = all?.filter((s) => s.kind !== "city") ?? null
+  const cityStyles = all?.filter((s) => s.kind === "city") ?? []
   const [creating, setCreating] = React.useState(false)
   const [fromSaved, setFromSaved] = React.useState(false)
 
@@ -123,6 +128,28 @@ export function StylesView() {
         </ul>
       )}
 
+      {cityStyles.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger className="group/city flex items-center gap-1 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline">
+            <ChevronRightIcon className="size-4 transition-transform duration-150 ease-out group-data-panel-open/city:rotate-90" />
+            <Building2Icon className="size-4" />
+            City styles ({cityStyles.length}): their art can make any poster
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
+              {cityStyles.map((s) => (
+                <li key={s.id}>
+                  <Link href={`/citys/styles/${s.id}`} className="flex flex-col overflow-hidden rounded-lg border bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [@media(hover:hover)]:hover:border-foreground/30">
+                    <StyleCover covers={s.covers} width={320} className="aspect-square" />
+                    <span className="truncate px-2 py-1.5 text-xs">{s.name}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       <CreateStyleDialog open={creating} onOpenChange={setCreating} />
       <StyleFromSavedDialog open={fromSaved} onOpenChange={setFromSaved} navigate />
     </div>
@@ -193,6 +220,7 @@ export function CreateStyleDialog({
 }) {
   const router = useRouter()
   const [name, setName] = React.useState("")
+  const [kind, setKind] = React.useState<"normal" | "city">("normal")
   const [busy, setBusy] = React.useState(false)
 
   async function submit(event: React.FormEvent) {
@@ -200,11 +228,11 @@ export function CreateStyleDialog({
     if (!name.trim() || busy) return
     setBusy(true)
     try {
-      const style = await createStyle(name)
+      const style = kind === "city" ? await createCityStyle(name) : await createStyle(name)
       onOpenChange(false)
       setName("")
       if (onCreated) onCreated(style.id, style.name)
-      else router.push(`/styles/${style.id}`)
+      else router.push(kind === "city" ? `/citys/styles/${style.id}` : `/styles/${style.id}`)
     } catch (error) {
       toast.error(`Couldn't create the style: ${(error as Error).message}`)
     } finally {
@@ -228,6 +256,28 @@ export function CreateStyleDialog({
             aria-label="Style name"
             maxLength={60}
           />
+          {!onCreated && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Made for</span>
+              <div className="flex rounded-lg border p-0.5" role="radiogroup" aria-label="Kind of style">
+                {(["normal", "city"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={kind === k}
+                    onClick={() => setKind(k)}
+                    className={cn(
+                      "h-7 rounded-md px-3 text-xs font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+                      kind === k ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {k === "city" ? "City posters" : "Any poster"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

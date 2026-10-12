@@ -1,3 +1,5 @@
+import type { CityStyleData } from "@/lib/citys/studio-types"
+
 // A style is a moodboard: a handful of posters that share a look, and the
 // guide Gemini writes from them once. Generation then paints steals in that
 // look from the guide (and a few of the images), so the style is understood
@@ -63,15 +65,22 @@ export type Style = {
   /** ISO 8601 */
   createdAt: string
   updatedAt: string
+  /** "city": made for city posters, with `city` (Citys → Styles); a normal style when absent. */
+  kind?: "city"
+  city?: CityStyleData
 }
 
 export type StyleSummary = Pick<
   Style,
-  "id" | "name" | "guide" | "guideStatus" | "incoming" | "createdAt" | "updatedAt"
+  "id" | "name" | "guide" | "guideStatus" | "incoming" | "createdAt" | "updatedAt" | "kind"
 > & {
   count: number
   /** Image URLs for the cover, up to four. */
   covers: string[]
+  /** City styles: their groups, whether they're confirmed, their guide's version. */
+  cityTags?: string[]
+  cityStatus?: "draft" | "confirmed"
+  cityVersion?: number
 }
 
 /** Images on the Generation page a moodboard can be filled from, one group per set. */

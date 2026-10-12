@@ -4,6 +4,8 @@ import { askJson } from "@/lib/mockups/gemini"
 import { NotFoundError } from "@/lib/mockups/storage"
 import { getFile } from "@/lib/storage/files"
 
+import { readCityGuide, withVersion } from "@/lib/citys/styles"
+
 import { fileKey, generationKey, getStyle, pick, reading, toGuide, updateStyle } from "./storage"
 import { READ_IMAGES, type Style } from "./types"
 
@@ -67,6 +69,18 @@ async function readStyle(id: string) {
         )
       )
     )
+    // City styles are read for how they show a place too (citys/styles.ts).
+    if (style.kind === "city") {
+      const { guide, city, medium } = await readCityGuide(style, images)
+      await updateStyle(id, (s) => ({
+        ...withVersion(s, guide, city, s.city?.version ? "Read again from the board" : "First read of the board", undefined, medium),
+        guideStatus: "idle",
+        guideError: undefined,
+        guideImages: style.images.map((i) => i.file),
+        guideEdited: false,
+      }))
+      return
+    }
     const answer = await askJson<unknown>(prompt(style.name, images.length), images, {
       schema: SCHEMA,
       temperature: 0.4,

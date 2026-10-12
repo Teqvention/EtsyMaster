@@ -1,4 +1,5 @@
 import type { SizeKey } from "@/lib/catalog/sizes"
+import type { CityColumns } from "@/lib/citys/artikel"
 import type { DailySnapshot, LedgerCategory, SyncedSection, SyncStatus } from "@/lib/sync/types"
 
 // Artikel: every listing of our shops with its numbers over a date range,
@@ -64,6 +65,8 @@ export type ArtikelRow = {
   /** Epoch ms */
   endsAt: number | null
   createdAt: number
+  /** Our city shops' listings: what we decided about it, where it came from, how its place ranks. */
+  city?: CityColumns
 }
 
 export type ArtikelSummary = {
@@ -114,6 +117,8 @@ export type ArtikelState = {
   sync: SyncStatus[]
   /** Price profiles a bulk action can set, cents per size. */
   profiles: { id: string; name: string; currency: string; prices: Record<SizeKey, number> }[]
+  /** When the shops shown include our city shops: which, and when their listings were last classified. */
+  city?: { accounts: string[]; classifiedAt?: string }
 }
 
 /** One listing in depth: day by day, its orders and fees. */

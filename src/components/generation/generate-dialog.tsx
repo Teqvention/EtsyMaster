@@ -505,8 +505,8 @@ export function DeliveryField({ value, onChange }: { value: Delivery; onChange: 
       </ToggleGroup>
       <span className="text-xs text-pretty text-muted-foreground">
         {value === "batch"
-          ? "Half the price, no waiting on quota; back in minutes to a few hours."
-          : "Drawn straight away, up to 20 at a time."}
+          ? "Half the price; back in minutes to an hour or two. What fails runs again by itself."
+          : "Online right away. Google draws about one a minute, so a bigger order sends the rest to a batch job."}
       </span>
     </>
   )

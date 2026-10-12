@@ -12,6 +12,7 @@ import type {
   ArtikelState,
   TagsFile,
 } from "@/lib/artikel/types"
+import type { CityStatus } from "@/lib/citys/ours"
 import type { SyncStatus } from "@/lib/sync/types"
 
 // Artikel's data: the table for one shop (or all) over a range, re-read when
@@ -250,4 +251,32 @@ export async function assignTags(listingIds: number[], change: { add?: string[];
 
 export function fetchDetail(listingId: number, range: { from: string; to: string }) {
   return json<ArtikelDetail>(`/api/artikel/listings/${listingId}?${new URLSearchParams(range)}`)
+}
+
+// --- City columns ---
+
+/** Reads the table again, e.g. once a classification has finished. */
+export function reloadArtikel() {
+  void loadState()
+}
+
+/** Sets our city listings' status by hand (null hands them back to the classification); shown at once. */
+export async function setCityStatus(listingIds: number[], status: CityStatus | null) {
+  const ids = new Set(listingIds)
+  const before = data.state
+  if (before && status) {
+    set({
+      state: {
+        ...before,
+        rows: before.rows.map((r) => (r.city && ids.has(r.listingId) ? { ...r, city: { ...r.city, status, manual: true, reason: "Set by hand" } } : r)),
+      },
+    })
+  }
+  try {
+    await json("/api/citys/artikel/status", { method: "PATCH", body: JSON.stringify({ listingIds, status }) })
+  } catch (error) {
+    if (before) set({ state: before })
+    throw error
+  }
+  if (!status) void loadState()
 }

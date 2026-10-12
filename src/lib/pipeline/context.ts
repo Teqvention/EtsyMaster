@@ -9,7 +9,10 @@ import { getScene } from "@/lib/mockups/storage"
 import { getProfile } from "@/lib/pricing/store"
 import { getDraft } from "@/lib/uploads/store"
 
+import { cityOrientation } from "@/lib/citys/upload-stages"
+
 import { Fatal } from "./errors"
+import { readFileUnder } from "./files"
 import { listingText } from "./listing-text"
 import type { JobItem, UploadJob } from "./types"
 
@@ -54,8 +57,13 @@ async function outputOf(item: JobItem) {
   return { set, output, file: output.file }
 }
 
-/** The poster's image file. */
+/** The poster's image file; a city poster's once composed. */
 export async function posterOf(item: JobItem) {
+  if (item.city?.poster) {
+    return readFileUnder(item.city.poster).catch(() => {
+      throw new Fatal("The composed poster is gone: run it again")
+    })
+  }
   const { set, file } = await outputOf(item)
   return readSetFile(set.id, file).catch(() => {
     throw new Fatal("The poster's image file is gone")
@@ -63,6 +71,7 @@ export async function posterOf(item: JobItem) {
 }
 
 export async function orientationOf(item: JobItem): Promise<Orientation> {
+  if (item.city?.compositionId) return (await cityOrientation(item.city.compositionId)) ?? "ver"
   const { output } = await outputOf(item)
   let { width, height } = output
   if (!width || !height) ({ width, height } = await sharp(await posterOf(item)).metadata())

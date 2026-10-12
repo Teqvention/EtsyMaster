@@ -76,7 +76,9 @@ const ALL_FOLDERS = "__all__"
 const INLINE = 6
 
 export function GenerationView() {
-  const sets = useGenerations()
+  const all = useGenerations()
+  // City sets live under Citys (Stealer, Styles, Outputs), not here.
+  const sets = React.useMemo(() => all?.filter((s) => !s.city) ?? null, [all])
   const [filter, setFilter] = useFilter()
   const [viewing, setViewing] = React.useState<Viewing>(null)
 

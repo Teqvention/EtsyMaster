@@ -52,9 +52,20 @@ export async function fetchReference(url: string) {
   if (parsed?.protocol !== "https:" || !parsed.hostname.endsWith(".etsystatic.com")) {
     throw new Error("Only Etsy listing photos can be used as a reference")
   }
-  const response = await fetch(parsed, { signal: AbortSignal.timeout(30_000) })
-  if (!response.ok) throw new Error(`Couldn't download the listing photo (${response.status})`)
-  return Buffer.from(await response.arrayBuffer())
+  // Etsy's image servers turn a request away now and then (429, 5xx) or drop it: asked again a little later.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(parsed, { signal: AbortSignal.timeout(30_000) })
+      if (response.ok) return Buffer.from(await response.arrayBuffer())
+      if (attempt >= 3 || !(response.status === 429 || response.status >= 500)) {
+        throw new Error(`Couldn't download the listing photo (${response.status})`)
+      }
+    } catch (error) {
+      const passing = error instanceof TypeError || (error instanceof DOMException && error.name === "TimeoutError")
+      if (attempt >= 3 || !passing) throw error
+    }
+    await new Promise((r) => setTimeout(r, attempt * 5_000))
+  }
 }
 
 /** Replaces the scene's placeholder poster with one poster per sheet found. */

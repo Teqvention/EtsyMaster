@@ -42,7 +42,10 @@ export function RetryButton({
       if (failed) toast.error(`Couldn't retry ${failed} of ${sets.length} ${sets.length === 1 ? "set" : "sets"}`)
       else
         toast.success(`Retrying ${count} failed`, {
-          description: delivery === "batch" ? "In a batch job: back in minutes to a few hours." : "Drawing now.",
+          description:
+            delivery === "batch"
+              ? "In a batch job: back in minutes to an hour or two."
+              : "Drawing online now; past the first few, the rest goes in a batch job.",
         })
     } finally {
       setBusy(false)
@@ -63,14 +66,14 @@ export function RetryButton({
             <ZapIcon />
             <span className="flex flex-col">
               Now
-              <span className="text-xs text-muted-foreground">Drawn straight away, up to 20 at a time</span>
+              <span className="text-xs text-muted-foreground">Online right away, about one a minute</span>
             </span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => retry("batch")}>
             <ClockIcon />
             <span className="flex flex-col">
               Batch
-              <span className="text-xs text-muted-foreground">Half the price; minutes to a few hours</span>
+              <span className="text-xs text-muted-foreground">Half the price; minutes to an hour or two</span>
             </span>
           </DropdownMenuItem>
         </DropdownMenuGroup>

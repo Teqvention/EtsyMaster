@@ -1,3 +1,5 @@
+import type { CityOutputInfo, CityRequest, CitySetInfo } from "@/lib/citys/studio-types"
+
 // What the Generation page shows: one "set" per listing photo a folder was
 // run on. A poster set downloads the photo, finds every poster in it (one, or
 // each of a set of N), reads what each one is, and then draws new posters
@@ -94,10 +96,14 @@ export type Output = Asset & {
   inspiration?: string[]
   /** The batch job painting it, while it does (see `PaintJob`), or `SENDING` until that job starts. */
   job?: string
+  /** The model that painted it, when it wasn't the usual one (the fallback while that one was overloaded). */
+  model?: string
   review: Review | null
   /** ISO 8601 */
   reviewedAt?: string
   createdAt: string
+  /** A city poster: what kind, and how it was asked for (see citys/studio-types). */
+  city?: CityOutputInfo
 }
 
 export type GenerateGroup = {
@@ -147,6 +153,12 @@ export type PaintJob = {
   harvest?: boolean
   /** Cancelled by hand: what it painted still comes in, the rest is dropped (see `cancelJobs`). */
   cancelled?: boolean
+  /** Put away by Reset fails once it had finished: the sidebar no longer counts it. */
+  cleared?: boolean
+  /** The model painting it, when it isn't the usual one. */
+  model?: string
+  /** Ended for being slow while its model was overloaded: what it didn't paint goes to the fallback model. */
+  rescue?: boolean
 }
 
 /** The error an output is left with when its batch job was cancelled by hand; a retry asks for it again. */
@@ -154,6 +166,9 @@ export const CANCELLED = "Cancelled"
 
 /** An output's `job` while it waits, with others, for the batch job they'll go out in. */
 export const SENDING = "sending"
+
+/** The error of whatever was stopped by hand before it was painted (see `stopWaiting`). */
+export const STOPPED = "Stopped before painting"
 
 export const MAX_VARIANTS = 20
 export const MAX_IDEAS = 50
@@ -172,6 +187,8 @@ export type Batch = {
   createdAt: string
   /** Outputs are made once the posters are known. */
   expanded: boolean
+  /** A city set's batch: what it asks for instead of `options` (whose counts are then 0). */
+  city?: CityRequest
 }
 
 export type SetStatus = "queued" | "running" | "done" | "error"
@@ -216,6 +233,14 @@ export type GenerationSet = {
   /** Mockup sets: the blank mockup and its scene, for the editor. */
   mockup?: Asset
   sceneId?: string
+  /** A city set: the place its posters show (see citys/generate.ts); the Generation page leaves these to Citys. */
+  city?: CitySetInfo
+  /**
+   * Times what failed in it for a passing reason was run again by itself
+   * (see `heal` in run.ts); 0 when asked for anew. Sets made before that
+   * don't have it and are left alone.
+   */
+  heals?: number
 }
 
 /** `count` levels spread evenly over `levels`, in order: 5 over low+high → L H L H L. */
@@ -231,3 +256,42 @@ export function imagesPerPoster(options: GenerateOptions) {
 
 export const isBusy = (status: AssetStatus | SetStatus) =>
   status === "pending" || status === "queued" || status === "running"
+
+/** A failed image, as Reset fails clears it: no picture, nothing to keep. */
+export const isFailedImage = (o: Output) => o.status === "error" && !o.file
+
+/**
+ * What Reset fails does to a set: its failed images go, and the whole set
+ * when that leaves nothing in it (a failed step too: no photo, no posters).
+ * One still at work stays, as does a lab set: its round reads it.
+ */
+export function resetOf(set: GenerationSet) {
+  const images = set.outputs.filter(isFailedImage).length
+  const steps = [set.original, set.extraction, set.mockup].some((a) => a?.status === "error")
+  const drop =
+    set.status !== "queued" && set.status !== "running" && !set.city?.lab && (images > 0 || steps) && set.outputs.length === images
+  return { images, drop }
+}
+
+/** How the batch an output came from asked for it to be painted. */
+export const deliveryOf = (set: GenerationSet, output: Output): Delivery =>
+  set.batches.find((b) => b.id === output.batch)?.options.delivery ?? "now"
+
+/** Errors no second try changes: the safety filters, a bad request, a photo we can't use, or someone stopping it. */
+const FOR_GOOD = [
+  /SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION|blocked/i,
+  /invalid argument|INVALID_ARGUMENT|\b400\b|rejected \(4\d\d\)/i,
+  /Only Etsy listing photos|listing photo \(40[34]\)/i,
+  /Unknown (generation|file|output)/i,
+]
+
+/**
+ * Whether something that failed with `error` is worth trying again by
+ * itself: Google busy or failing on its side, a dropped connection, a server
+ * that stopped, a batch job that lost an image. Not when it was stopped or
+ * cancelled by hand, nor for errors no try changes (`FOR_GOOD`).
+ */
+export function worthRetrying(error: string | undefined) {
+  if (!error || error === CANCELLED || error === STOPPED) return false
+  return !FOR_GOOD.some((pattern) => pattern.test(error))
+}

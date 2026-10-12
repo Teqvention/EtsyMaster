@@ -24,9 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { createCityStyle } from "@/hooks/use-city-style"
 import { useSaved } from "@/hooks/use-saved"
+import { hasPrimaryTag, useShopHistory } from "@/hooks/use-shop-history"
 import { addSavedListings, createStyle } from "@/hooks/use-styles"
 import { MAX_IMAGES, type Style } from "@/lib/styles/types"
+import { cn } from "@/lib/utils"
 
 // A style from the posters of a Saved folder, or more of them for a style's
 // board. The server takes each poster out of its listing photo (the photo
@@ -45,6 +48,7 @@ export function StyleFromSavedDialog({
   style,
   navigate = false,
   onDone,
+  kind,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -58,6 +62,8 @@ export function StyleFromSavedDialog({
   navigate?: boolean
   /** With the new style, or the one added to. */
   onDone?: (style: Style) => void
+  /** A city style or a normal one; picked here (city when the posters' shops are city shops) when not given. */
+  kind?: "city" | "normal"
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,6 +74,7 @@ export function StyleFromSavedDialog({
             initial={picked}
             target={style}
             navigate={navigate}
+            kind={kind}
             onDone={(next) => {
               onOpenChange(false)
               onDone?.(next)
@@ -85,15 +92,19 @@ function Form({
   target,
   navigate,
   onDone,
+  kind: fixedKind,
 }: {
   fixed?: string
   initial?: number[]
   target?: Style
   navigate: boolean
   onDone: (style: Style) => void
+  kind?: "city" | "normal"
 }) {
   const router = useRouter()
   const saved = useSaved()
+  const history = useShopHistory()
+  const [chosenKind, setKind] = React.useState<"city" | "normal" | null>(null)
   const [folder, setFolder] = React.useState<string | null>(null)
   // Null while untouched: the folder's name, and all of it (or the listings it opened with).
   const [name, setName] = React.useState<string | null>(null)
@@ -137,6 +148,13 @@ function Form({
   }, [items, initial, max])
   const selected = picked ?? defaults
   const chosen = items.filter((i) => selected.has(i.id))
+  // City mode first when most of the posters come from shops tagged "citys".
+  const cityShops = React.useMemo(
+    () => new Set(Object.values(history).filter((v) => hasPrimaryTag(v, "citys")).map((v) => v.shop.name.toLowerCase())),
+    [history]
+  )
+  const fromCityShops = listings.filter((l) => l.shop && cityShops.has(l.shop.toLowerCase())).length
+  const kind = fixedKind ?? chosenKind ?? (listings.length && fromCityShops * 2 >= listings.length ? "city" : "normal")
   const styleName = name ?? current ?? ""
   const ready = chosen.length > 0 && (target !== undefined || styleName.trim() !== "")
 
@@ -148,7 +166,8 @@ function Form({
     const picks = chosen.flatMap((i) => byId.get(i.id) ?? [])
     const posters = picks.length === 1 ? "1 poster" : `${picks.length} posters`
     try {
-      const style = target ?? (await createStyle(styleName))
+      const style = target ?? (kind === "city" ? await createCityStyle(styleName) : await createStyle(styleName))
+      const page = kind === "city" && !target ? `/citys/styles/${style.id}` : `/styles/${style.id}`
       const next = await addSavedListings(
         style.id,
         picks.map(({ listingId, title, image }) => ({ listingId, title, image }))
@@ -161,10 +180,10 @@ function Form({
         toast.success(`Generating ${next.name}`, {
           description: `${posters} taken out of their photos, then Gemini reads the board.`,
           ...(!navigate && {
-            action: { label: "Open", onClick: () => router.push(`/styles/${next.id}`) },
+            action: { label: "Open", onClick: () => router.push(page) },
           }),
         })
-        if (navigate) router.push(`/styles/${next.id}`)
+        if (navigate) router.push(page)
       }
       onDone(next)
     } catch (error) {
@@ -229,6 +248,29 @@ function Form({
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {!target && !fixedKind && (
+              <div className="flex shrink-0 flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Kind</span>
+                <div className="flex h-9 rounded-lg border p-0.5" role="radiogroup" aria-label="Kind of style">
+                  {(["normal", "city"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="radio"
+                      aria-checked={kind === k}
+                      onClick={() => setKind(k)}
+                      title={k === "city" ? "Read for how it shows a place too, and tried in the city lab" : "A style for any poster"}
+                      className={cn(
+                        "rounded-md px-3 text-xs font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+                        kind === k ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {k === "city" ? "City" : "Normal"}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {!target && (

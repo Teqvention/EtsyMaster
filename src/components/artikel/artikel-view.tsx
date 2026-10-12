@@ -12,6 +12,7 @@ import {
   LoaderCircleIcon,
   PowerIcon,
   RefreshCwIcon,
+  SearchCheckIcon,
   SearchIcon,
   Settings2Icon,
   TriangleAlertIcon,
@@ -50,8 +51,10 @@ import { cn } from "@/lib/utils"
 
 import { ActionDialog, targetChoices, type ActionKind } from "./action-dialog"
 import { ActionsPanel } from "./actions-panel"
-import { ArtikelTable, SORT_VALUE, type Sort, type SortKey } from "./artikel-table"
+import { ArtikelTable, ASCENDING_FIRST, SORT_VALUE, type Sort, type SortKey } from "./artikel-table"
+import { CityStatusMenu, CityStrip, cityFilterItems, matchesCity, NO_CITY_FILTERS, type CityFilters } from "./city-columns"
 import { ListingSheet } from "./listing-sheet"
+import { SeoSheet } from "./seo-sheet"
 import { ago, Est, money, plural, shortDate, Signed, STATE_LABEL } from "./shared"
 import { TagManager, TagsPopover } from "./tags-menu"
 
@@ -94,8 +97,8 @@ function useParams() {
   return [searchParams, set] as const
 }
 
-type Filters = { search: string; state: string; section: string; tag: string; withSales: boolean }
-const NO_FILTERS: Filters = { search: "", state: "all", section: "all", tag: "all", withSales: false }
+type Filters = { search: string; state: string; section: string; tag: string; withSales: boolean } & CityFilters
+const NO_FILTERS: Filters = { search: "", state: "all", section: "all", tag: "all", withSales: false, ...NO_CITY_FILTERS }
 
 export function ArtikelView() {
   const [searchParams, setParams] = useParams()
@@ -120,6 +123,7 @@ export function ArtikelView() {
   const [openId, setOpenId] = React.useState<number | null>(null)
   const [launch, setLaunch] = React.useState<{ kind: ActionKind; ids?: number[] } | null>(null)
   const [managingTags, setManagingTags] = React.useState(false)
+  const [seoOpen, setSeoOpen] = React.useState(false)
   const search = React.useRef<HTMLInputElement>(null)
 
   const rows = React.useMemo(() => (state ? filterRows(state, filters, sort) : []), [state, filters, sort])
@@ -163,7 +167,7 @@ export function ArtikelView() {
   }
 
   function toggleSort(key: SortKey) {
-    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "title" && key !== "section" && key !== "endsAt" }))
+    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: !ASCENDING_FIRST.includes(key) }))
     setShown(STEP)
   }
 
@@ -195,6 +199,9 @@ export function ArtikelView() {
   const choices = launch ? targetChoices(state, launchIds, account) : []
   const defaultTarget = launchIds.length ? "listings" : account ? `shop:${account}` : state.shops.length === 1 ? `shop:${state.shops[0].account}` : "all"
   const neverSynced = state.sync.every((s) => !s.listings)
+  const showCity = !!state.city && (!account || state.city.accounts.includes(account))
+  const pickedSet = new Set(picked)
+  const pickedCity = showCity ? state.rows.filter((r) => r.city && pickedSet.has(r.listingId)).map((r) => r.listingId) : []
 
   return (
     <div className="flex flex-col gap-3 px-4 lg:px-6">
@@ -230,6 +237,9 @@ export function ArtikelView() {
         <>
           <Notices state={state} />
           <Summary state={state} />
+          {showCity && (
+            <CityStrip state={state} account={account} status={filters.status} onStatus={(status) => filter({ status })} onSeo={() => setSeoOpen(true)} />
+          )}
           {actions && actions.length > 0 && <ActionsPanel actions={actions} />}
 
           <section aria-labelledby="artikel-listings" className="flex flex-col gap-3 rounded-lg border p-3">
@@ -261,6 +271,7 @@ export function ArtikelView() {
                 selection={selection}
                 tags={tags}
                 showShop={!account && state.shops.length > 1}
+                showCity={showCity}
                 openId={openId}
                 onOpen={setOpenId}
                 now={dayMs(today)}
@@ -303,6 +314,13 @@ export function ArtikelView() {
           </DropdownMenuContent>
         </DropdownMenu>
         <TagsPopover picked={picked} rows={state.rows} tags={state.tags} />
+        {showCity && <CityStatusMenu picked={picked} rows={state.rows} />}
+        {showCity && pickedCity.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setSeoOpen(true)}>
+            <SearchCheckIcon />
+            Analyse SEO
+          </Button>
+        )}
       </SelectionBar>
 
       <ActionDialog
@@ -320,6 +338,7 @@ export function ArtikelView() {
         onAction={(kind, listingId) => setLaunch({ kind, ids: [listingId] })}
       />
       <TagManager open={managingTags} onOpenChange={setManagingTags} tags={state.tags} rows={state.rows} />
+      {showCity && <SeoSheet open={seoOpen} onOpenChange={setSeoOpen} picked={pickedCity} />}
     </div>
   )
 }
@@ -331,8 +350,9 @@ function filterRows(state: ArtikelState, f: Filters, sort: Sort) {
     if (f.section === "none" ? r.sectionId !== null : f.section !== "all" && `${r.account}:${r.sectionId}` !== f.section) return false
     if (f.tag === "none" ? r.tags.length > 0 : f.tag !== "all" && !r.tags.includes(f.tag)) return false
     if (f.withSales && r.sales === 0) return false
+    if (!matchesCity(r, f)) return false
     if (words.length) {
-      const text = `${r.title} ${r.listingId} ${r.section ?? ""}`.toLowerCase()
+      const text = `${r.title} ${r.listingId} ${r.section ?? ""} ${r.city?.place ?? ""}`.toLowerCase()
       if (!words.every((w) => text.includes(w))) return false
     }
     return true
@@ -639,7 +659,17 @@ function FilterBar({
     { value: "none", label: "Untagged" },
     ...state.tags.map((t) => ({ value: t.id, label: t.name })),
   ]
-  const active = filters.search || filters.state !== "all" || filters.section !== "all" || filters.tag !== "all" || filters.withSales
+  const showCity = !!state.city && (!account || state.city.accounts.includes(account))
+  const cityItems = showCity ? cityFilterItems(account ? state.rows.filter((r) => r.account === account) : state.rows) : null
+  const active =
+    filters.search ||
+    filters.state !== "all" ||
+    filters.section !== "all" ||
+    filters.tag !== "all" ||
+    filters.withSales ||
+    filters.status !== "all" ||
+    filters.origin !== "all" ||
+    filters.rank !== "all"
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -673,6 +703,13 @@ function FilterBar({
         </InputGroupAddon>
       </InputGroup>
 
+      {cityItems && (
+        <>
+          <FilterSelect value={filters.status} items={cityItems.status} label="City status" onChange={(value) => onFilter({ status: value })} />
+          <FilterSelect value={filters.origin} items={cityItems.origin} label="Origin" onChange={(value) => onFilter({ origin: value })} />
+          <FilterSelect value={filters.rank} items={cityItems.rank} label="Rank of the place" onChange={(value) => onFilter({ rank: value })} />
+        </>
+      )}
       <FilterSelect value={filters.state} items={stateItems} label="State" onChange={(value) => onFilter({ state: value })} />
       <FilterSelect value={filters.section} items={sectionItems} label="Section" onChange={(value) => onFilter({ section: value })} />
       <div className="flex items-center">

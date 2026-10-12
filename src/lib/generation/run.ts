@@ -2,32 +2,39 @@
 import sharp from "sharp"
 
 import { watchDoc } from "@/lib/db/documents"
-import { exclusive } from "@/lib/db/sql"
-import { googlePaused, GooglePausedError, PAUSE_KEY } from "@/lib/google/pause"
-import { BLANK_PROMPT, blankAgainPrompt, paint } from "@/lib/mockups/gemini"
+import { claim, type Claim, exclusive } from "@/lib/db/sql"
+import { paceState } from "@/lib/google/pace"
+import { googlePaused, GooglePausedError, heldBackByGoogle, PAUSE_KEY, wrong } from "@/lib/google/pause"
+import { BLANK_PROMPT, blankAgainPrompt, FALLBACK_MODEL, paint, PAINT_MODEL, StayedBusyError } from "@/lib/mockups/gemini"
 import { createSceneFromBlank, fetchReference, replaceBlank, roomFile } from "@/lib/mockups/reference"
 import { getScene, NotFoundError, readSceneFile } from "@/lib/mockups/storage"
-import { isLeader } from "@/lib/db/workers"
+import { instanceId, isLeader } from "@/lib/db/workers"
 import {
+  type Attempt,
+  BLOCKED,
+  batchConfigured,
   cancelPaintBatch,
+  GoogleError,
   inputLines,
   type OpenJob,
   openPaintBatches,
   paintBatchResults,
   paintBatchState,
-  paintLineNow,
+  paintLineOnce,
   paintLines,
   type PaintResult,
-  StayedBusyError,
   startPaintBatch,
 } from "@/lib/mockups/vertex-batch"
+import { cityRequest, cityWork, isCitySet } from "@/lib/citys/generate"
 import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
 import { analysePoster, extractPosters } from "./poster"
 import { paintPrompt, planBriefs } from "./prompts"
 import {
+  deleteSet,
   getSet,
+  INTERRUPTED,
   listSets,
   readSetFile,
   newId,
@@ -50,15 +57,23 @@ import {
   type OutputMode,
   type PaintJob,
   CANCELLED,
+  isFailedImage,
+  resetOf,
   SENDING,
+  STOPPED,
+  worthRetrying,
 } from "./types"
 
 // Works through queued sets in the background, on the server that queued
 // them. A set's finished parts are kept, so a retry only redoes what failed,
 // and new batches only add images.
 
-/** Sets worked on at once; how many images go to Vertex at a time is up to its gate in gemini.ts. */
-const PARALLEL = 3
+/**
+ * Sets worked on at once (finding posters, writing briefs: Gemini Flash,
+ * which has room to spare); painting is up to the lane and the batch outbox.
+ * A thousand images (a hundred sets) are ready to go in about twenty minutes.
+ */
+const PARALLEL = 6
 
 type Queue = { waiting: string[]; running: Set<string> }
 // On globalThis, so every route (and a dev reload) shares the one queue.
@@ -113,6 +128,7 @@ function resume() {
   lane.pull()
   watchOutbox()
   kickBatches(0)
+  void healer.pass()
 }
 
 void pausedNow()
@@ -137,6 +153,8 @@ export async function retry(id: string, delivery?: Delivery) {
       status: "queued",
       doneAt: undefined,
       stopping: undefined,
+      // Asked for again by hand: it may heal itself again as often as a new one.
+      heals: 0,
       original: reset(s.original),
       extraction: s.extraction && reset(s.extraction),
       mockup: s.mockup && reset(s.mockup),
@@ -180,6 +198,7 @@ export async function refreshMockup(id: string, feedback: string, delivery: Deli
       status: "queued",
       doneAt: undefined,
       stopping: undefined,
+      heals: 0,
       mockup: { status: "pending", file: null },
       // The new one first (a mockup set's blank is its first output), and the one it improves on.
       outputs: [output, ...s.outputs.filter((o) => o.id === output.from)],
@@ -210,7 +229,7 @@ export async function addBatch(id: string, options: GenerateOptions) {
     if (s.kind !== "poster") throw new Error("Only poster sets make new images")
     const batch: Batch = { id: newId(), options, createdAt: new Date().toISOString(), expanded: false }
     // New images need a look, so the set comes back out of Done.
-    return { ...s, status: "queued", batches: [...s.batches, batch], doneAt: undefined, stopping: undefined }
+    return { ...s, status: "queued", batches: [...s.batches, batch], doneAt: undefined, stopping: undefined, heals: 0 }
   })
   enqueue(id)
   return set
@@ -241,8 +260,6 @@ export async function stopWaiting() {
   return { stopped }
 }
 
-const STOPPED = "Stopped before painting"
-
 /** Marks what hasn't started as stopped; images in a batch job go on. */
 function halt(id: string) {
   return updateSet(id, (s) => {
@@ -256,7 +273,7 @@ function halt(id: string) {
       mockup: s.mockup && stop(s.mockup),
       outputs: s.outputs.map(stop),
     }
-    return { ...next, status: s.outputs.some((o) => o.job) ? "running" : "error" }
+    return { ...next, status: s.outputs.some(painting) ? "running" : "error" }
   })
 }
 
@@ -276,13 +293,22 @@ async function work(id: string) {
   try {
     const set = await updateSet(id, (s) => ({ ...s, status: "running" }))
     if (set.stopping) return void (await halt(id))
-    if (set.kind === "poster") await poster(id)
+    // City posters plan and paint their own way (citys/generate.ts), through the same lane and batch jobs.
+    if (isCitySet(set)) {
+      const none = () => Promise.resolve(null)
+      await cityWork(id, {
+        draw: (setId, output) => draw(setId, output, none()),
+        submit: (setId, outputs) => submit(setId, outputs, none),
+        halt,
+      })
+    } else if (set.kind === "poster") await poster(id)
     else await mockup(set)
-    // A batch job still painting keeps the set going; the batch poller finishes it.
+    // Images still painting (online in the lane, or in a batch job) keep the
+    // set going; whoever brings the last one in finishes it (see `settled`).
     await updateSet(id, (s) => ({
       ...s,
       stopping: undefined,
-      status: s.outputs.some((o) => o.job) ? "running" : failed(s) ? "error" : "done",
+      status: s.outputs.some(painting) ? "running" : failed(s) ? "error" : "done",
     }))
   } catch (error) {
     if (error instanceof NotFoundError && error.message === "Unknown generation") return // deleted while it ran
@@ -294,6 +320,9 @@ async function work(id: string) {
     })).catch(() => {})
   }
 }
+
+/** Being painted: online in the lane, or waiting for or in a batch job. */
+const painting = (o: Output) => o.status === "running" || !!o.job
 
 function failed(set: GenerationSet) {
   return (
@@ -372,7 +401,7 @@ async function poster(id: string) {
     batches: s.batches.map((b) => ({ ...b, expanded: true })),
   }))
 
-  // 4. A brief for each, then the painting: now, or handed to a batch job.
+  // 4. A brief for each, then the painting: online (now), or in a batch job.
   await plan(id)
   set = await getSet(id)
   if (set.stopping) return halt(id)
@@ -386,14 +415,21 @@ async function poster(id: string) {
   const delivery = new Map(set.batches.map((b) => [b.id, b.options.delivery ?? "now"]))
   const waiting = set.outputs.filter((o) => o.status === "pending")
   const batched = waiting.filter((o) => delivery.get(o.batch) === "batch")
+  const now = waiting.filter((o) => !batched.includes(o))
   await Promise.all([
-    ...waiting.filter((o) => !batched.includes(o)).map((o) => draw(id, o, styleOf(o))),
+    // Through the online lane, which sends what it can't get to soon to a batch
+    // job; drawn here only where there's no batch bucket for that.
+    ...(batchConfigured() ? [now.length ? submit(id, now, styleOf, true) : null] : now.map((o) => draw(id, o, styleOf(o)))),
     batched.length ? submit(id, batched, styleOf) : null,
   ])
 }
 
-/** Hands `outputs` to the online lane (see `send`), as the lines a batch job would read. */
-async function submit(id: string, outputs: Output[], styleOf: (o: Output) => Promise<StyleRef | null>) {
+/**
+ * Hands `outputs` on as the lines a batch job would read: "now" ones (`now`)
+ * to the online lane as far as it gets to them soon, the rest to the batch
+ * outbox (see `send`).
+ */
+async function submit(id: string, outputs: Output[], styleOf: (o: Output) => Promise<StyleRef | null>, now = false) {
   const ids = outputs.map((o) => o.id)
   await updateSet(id, (s) => ({
     ...s,
@@ -404,11 +440,18 @@ async function submit(id: string, outputs: Output[], styleOf: (o: Output) => Pro
       outputs.map(async (o) => ({ key: o.id, ...(await request(id, o.id, styleOf(o))) }))
     )
     const lines = await paintLines(`batch/${id}-${Date.now().toString(36)}`, requests)
+    // "now" images the lane takes on are just running (taken on at once, so sets
+    // handing images over side by side don't overfill it); the others wait for a batch job.
+    const online = now ? Math.min(ids.length, nowRoom()) : 0
+    for (let i = 0; i < online; i++) lane.errands.push(errand(id, ids[i], lines[i], true))
+    pumpLane()
+    const bound = ids.slice(online)
+    if (!bound.length) return
     await updateSet(id, (s) => ({
       ...s,
-      outputs: s.outputs.map((o) => (ids.includes(o.id) ? { ...o, job: SENDING } : o)),
+      outputs: s.outputs.map((o) => (bound.includes(o.id) ? { ...o, job: SENDING } : o)),
     }))
-    send({ set: id, outputs: ids, lines })
+    send({ set: id, outputs: bound, lines: lines.slice(online) }, now)
   } catch (error) {
     if (error instanceof NotFoundError && error.message === "Unknown generation") throw error
     console.error(`Generation ${id}, batch:`, error)
@@ -421,69 +464,182 @@ async function submit(id: string, outputs: Output[], styleOf: (o: Output) => Pro
 
 // --- Online lane and batch outbox ---
 
-// Vertex paints Nano Banana two ways, and neither keeps up on its own. Online
-// its shared quota lets through an image a minute or so whatever we ask (10
-// Oct: 64 at once painted no more than 32). Batch jobs paint a few a minute
-// when they run, but some sit for hours without painting a thing (five sent
-// at 14:01 had none by 19:00, while two sent at 16:40 painted 87 in 20 min).
-// So outputs bound for batch go both ways, from the very lines a job would
-// read (their images are in Cloud Storage, which online calls read too):
-// `LANE_PARALLEL` painting online, the rest in batch jobs of `MAX_JOB`, and
-// a job that's painted nothing for `STUCK` goes out again (see `follow`).
-// Online, an output keeps `job: SENDING`, so a server that stops leaves it
-// for the batch check to send again.
+// Vertex paints Nano Banana two ways. Online, its shared quota lets about one
+// image a minute through for this project whatever we ask (12 Oct, Cloud
+// Monitoring: 3–7 busy answers for every image painted), and every try is
+// paced with every other server's (google/pace.ts). In a batch job it paints
+// at half the price with no quota to wait for, and most jobs are back within
+// half an hour — but some sit for an hour or more (see `follow`).
+// Neither keeps up on its own, so both paint at once. The lane paints
+// online, `LANE_PARALLEL` at a time:
+// - "now" images first. As many as the lane gets through in about
+//   `NOW_HORIZON` (going by how fast it's been) are kept for it; the rest of
+//   a "now" order goes straight into a batch job, which is usually back
+//   sooner than the lane would get to them (see `submit`).
+// - else batch images not in a job yet: those waiting in the outbox for
+//   room in a running job (see `MAX_RUNNING_JOBS`), oldest first. On a day
+//   batch jobs are slow (12 Oct: about an image a minute for the project)
+//   the lane paints a good part of a big order; on a fast one the jobs take
+//   nearly all of it, at half the price.
+// An image Vertex turns away waits its turn again (the shared pace keeps
+// every server's next try a while off); one it keeps turning away past its
+// patience goes into a batch job instead. Images bound for a batch job keep
+// `job: SENDING` until their job starts, so a server that stops leaves them
+// for the batch check (or `heal`) to send again; "now" images in the lane are
+// just running, and read as interrupted should their server stop.
 
-type Parcel = { set: string; outputs: string[]; lines: string[]; tries?: number }
-type Errand = { set: string; output: string; line: string }
+type Parcel = {
+  set: string
+  outputs: string[]
+  lines: string[]
+  tries?: number
+  /** The name the job it goes out in got on the first try, kept for the next (see `sendJob`). */
+  jobName?: string
+  /** Painted by this model rather than the usual one (`FALLBACK_MODEL`, taking over from an overloaded one). */
+  model?: string
+  /** When it went into the outbox. */
+  since?: number
+  /** A "now" order's overflow: it goes in the next job, without waiting for more. */
+  urgent?: boolean
+}
+type Errand = {
+  set: string
+  output: string
+  line: string
+  /** A "now" image: it goes before batch images, and waits longer before it's sent to a batch job. */
+  now: boolean
+  /** Not tried again before this. */
+  after: number
+  /** Since when Vertex has turned it away, with nothing else wrong. */
+  busySince?: number
+  /** Tries that came back without an image, or failed on Vertex's side. */
+  misses: number
+  /** Painted by this model rather than the usual one. */
+  model?: string
+  /** Times in a row the model turned it away as busy. */
+  turnedAway?: number
+}
 type Lane = {
   errands: Errand[]
   active: number
+  /** Of those, "now" images. */
+  activeNow: number
   painted: number
   failed: number
-  /** Keeps the lane full from the outbox. */
+  /** When it painted an image lately, to tell how fast it goes. */
+  recent: number[]
+  /** The outputs being tried right now. */
+  inFlight: Set<string>
+  /** Keeps the lane going: errands whose wait is over, and room filled from the outbox. */
   drain?: ReturnType<typeof setInterval>
   pull: () => void
+  /** Starts what may go; called through here, so after a dev reload the newest code does. */
+  pump?: () => void
 }
 const lane = ((global as typeof global & { __paintLane?: Lane }).__paintLane ??= {
   errands: [],
   active: 0,
+  activeNow: 0,
   painted: 0,
   failed: 0,
+  recent: [],
+  inFlight: new Set(),
   pull: () => {},
 })
-// Was 24; kept low since Google suspended an account over request bursts (11 Oct).
-const LANE_PARALLEL = 2
+// Made before these were fields: a dev reload keeps the old object (and its errands).
+lane.activeNow ??= 0
+lane.recent ??= []
+lane.inFlight ??= new Set()
+lane.errands = lane.errands.map((e) => ({ ...e, now: e.now ?? false, after: e.after ?? 0, misses: e.misses ?? 0 }))
 
-/** Online while the lane has room; the rest waits in the outbox for a batch job (or room in the lane). */
-function send(parcel: Parcel) {
+/** Online tries at once on this server. Vertex lets about one image a minute through, so more would only add 429s. */
+const LANE_PARALLEL = 2
+/** How far ahead the lane takes "now" images on; past that they go in a batch job right away. */
+const NOW_HORIZON = 10 * 60_000
+/**
+ * "now" images the lane takes on at least, however slow it's been: twenty,
+ * a usual "now" order, which the fallback model paints in a few minutes
+ * when the usual one is overloaded (a batch job of it took two hours on 12 Oct).
+ */
+const NOW_MIN = 20
+/** How long Vertex may turn an image away online before it goes in a batch job: "now" ones are worth the wait. */
+const NOW_PATIENCE = 20 * 60_000
+const SPARE_PATIENCE = 3 * 60_000
+/** Tries past the first for an answer without an image, or a failure on Vertex's side. */
+const MISSES = 2
+/**
+ * Busy answers from the usual model after which the fallback paints an
+ * image online instead (12 Oct: Nano Banana 2.1 turned 6 requests away 11
+ * times; Nano Banana 2 painted them in 14 s each, at twice the price).
+ */
+const FALLBACK_AFTER = 2
+
+const errand = (set: string, output: string, line: string, now: boolean, model?: string): Errand => ({
+  set,
+  output,
+  line,
+  now,
+  after: 0,
+  misses: 0,
+  ...(model && { model }),
+})
+
+/** "now" images the lane can take on: what it painted in the last half hour, scaled to `NOW_HORIZON`, less what it has. */
+function nowRoom() {
+  const since = Date.now() - 30 * 60_000
+  lane.recent = lane.recent.filter((at) => at > since)
+  const soon = Math.max(NOW_MIN, Math.round((lane.recent.length / 30) * (NOW_HORIZON / 60_000)))
+  return Math.max(0, soon - lane.activeNow - lane.errands.filter((e) => e.now).length)
+}
+
+/** Batch-bound images: as many as the lane has room for go online, the rest to the outbox. */
+function send(parcel: Parcel, urgent = false) {
   const room = Math.max(0, LANE_PARALLEL - lane.active - lane.errands.length)
-  parcel.outputs.slice(0, room).forEach((output, i) => lane.errands.push({ set: parcel.set, output, line: parcel.lines[i] }))
+  parcel.outputs.slice(0, room).forEach((output, i) => lane.errands.push(errand(parcel.set, output, parcel.lines[i], false, parcel.model)))
   if (parcel.outputs.length > room) {
-    toOutbox({ ...parcel, outputs: parcel.outputs.slice(room), lines: parcel.lines.slice(room) })
+    toOutbox({ ...parcel, outputs: parcel.outputs.slice(room), lines: parcel.lines.slice(room) }, urgent)
   }
   pumpLane()
 }
 
 function pumpLane() {
   if (pause.on) return
-  while (lane.active < LANE_PARALLEL && lane.errands.length) {
-    const errand = lane.errands.shift()!
+  while (lane.active < LANE_PARALLEL) {
+    const now = Date.now()
+    const ready = (e: Errand) => (e.after ?? 0) <= now
+    // "now" images first, then batch ones, each in the order they came.
+    let i = lane.errands.findIndex((e) => e.now && ready(e))
+    if (i < 0) i = lane.errands.findIndex(ready)
+    if (i < 0) return
+    const [next] = lane.errands.splice(i, 1)
     lane.active++
-    void paintErrand(errand).finally(() => {
+    if (next.now) lane.activeNow++
+    lane.inFlight.add(next.output)
+    void paintErrand(next).finally(() => {
       lane.active--
-      pumpLane()
+      if (next.now) lane.activeNow--
+      lane.inFlight.delete(next.output)
+      lane.pump?.()
     })
   }
 }
+lane.pump = pumpLane
 
-/** Room in the lane is filled from the outbox, before its next job goes. */
+/**
+ * Room in the lane is filled from the outbox, oldest first, while no job has
+ * room for what waits there (painting it online costs twice as much, so
+ * only then) and no "now" images wait.
+ */
 lane.pull = () => {
-  // Errands past the lane's room (from before it had one) wait for batch.
-  const extra = lane.errands.splice(Math.max(0, LANE_PARALLEL - lane.active))
-  for (const e of extra) toOutbox({ set: e.set, outputs: [e.output], lines: [e.line] })
-  while (lane.active + lane.errands.length < LANE_PARALLEL && outbox.parcels.length) {
+  while (
+    outbox.full &&
+    !lane.errands.some((e) => e.now) &&
+    lane.active + lane.errands.length < LANE_PARALLEL &&
+    !outbox.sending &&
+    outbox.parcels.length
+  ) {
     const p = outbox.parcels[0]
-    lane.errands.push({ set: p.set, output: p.outputs.shift()!, line: p.lines.shift()! })
+    lane.errands.push(errand(p.set, p.outputs.shift()!, p.lines.shift()!, false, p.model))
     if (!p.outputs.length) outbox.parcels.shift()
   }
   pumpLane()
@@ -498,6 +654,12 @@ type Outbox = {
   timer: ReturnType<typeof setTimeout> | null
   /** After a job failed to start, the next try waits until then. */
   notBefore?: number
+  /** Jobs are being started (one at a time, paced): nothing else takes from the outbox meanwhile. */
+  sending?: boolean
+  /** What the timer runs; called through here, so after a dev reload the newest code does. */
+  tick?: () => Promise<void>
+  /** The last look found no room for another job: what waits now waits for a job to end. */
+  full?: boolean
 }
 const outbox = ((global as typeof global & { __batchOutbox?: Outbox }).__batchOutbox ??= {
   parcels: [],
@@ -510,95 +672,184 @@ if (outbox.notBefore === Number.MAX_SAFE_INTEGER) outbox.notBefore = 0
 /** Tries a job gets to go out, a few minutes apart: Vertex may be refusing more jobs while many run. */
 const SEND_TRIES = 30
 
-/** How long the outbox waits for more at most, so a job's minute or two to start is shared. */
-const GATHER = 60_000
+/**
+ * How long the outbox waits for the rest of an order before its images go
+ * out: all of them in few jobs is what made big orders fast (one job of 120
+ * back in 11 minutes, 7 Sep), and a big order's first sets sent off early
+ * would take the few jobs that may run, leaving the rest waiting for one to
+ * end (overnight, maybe until the laptop wakes). So it sends once no set is
+ * left to prepare, or once what waits would fill every job there may be; and
+ * after `GATHER_MAX` in any case, should a set never get through.
+ */
+const GATHER_MAX = 90 * 60_000
 
-function toOutbox(parcel: Parcel) {
+function toOutbox(parcel: Parcel, urgent = false) {
   if (!outbox.parcels.length) outbox.first = Date.now()
-  outbox.parcels.push(parcel)
+  const placed = { ...parcel, since: parcel.since ?? Date.now(), ...(urgent && { urgent: true }) }
+  // A "now" order's overflow goes ahead of what was only waiting for a job.
+  const at = urgent ? outbox.parcels.findIndex((p) => !p.urgent) : -1
+  outbox.parcels.splice(at < 0 ? outbox.parcels.length : at, 0, placed)
   outbox.last = Date.now()
   watchOutbox()
 }
 
 function watchOutbox() {
   if (outbox.timer) return
-  outbox.timer = setTimeout(async () => {
+  outbox.timer = setTimeout(() => {
     outbox.timer = null
-    if (!outbox.parcels.length) return
-    try {
-      const allowed = Date.now() >= (outbox.notBefore ?? 0) && !pause.on
-      const quiet = Date.now() - outbox.last > 5_000 && queue.running.size === 0 && queue.waiting.length === 0
-      if (allowed && (quiet || Date.now() - outbox.first > GATHER)) await sendOut()
-    } catch (error) {
-      console.error("Batch outbox:", error)
-    }
-    if (outbox.parcels.length) watchOutbox()
+    void outbox.tick?.()
   }, 2_000)
 }
 
-/**
- * Requests in one job at most. Vertex works through a job in parts, and
- * several small jobs side by side paint more than one big one (jobs of 5
- * next to one of 20 painted 13 images to its 1, 10 Oct); a job that sticks
- * also holds fewer images back.
- */
-const MAX_JOB = 10
+async function outboxTick() {
+  if (!outbox.parcels.length) return
+  if (!outbox.sending) {
+    outbox.sending = true
+    try {
+      const allowed = Date.now() >= (outbox.notBefore ?? 0) && !pause.on
+      const quiet = Date.now() - outbox.last > 5_000 && queue.running.size === 0 && queue.waiting.length === 0
+      const urgent = outbox.parcels.some((p) => p.urgent)
+      const full = outbox.parcels.reduce((n, p) => n + p.outputs.length, 0) >= (MAX_RUNNING_JOBS - 1) * HUGE_JOB
+      if (allowed && (urgent || quiet || full || Date.now() - outbox.first > GATHER_MAX)) await sendOut()
+    } catch (error) {
+      console.error("Batch outbox:", error)
+    } finally {
+      outbox.sending = false
+    }
+  }
+  if (outbox.parcels.length) watchOutbox()
+}
+
+outbox.tick = outboxTick
+// A timer the code before a dev reload set would run that code on (until 12 Oct it
+// did, holding everything to the old limits): set it again, for this code.
+if (outbox.timer) {
+  clearTimeout(outbox.timer)
+  outbox.timer = null
+  watchOutbox()
+}
 
 /**
- * Batch jobs running at once at most, across all sets. 44 sent within five
- * minutes on 10 Oct were followed by Google suspending the account; what
- * doesn't fit waits in the outbox until a job ends.
+ * Batch jobs running at once at most, across all sets and servers; one of
+ * them is kept for a "now" order's overflow. More side by side queue up
+ * behind each other at Google (5 Sep: of 7 at once, three were still running
+ * after 45 minutes; the same images in one job were done in 12), and 44 sent
+ * within five minutes on 10 Oct were followed by Google suspending the
+ * account. Jobs also start at least half a minute apart (google/pace.ts);
+ * what doesn't fit waits in the outbox until a job ends.
  */
-const MAX_RUNNING_JOBS = 3
+const MAX_RUNNING_JOBS = 4
 
-/** What's in the outbox, in jobs of `MAX_JOB` at most, as many as `MAX_RUNNING_JOBS` leaves room for. */
+/**
+ * How big a job is: an order goes out as one job while it holds no more than
+ * `MAX_JOB` (161, 202 and 226 images came back in 8 to 22 minutes in one job
+ * each, Sep–Oct); a bigger one is shared out over the jobs that may start,
+ * in equal parts, so that all of it is at Google within the hour: thousands
+ * in the evening paint overnight while the laptop sleeps, and come in when
+ * it wakes. Vertex paints a job's requests side by side and hands them over
+ * only when it ends; how long that takes depends on how busy it is far more
+ * than on the size (12 Oct, jobs of 6 to 10 took an hour), and one that
+ * sticks, stalls or falls behind is ended, its images come in and the rest
+ * goes out again (see `follow`). Vertex takes up to 200,000 requests a job;
+ * `HUGE_JOB` and `MAX_IN_FLIGHT` keep what one job holds and what's out at
+ * once sensible.
+ */
+const MAX_JOB = 250
+const HUGE_JOB = 2_000
+const MAX_IN_FLIGHT = 6_000
+
+/** What's in the outbox, shared out over as many jobs as `MAX_RUNNING_JOBS` and `MAX_IN_FLIGHT` leave room for, started one after another. */
 async function sendOut() {
-  const running = new Set(
-    (await listSets()).flatMap((s) => (s.jobs ?? []).filter((j) => j.status === "running").map((j) => j.name))
-  ).size
-  const room = MAX_RUNNING_JOBS - running
-  if (room <= 0) {
+  const running = new Map<string, number>()
+  for (const set of await listSets()) {
+    for (const job of set.jobs ?? []) {
+      if (job.status === "running") running.set(job.name, Math.max(running.get(job.name) ?? 0, job.size || job.outputs.length))
+    }
+  }
+  // The last free job is a "now" order's: batch images leave it free.
+  const urgent = outbox.parcels.some((p) => p.urgent)
+  const room = MAX_RUNNING_JOBS - running.size - (urgent ? 0 : 1)
+  let images = MAX_IN_FLIGHT - [...running.values()].reduce((n, size) => n + size, 0)
+  if (room <= 0 || images <= 0) {
+    outbox.full = true
     outbox.notBefore = Date.now() + 60_000
     return
   }
-  const all = outbox.parcels.splice(0)
+  outbox.full = false
+  const waiting = outbox.parcels.reduce((n, p) => n + p.outputs.length, 0)
+  if (!waiting) return
+  const parts = Math.min(room, Math.ceil(waiting / MAX_JOB))
+  const each = Math.min(HUGE_JOB, Math.ceil(waiting / parts))
+  // Each job filled to `each` (less where few images have room), a parcel cut
+  // where it doesn't fit; the rest waits its turn.
   const jobs: Parcel[][] = []
-  while (all.length && jobs.length < room) {
-    let size = 0
-    const count = all.findIndex((p) => (size += p.lines.length) > MAX_JOB)
-    jobs.push(all.splice(0, count < 0 ? all.length : Math.max(count, 1)))
+  const rest: Parcel[] = []
+  let filling: Parcel[] = []
+  let size = 0
+  for (let p of outbox.parcels.splice(0)) {
+    while (p.outputs.length && jobs.length < room && images > 0) {
+      // A job paints with one model.
+      if (filling.length && (filling[0].model ?? PAINT_MODEL) !== (p.model ?? PAINT_MODEL)) {
+        jobs.push(filling)
+        filling = []
+        size = 0
+        continue
+      }
+      const take = Math.min(each - size, images, p.outputs.length)
+      filling.push({ ...p, outputs: p.outputs.slice(0, take), lines: p.lines.slice(0, take) })
+      p = { ...p, outputs: p.outputs.slice(take), lines: p.lines.slice(take) }
+      size += take
+      images -= take
+      if (size === each || images === 0) {
+        jobs.push(filling)
+        filling = []
+        size = 0
+      }
+    }
+    if (p.outputs.length) rest.push(p)
   }
-  // The rest waits its turn.
-  if (all.length) {
-    outbox.parcels.unshift(...all)
+  if (filling.length) jobs.push(filling)
+  if (rest.length) {
+    outbox.parcels.unshift(...rest)
     outbox.notBefore = Date.now() + 60_000
   }
-  await Promise.all(jobs.map(sendJob))
+  // Each waits for its turn to start (google/pace.ts); one that fails goes back to the outbox.
+  for (const job of jobs) await sendJob(job)
 }
 
 async function sendJob(parcels: Parcel[]) {
   const size = parcels.reduce((n, p) => n + p.lines.length, 0)
+  const model = parcels[0].model ?? PAINT_MODEL
+  // One name for every try of these images: a job that started at Google
+  // without the answer reaching us is found by it, and never paid for twice.
+  const display = parcels.find((p) => p.jobName)?.jobName ?? `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  for (const p of parcels) p.jobName = display
   let name: string
   try {
-    name = await startPaintBatch(`batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, parcels.flatMap((p) => p.lines))
+    if (pause.on) throw new GooglePausedError()
+    const started = parcels.some((p) => p.tries) ? (await openPaintBatches()).find((j) => j.displayName === display) : undefined
+    name = started?.name ?? (await startPaintBatch(display, parcels.flatMap((p) => p.lines), model))
   } catch (error) {
-    const tries = (parcels[0].tries ?? 0) + 1
+    // Turned down as wrong: sent again as it is, it would only be turned down again.
+    const final = error instanceof GoogleError && wrong(error.status)
+    const tries = final ? SEND_TRIES : (parcels[0].tries ?? 0) + (error instanceof GooglePausedError ? 0 : 1)
     console.error(`Batch job (try ${tries} of ${SEND_TRIES}):`, error)
     if (tries < SEND_TRIES) {
       // Back in the outbox, for a try a little later.
       outbox.parcels.unshift(...parcels.map((p) => ({ ...p, tries })))
       outbox.first = Math.min(outbox.first || Date.now(), Date.now())
-      outbox.notBefore = Date.now() + Math.min(tries, 3) * 60_000
+      outbox.notBefore = Date.now() + Math.max(1, Math.min(tries, 3)) * 60_000
       watchOutbox()
       return
     }
+    const why = final ? `Batch job rejected (${(error as GoogleError).status}): ${message(error)}` : message(error)
     for (const p of parcels) {
       const after = await updateSet(p.set, (s) =>
         settled({
           ...s,
           outputs: s.outputs.map((o) =>
             p.outputs.includes(o.id) && o.job === SENDING
-              ? { ...o, status: "error", job: undefined, error: message(error) }
+              ? { ...o, status: "error", job: undefined, error: why }
               : o
           ),
         })
@@ -607,12 +858,14 @@ async function sendJob(parcels: Parcel[]) {
     }
     return
   }
+  // Looked after from here until it's in, before any set (or other server) knows of it.
+  await keep(name)
   const submittedAt = new Date().toISOString()
   // A set can have several parcels; it gets one entry for the job.
   const bySet = new Map<string, string[]>()
   for (const p of parcels) bySet.set(p.set, [...(bySet.get(p.set) ?? []), ...p.outputs])
   for (const [set, ids] of bySet) {
-    const job: PaintJob = { name, outputs: ids, submittedAt, status: "running", size }
+    const job: PaintJob = { name, outputs: ids, submittedAt, status: "running", size, ...(model !== PAINT_MODEL && { model }) }
     await updateSet(set, (s) => ({
       ...s,
       status: "running",
@@ -625,28 +878,87 @@ async function sendJob(parcels: Parcel[]) {
   kickBatches()
 }
 
-async function paintErrand({ set, output, line }: Errand) {
-  let result: PaintResult
+/** One try at painting an errand online; what's next depends on how it went. */
+async function paintErrand(next: Errand) {
+  const model = next.model ?? PAINT_MODEL
+  let attempt: Attempt
   try {
-    result = await paintLineNow(line)
+    attempt = await paintLineOnce(next.line, model)
   } catch (error) {
-    // Vertex stayed busy all along, or Google was paused meanwhile: a batch job takes it.
-    if (error instanceof StayedBusyError || error instanceof GooglePausedError) {
-      return toOutbox({ set, outputs: [output], lines: [line] })
-    }
-    result = { key: output, error: message(error) }
+    // Paused meanwhile: it waits in line for the switch (`resume` starts the lane again).
+    if (error instanceof GooglePausedError) return void lane.errands.unshift({ ...next, after: 0 })
+    attempt = { outcome: "flaky", why: message(error) }
   }
-  if (result.image) lane.painted++
-  else lane.failed++
-  try {
-    await bringIn(set, { ...result, key: output, error: result.image ? undefined : (result.error ?? "No image") })
-    const after = await updateSet(set, settled)
-    if (after.status === "queued") enqueue(set)
-  } catch (error) {
-    if (!(error instanceof NotFoundError)) console.error(`Generation ${set}, output ${output}:`, error)
+  const now = Date.now()
+  switch (attempt.outcome) {
+    case "image":
+      lane.painted++
+      lane.recent.push(now)
+      return land(next, { key: next.output, image: attempt.image }, model)
+    case "busy":
+    case "refused": {
+      const turnedAway = (next.turnedAway ?? 0) + (attempt.outcome === "busy" ? 1 : 0)
+      // The usual model is overloaded: the fallback paints it, from the next try on.
+      if (model === PAINT_MODEL && turnedAway >= FALLBACK_AFTER) {
+        lane.errands.push({ ...next, model: FALLBACK_MODEL, turnedAway: 0, busySince: undefined, after: 0 })
+        return
+      }
+      const busySince = next.busySince ?? now
+      if (now - busySince > (next.now ? NOW_PATIENCE : SPARE_PATIENCE)) return toBatch(next)
+      // Back in line. The shared pace keeps every server's next try a while off anyway.
+      lane.errands.push({ ...next, busySince, turnedAway, after: now + (attempt.outcome === "refused" ? 60_000 : 5_000) })
+      return
+    }
+    case "flaky":
+    case "empty":
+      if (next.misses < MISSES) {
+        lane.errands.push({ ...next, misses: next.misses + 1, after: now + 15_000 * (next.misses + 1) })
+        return
+      }
+      // Vertex keeps failing it online: a batch job takes it.
+      if (attempt.outcome === "flaky") return toBatch(next)
+      lane.failed++
+      return land(next, { key: next.output, error: attempt.why })
+    case "blocked":
+    case "failed":
+      lane.failed++
+      return land(next, { key: next.output, error: attempt.why })
   }
 }
 
+/** Vertex kept turning it away online: it goes in a batch job instead (a "now" image ahead of the others), with the usual model. */
+async function toBatch({ set, output, line, now }: Errand) {
+  if (now) {
+    try {
+      await updateOutput(set, output, { job: SENDING })
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) console.error(`Generation ${set}, output ${output}:`, error)
+      return
+    }
+  }
+  toOutbox({ set, outputs: [output], lines: [line] }, now)
+}
+
+/**
+ * An image (or why not) painted online by `model`, brought into its set. Its
+ * slot in the lane is free again after `LANDING` at most: right after the
+ * laptop wakes, a database write can hang on a connection that's gone. Should
+ * it never get written, `heal` finds the image still marked as painting and
+ * paints it again.
+ */
+async function land({ set, output }: Errand, result: PaintResult, model?: string) {
+  const landing = (async () => {
+    await bringIn(set, result, model)
+    const after = await updateSet(set, settled)
+    if (after.status === "queued") enqueue(set)
+  })().catch((error) => {
+    if (!(error instanceof NotFoundError)) console.error(`Generation ${set}, output ${output}:`, error)
+  })
+  await Promise.race([landing, sleep(LANDING)])
+}
+
+const LANDING = 3 * 60_000
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
  * The set as it stands once nothing in it is drawing any more. A mockup set
@@ -666,21 +978,32 @@ function settled(s: GenerationSet): GenerationSet {
 const BATCH_POLL = 30_000
 
 /**
- * Vertex only hands a job's images over when it ends, and a few slow
- * requests hold up all of them; so a job that's painted some and then
- * nothing for `STALL` is ended, its images come in and the rest goes
- * straight out again. One still painting goes on: a new job waits for
- * capacity and starts over, so ending it early costs more than it brings —
- * but after `HARVEST_MAX` what it has comes in anyway.
+ * Each job is held to a goal: an hour for an order of up to `BIG_JOB`
+ * images, the night (`NIGHT`) for a bigger one, sent off in the evening.
+ * Vertex only hands a job's images over when it ends, so a job is ended
+ * early, its images come in and the rest goes out again, when
+ * - it has painted at least `HARVEST_SHARE` and then nothing for `STALL`
+ *   (a few slow requests holding up all the others),
+ * - it has painted nothing new for `LONG_STALL`, or is past its goal,
+ * - it has painted nothing for `STUCK` while a job sent after it paints, or
+ *   for `STUCK_ALONE` (some sit for hours while others paint),
+ * - it runs on the usual model and has fallen well behind its goal: after a
+ *   third of it, less than half as far along as the time spent asks for.
+ * A job of the usual model ended early hands the rest to the fallback model
+ * (see `FALLBACK_MODEL`); one of the fallback's sends it out again as it is.
+ * A job that's painting, if slowly, goes on: until 12 Oct a job was ended
+ * after one image and a few minutes' stall, and its rest started over in a
+ * new job again and again.
  */
+const HOUR = 60 * 60_000
+const NIGHT = 8 * HOUR
+const BIG_JOB = 250
 const HARVEST_AFTER = 10 * 60_000
-const STALL = 4 * 60_000
-const HARVEST_MAX = 2 * 60 * 60_000
-/**
- * A job that's painted nothing this long has stuck (some sit for hours
- * while jobs sent after them paint): it's ended and goes out again.
- */
-const STUCK = 20 * 60_000
+const HARVEST_SHARE = 0.5
+const STALL = { small: 5 * 60_000, big: 20 * 60_000 }
+const LONG_STALL = { small: 45 * 60_000, big: 2 * HOUR }
+const STUCK = { small: 20 * 60_000, big: HOUR }
+const STUCK_ALONE = { small: 45 * 60_000, big: 2 * HOUR }
 /** How often a running job's progress is written to its sets at most. */
 const PROGRESS_EVERY = 60_000
 
@@ -736,6 +1059,43 @@ export function kickBatches(ms = 5_000) {
   }, ms)
 }
 
+// The server that starts a job looks after it until it's in: it holds the
+// job's lock all along (`claim`), so another server (perhaps one on older
+// code, with other rules for ending jobs early) takes over only once this
+// one stops, its connection going and the lock with it; the next server
+// that asks after the job then looks after it. Everything done to a job goes
+// through `onJob`: here one thing at a time, elsewhere under the job's lock.
+
+type Kept = { claim: Claim; turn: Promise<unknown>; since: number }
+const kept = ((global as typeof global & { __keptJobs?: Map<string, Kept> }).__keptJobs ??= new Map())
+
+async function keep(name: string) {
+  const held = await claim(`batch:${name}`).catch((error) => {
+    console.warn(`Batch ${name}: not looked after here:`, message(error))
+    return null
+  })
+  if (held) kept.set(name, { claim: held, turn: Promise.resolve(), since: Date.now() })
+}
+
+function letGo(name: string) {
+  const held = kept.get(name)
+  if (!held) return
+  kept.delete(name)
+  void held.claim.release()
+}
+
+/** Runs `work` on the job `name`: in turn when this server looks after it, else under its lock (null when another server holds that). */
+function onJob<T>(name: string, work: () => Promise<T>): Promise<T | null> {
+  const held = kept.get(name)
+  if (!held || held.claim.lost) {
+    if (held) letGo(name)
+    return exclusive(`batch:${name}`, work)
+  }
+  const turn = held.turn.then(work, work)
+  held.turn = turn.catch(() => {})
+  return turn
+}
+
 /** A set's share of a job; `waiting`, its outputs the job hasn't brought in yet. */
 type Share = { set: string; job: PaintJob; waiting: string[] }
 
@@ -750,7 +1110,10 @@ async function pollBatches() {
   let more = false
   try {
     const jobs = new Map<string, Share[]>()
+    // Sets this code knows how to run: only their jobs are looked after here, and handed to the fallback model.
+    const known = new Set<string>()
     for (const set of await listSets()) {
+      if (ours(set)) known.add(set.id)
       for (const job of set.jobs ?? []) {
         if (job.status !== "running") continue
         const shares = jobs.get(job.name) ?? []
@@ -764,15 +1127,26 @@ async function pollBatches() {
         }
       }
     }
+    // Jobs looked after here that are in by now (or gone) are let go; one only
+    // just started may not be written down yet.
+    for (const [name, held] of kept) if (!jobs.has(name) && Date.now() - held.since > 2 * 60_000) letGo(name)
+    // The newest job that has painted anything: one sent before it with nothing painted has stuck.
+    const moving = Math.max(
+      0,
+      ...[...jobs.values()].filter((shares) => (shares[0].job.ready ?? 0) > 0).map((shares) => Date.parse(shares[0].job.submittedAt))
+    )
     for (const [name, shares] of jobs) {
       if (pass !== batches.pass) return // the watchdog gave up on this pass
       more = true
       batches.beat = Date.now()
       const short = name.split("/").pop()
       batches.doing = `waiting for the lock on ${short}`
-      await exclusive(`batch:${name}`, () => {
+      const mine = shares.every((s) => known.has(s.set))
+      // A job no one looks after (its server stopped) is looked after here from now on.
+      if (mine && !kept.has(name)) await keep(name)
+      await onJob(name, () => {
         batches.doing = `asking Vertex about ${short}`
-        return follow(name, shares)
+        return follow(name, shares, moving, mine)
       }).catch((error) => console.error(`Batch ${name}:`, error))
     }
   } finally {
@@ -780,6 +1154,8 @@ async function pollBatches() {
       batches.ticking = false
       batches.beat = Date.now()
       batches.doing = ""
+      // A server that led once asks on only while it still leads, or has jobs to ask after.
+      if (batches.steady && !more && !(await isLeader().catch(() => false))) batches.steady = false
       if (more || batches.steady) kickBatches(BATCH_POLL)
     }
   }
@@ -874,7 +1250,14 @@ async function adopt(job: OpenJob, sets: GenerationSet[]) {
     await updateSet(set.id, (s) => {
       const ids = s.outputs.filter(open).map((o) => o.id)
       took += ids.length
-      const entry: PaintJob = { name: job.name, outputs: ids, submittedAt: job.createdAt, status: "running", size: keys.size }
+      const entry: PaintJob = {
+        name: job.name,
+        outputs: ids,
+        submittedAt: job.createdAt,
+        status: "running",
+        size: keys.size,
+        ...(job.model !== PAINT_MODEL && { model: job.model }),
+      }
       return {
         ...s,
         status: "running",
@@ -887,21 +1270,37 @@ async function adopt(job: OpenJob, sets: GenerationSet[]) {
   return took
 }
 
-/** How batch work stands on this server, for a look from outside. */
-export function batchHealth() {
+/** How painting stands on this server (and the shared pace), for a look from outside. */
+export async function batchHealth() {
   const ago = (at: number) => (at ? Math.round((Date.now() - at) / 1000) : null)
+  const hour = Date.now() - 60 * 60_000
   return {
-    polling: !batches.steady ? "not on this server" : batches.ticking ? `busy: ${batches.doing}` : "waiting",
+    polling: batches.ticking ? `busy: ${batches.doing}` : batches.timer ? "waiting" : "not on this server",
     lastProgressSecondsAgo: ago(batches.beat),
     lastCheckSecondsAgo: ago(batches.checkedAt),
-    lane: { waiting: lane.errands.length, painting: lane.active, painted: lane.painted, failed: lane.failed },
+    lane: {
+      waiting: lane.errands.length,
+      waitingNow: lane.errands.filter((e) => e.now).length,
+      painting: lane.active,
+      painted: lane.painted,
+      failed: lane.failed,
+      paintedLastHour: lane.recent.filter((at) => at > hour).length,
+      takesNow: nowRoom(),
+    },
     waitingToGoOut: outbox.parcels.reduce((n, p) => n + p.outputs.length, 0),
+    healing: { lastPassSecondsAgo: ago(healer.at), healed: healer.log },
+    pace: await paceState().catch((error) => ({ error: message(error) })),
     problems: batches.problems,
   }
 }
 
-/** Brings a finished job's images in; one still going is noted, and ended early once it's held its images long enough. */
-async function follow(name: string, shares: Share[]) {
+/**
+ * Brings a finished job's images in; one still going is noted, and ended
+ * early once it's held its images long enough (or stuck: `moving` is when
+ * the newest job that has painted anything was sent). Only a job of sets
+ * this code knows (`mine`) hands its rest to the fallback model.
+ */
+async function follow(name: string, shares: Share[], moving: number, mine = true) {
   const state = await paintBatchState(name)
   if (state.state !== "running") return collect(name, shares, state)
 
@@ -912,24 +1311,36 @@ async function follow(name: string, shares: Share[]) {
   const age = now - Date.parse(job.submittedAt)
   const moved = state.ready !== (job.ready ?? 0)
   const movedAt = moved ? new Date(now).toISOString() : (job.movedAt ?? job.submittedAt)
+  // Vertex leaves the counts out while a job waits to start: the size it had stays.
+  const size = state.total || job.size || 0
+  const kind = size > BIG_JOB ? "big" : "small"
+  const goal = kind === "big" ? NIGHT : HOUR
+  const stalled = now - Date.parse(movedAt)
+  const share = size ? state.ready / size : 0
+  const behind = mine && !job.model && age >= goal / 3 && share < (0.5 * Math.min(age, goal)) / goal
   const due =
     !job.harvest &&
     state.ready < state.total &&
-    (state.ready > 0
-      ? age >= HARVEST_AFTER && (now - Date.parse(movedAt) >= STALL || age >= HARVEST_MAX)
-      : age >= STUCK)
+    (behind ||
+      (state.ready > 0
+        ? age >= goal ||
+          stalled >= LONG_STALL[kind] ||
+          (age >= HARVEST_AFTER && share >= HARVEST_SHARE && stalled >= STALL[kind])
+        : age >= STUCK_ALONE[kind] || (age >= STUCK[kind] && moving > Date.parse(job.submittedAt))))
   // Every set is written on each change, so a fast job's progress goes out once a minute.
   const recent = now - Date.parse(job.movedAt ?? job.submittedAt) < PROGRESS_EVERY
-  if (!due && (!moved || recent) && job.size === state.total) return
+  if (!due && (!moved || recent) && job.size === size) return
   batches.doing = `writing how ${name.split("/").pop()} stands`
   await eachShare(shares, name, (j) => ({
     ...j,
     ready: state.ready,
     movedAt,
-    size: state.total,
-    ...(due && { harvest: true }),
+    size,
+    // The usual model's rest goes to the fallback (see `collect`).
+    ...(due && { harvest: true, ...(mine && !j.model && { rescue: true }) }),
   }))
   if (due) {
+    console.log(`Batch ${name.split("/").pop()}: ${state.ready} of ${size} after ${Math.round(age / 60_000)} min, ended early${mine && !job.model ? ", the rest goes to the fallback model" : ""}`)
     await cancelPaintBatch(name)
     kickBatches(15_000)
   }
@@ -954,7 +1365,7 @@ async function laneJobs() {
     [...jobs].map(async ([name, shares]) => {
       try {
         // Null: being collected right now, which sends its rest out again anyway.
-        const outcome = (await exclusive(`batch:${name}`, () => handOver(name, shares))) ?? "being collected"
+        const outcome = (await onJob(name, () => handOver(name, shares))) ?? "being collected"
         console.log(`Batch ${name.split("/").pop()}: ${outcome}`)
       } catch (error) {
         console.error(`Batch ${name}, sending again:`, error)
@@ -1015,6 +1426,7 @@ function eachShare(shares: Pick<Share, "set">[], name: string, change: (job: Pai
 async function collect(name: string, shares: Share[], { state, error, output, input }: Awaited<ReturnType<typeof paintBatchState>>) {
   const owner = new Map(shares.flatMap(({ set, waiting }) => waiting.map((o) => [o, set] as const)))
   const left = new Set(owner.keys())
+  let blocked = 0
   const short = name.split("/").pop()
   const ended = state === "failed" && shares.some(({ job }) => job.harvest) ? "ended early" : state
   console.log(`Batch ${short}: ${ended}, collecting`)
@@ -1028,7 +1440,8 @@ async function collect(name: string, shares: Share[], { state, error, output, in
       const id = owner.get(result.key)
       if (!id || !left.has(result.key) || (!result.image && !result.error)) continue
       left.delete(result.key)
-      const task: Promise<void> = bringIn(id, result)
+      if (!result.image && BLOCKED.test(result.error ?? "")) blocked++
+      const task: Promise<void> = bringIn(id, result, shares[0].job.model)
         .catch((error) => void (failure ??= error))
         .finally(() => {
           busy.delete(task)
@@ -1042,6 +1455,8 @@ async function collect(name: string, shares: Share[], { state, error, output, in
     if (failure) throw failure
   }
 
+  // Many held back by the safety filters: everything pauses until the prompts have had a look (google/pause.ts).
+  if (blocked) void heldBackByGoogle(`batch job ${short}`, blocked, owner.size)
   const harvested = shares.some(({ job }) => job.harvest)
   // Cancelled by hand: what it didn't get to is dropped, not sent again.
   const cancelled = shares.some(({ job }) => job.cancelled)
@@ -1088,7 +1503,9 @@ async function collect(name: string, shares: Share[], { state, error, output, in
       return null
     })
     if (after?.status === "queued") enqueue(set)
-    if (resend.length) send({ set, outputs: resend, lines: resend.map((o) => again.get(o)!) })
+    // Ended for falling behind: the fallback paints the rest.
+    const model = shares.some(({ job: j }) => j.rescue) ? FALLBACK_MODEL : undefined
+    if (resend.length) send({ set, outputs: resend, lines: resend.map((o) => again.get(o)!), ...(model && { model }) })
   }
   // How long a job of this size took, to tune `MAX_JOB` by.
   const minutes = Math.round((Date.now() - Date.parse(shares[0].job.submittedAt)) / 60_000)
@@ -1100,11 +1517,16 @@ async function collect(name: string, shares: Share[], { state, error, output, in
 
 const COLLECT_PARALLEL = 6
 
-async function bringIn(id: string, result: PaintResult) {
+async function bringIn(id: string, result: PaintResult, model?: string) {
   try {
     if (result.image) {
       const stored = await store(id, `out-${result.key}`, result.image)
-      await updateOutput(id, result.key, { ...stored.asset, job: undefined, error: undefined })
+      await updateOutput(id, result.key, {
+        ...stored.asset,
+        job: undefined,
+        error: undefined,
+        model: model && model !== PAINT_MODEL ? model : undefined,
+      })
     } else {
       await updateOutput(id, result.key, { status: "error", job: undefined, error: result.error })
     }
@@ -1148,7 +1570,7 @@ export async function cancelJobs(names?: string[]) {
     }
   }
   for (const [name, shares] of jobs) {
-    const outcome = (await exclusive(`batch:${name}`, () => endJob(name, shares))) ?? "being collected"
+    const outcome = (await onJob(name, () => endJob(name, shares))) ?? "being collected"
     console.log(`Batch ${name.split("/").pop()}: cancelled, ${outcome}`)
   }
   return jobs.size
@@ -1208,6 +1630,250 @@ async function dropJob(name: string, shares: Share[]) {
     })
     if (after?.status === "queued") enqueue(set)
   }
+}
+
+// --- Reset fails ---
+
+/**
+ * Every failed image goes (see `resetOf`), so nothing asks for it again: not
+ * Retry, not Send all, not the batch check. A set left with nothing in it
+ * goes too. Finished batch jobs are put away, and those left without images
+ * go, so the sidebar counts only what's sent from now on. Whatever is still
+ * painting carries on. With `dryRun` it only counts; `ids` keeps it to those
+ * sets. Answers how many images and sets went (or would).
+ */
+export async function resetFails({ dryRun = false, ids }: { dryRun?: boolean; ids?: string[] } = {}) {
+  const todo = (await listSets()).filter((set) => {
+    if (ids && !ids.includes(set.id)) return false
+    const plan = resetOf(set)
+    return plan.images > 0 || plan.drop || (set.jobs ?? []).some((j) => j.status !== "running" && !j.cleared)
+  })
+  if (dryRun) {
+    const plans = todo.map(resetOf)
+    return { images: plans.reduce((n, p) => n + p.images, 0), sets: plans.filter((p) => p.drop).length }
+  }
+  let images = 0
+  let sets = 0
+  // A few sets at a time: each is a round trip or two to the database.
+  let next = 0
+  await Promise.all(
+    Array.from({ length: RESET_PARALLEL }, async () => {
+      while (next < todo.length) {
+        const went = await resetSet(todo[next++])
+        images += went.images
+        if (went.set) sets++
+      }
+    })
+  )
+  return { images, sets }
+}
+
+const RESET_PARALLEL = 6
+
+async function resetSet(set: GenerationSet) {
+  if (resetOf(set).drop) {
+    // Under its lock and as it is by then: a set asked for again meanwhile isn't deleted from under its run.
+    const went = await exclusive(`generation:${set.id}`, async () => {
+      const now = resetOf(await getSet(set.id))
+      if (!now.drop) return null
+      await deleteSet(set.id)
+      return now.images
+    }).catch((error) => {
+      if (error instanceof NotFoundError) return null
+      throw error
+    })
+    if (went !== null) return { images: went, set: true }
+  }
+  let removed = 0
+  const after = await updateSet(set.id, (s) => {
+    const gone = new Set(s.outputs.filter(isFailedImage).map((o) => o.id))
+    removed = gone.size
+    const jobs = (s.jobs ?? []).flatMap((j): PaintJob[] => {
+      if (j.status === "running") return [j]
+      const outputs = j.outputs.filter((o) => !gone.has(o))
+      // What it brought in stays listed under it, without the failure it may have ended in.
+      return outputs.length ? [{ ...j, outputs, status: "done", error: undefined, cleared: true }] : []
+    })
+    return settled({ ...s, outputs: s.outputs.filter((o) => !gone.has(o.id)), jobs })
+  }).catch((error) => {
+    if (!(error instanceof NotFoundError)) throw error
+    return null
+  })
+  if (after?.status === "queued") enqueue(set.id)
+  return { images: removed, set: false }
+}
+
+// --- Healing ---
+
+// What failed for a passing reason runs again by itself, so a run started
+// and left alone ends with every image there that can be: Google busy past a
+// call's patience, a dropped connection, a batch job that failed or lost
+// images, a server that stopped halfway (its sets read as interrupted, and
+// those of them still to be painted go out again from here). Every minute
+// one server looks (a lock keeps it to one at a time), and a set whose
+// failures are worth another try (`worthRetrying`) runs again: at once when
+// its server stopped, else `HEAL_AFTER` after it last changed, up to
+// `MAX_HEALS` times. Safety blocks, bad requests and what was stopped or
+// cancelled by hand stay failed. Only sets asked for since this came in
+// (they have `heals`) and that this code knows how to run (`ours`), changed
+// within `HEAL_WINDOW`: older failures wait for a Retry by hand.
+// Each server also looks after itself every minute: it starts its batch
+// polling again should a pass have hung (on a connection the laptop's sleep
+// took), and sends out again images of its own sets still marked as
+// painting that nothing here paints.
+
+const HEAL_EVERY = 60_000
+const HEAL_AFTER = [60_000, 3 * 60_000, 10 * 60_000, 20 * 60_000]
+const MAX_HEALS = HEAL_AFTER.length
+const HEAL_WINDOW = 6 * 60 * 60_000
+/** A pass (healing, or asking after batch jobs) that's got nowhere this long has hung. */
+const HUNG_PASS = 10 * 60_000
+/**
+ * An image of this server's still marked as painting, with nothing here
+ * painting it and its set unchanged this long, was lost. Not sooner: a
+ * server on older code that took a job over (when the database was too slow
+ * to hold the job's lock for this one) may still be painting it.
+ */
+const LOST_AFTER = 15 * 60_000
+
+type Healer = {
+  timer: ReturnType<typeof setInterval> | null
+  busy: boolean
+  /** When the last pass ran. */
+  at: number
+  /** What it ran again lately, newest last. */
+  log: { at: string; set: string; images: number; why: string }[]
+  pass: () => Promise<void>
+}
+const healer = ((global as typeof global & { __generationHealer?: Healer }).__generationHealer ??= {
+  timer: null,
+  busy: false,
+  at: 0,
+  log: [],
+  pass: async () => {},
+})
+
+// The fields this code writes on a set, its batches and their options, and
+// its outputs (add a new one here too).
+const SET_FIELDS = new Set(["id", "kind", "folder", "source", "status", "createdAt", "updatedAt", "original", "layout", "posters", "extraction", "batches", "outputs", "jobs", "stopping", "doneAt", "mockup", "sceneId", "heals", "runner"])
+const BATCH_FIELDS = new Set(["id", "options", "createdAt", "expanded"])
+const OPTION_FIELDS = new Set(["variants", "ideas", "feedback", "posters", "from", "inspiration", "delivery"])
+const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "note", "id", "poster", "batch", "mode", "creativity", "styleId", "title", "brief", "feedback", "from", "inspiration", "job", "model", "review", "reviewedAt", "createdAt"])
+
+/**
+ * Sets this code knows how to run: nothing on them it doesn't know. Other
+ * worktrees on the shared database add kinds and fields of their own (city
+ * and lab sets, prompts planned elsewhere), and running those this way would
+ * paint them wrong.
+ */
+function ours(set: GenerationSet) {
+  const only = (o: object | undefined, fields: Set<string>) => Object.keys(o ?? {}).every((key) => fields.has(key))
+  return (
+    (set.kind === "poster" || set.kind === "mockup") &&
+    only(set, SET_FIELDS) &&
+    set.batches.every((b) => only(b, BATCH_FIELDS) && only(b.options, OPTION_FIELDS)) &&
+    set.outputs.every((o) => only(o, OUTPUT_FIELDS))
+  )
+}
+
+/** Why `set` should run again now, if it should. */
+function healDue(set: GenerationSet): string | null {
+  if (typeof set.heals !== "number" || set.heals >= MAX_HEALS || !ours(set) || set.doneAt || set.stopping) return null
+  if (Date.now() - Date.parse(set.updatedAt) > HEAL_WINDOW) return null
+  const steps = [set.original, set.extraction, set.mockup].filter((a): a is Asset => a?.status === "error")
+  // A photo we can't use, say: nothing after it can be made.
+  if (steps.some((a) => !worthRetrying(a.error))) return null
+  const failed = [...steps, ...set.outputs.filter((o) => o.status === "error" && (!o.job || o.job === SENDING))]
+  if (!failed.some((a) => worthRetrying(a.error))) return null
+  if (failed.some((a) => a.error === INTERRUPTED)) return "its server stopped"
+  // Whatever still paints comes in first.
+  if (set.status === "queued" || set.status === "running") return null
+  return Date.now() - Date.parse(set.updatedAt) >= HEAL_AFTER[set.heals] ? "failed for a passing reason" : null
+}
+
+/** Images of `set` (run here) still marked as painting that nothing on this server paints any more. */
+function lost(set: GenerationSet) {
+  if (typeof set.heals !== "number" || (set as GenerationSet & { runner?: string }).runner !== instanceId) return []
+  if (queue.running.has(set.id) || queue.waiting.includes(set.id) || outbox.sending) return []
+  if (Date.now() - Date.parse(set.updatedAt) < LOST_AFTER) return []
+  const here = new Set([...lane.inFlight, ...lane.errands.map((e) => e.output), ...outbox.parcels.flatMap((p) => p.outputs)])
+  return set.outputs.filter((o) => o.status === "running" && (!o.job || o.job === SENDING) && !here.has(o.id)).map((o) => o.id)
+}
+
+async function healPass() {
+  // One that hung (its database connection gone) is given up on.
+  if (healer.busy && Date.now() - healer.at < HUNG_PASS) return
+  healer.busy = true
+  healer.at = Date.now()
+  try {
+    // Batch polling that hung here starts again (the leader's batch check only looks after its own).
+    if (batches.ticking && Date.now() - batches.beat > HUNG_PASS) {
+      console.warn(`Batch polling got nowhere for ${Math.round((Date.now() - batches.beat) / 60_000)} min (${batches.doing || "?"}): started again`)
+      batches.pass++
+      batches.ticking = false
+      kickBatches(0)
+    }
+    const sets = await listSets()
+    for (const set of sets) {
+      const gone = lost(set)
+      if (gone.length) await heal(set.id, "images went missing on this server", gone)
+    }
+    if (pause.on || process.env.FOLLOWER === "1") return
+    await exclusive("generation:heal", async () => {
+      for (const set of await listSets()) {
+        const why = healDue(set)
+        if (why) await heal(set.id, why)
+      }
+    })
+    // Jobs still painting are asked after here too, should nobody be polling them.
+    if (!batches.ticking && !batches.timer && sets.some((s) => s.jobs?.some((j) => j.status === "running"))) kickBatches(0)
+  } catch (error) {
+    console.error("Healing:", error)
+  } finally {
+    healer.busy = false
+  }
+}
+
+healer.pass = healPass
+// Every server with this code heals (not one held back with FOLLOWER=1); the lock keeps it to one pass at a time.
+healer.timer ??= setInterval(() => void healer.pass(), HEAL_EVERY)
+healer.timer.unref?.()
+
+/**
+ * Runs again what failed in the set for a passing reason (and the outputs
+ * `missing`, lost while painting); what's painting or done stays as it is.
+ */
+async function heal(id: string, why: string, missing: string[] = []) {
+  let images = 0
+  try {
+    await updateSet(id, (s) => {
+      const again = <T extends Asset & { job?: string }>(a: T): T => {
+        if (a.status !== "error" || !worthRetrying(a.error) || (a.job && a.job !== SENDING)) return a
+        return { ...a, status: "pending", error: undefined, job: undefined }
+      }
+      const outputs = s.outputs.map((o) =>
+        missing.includes(o.id) && o.status === "running" && (!o.job || o.job === SENDING)
+          ? { ...o, status: "pending" as const, error: undefined, job: undefined }
+          : again(o)
+      )
+      images = outputs.filter((o, i) => o !== s.outputs[i]).length
+      return {
+        ...s,
+        status: "queued",
+        heals: (s.heals ?? 0) + 1,
+        original: again(s.original),
+        extraction: s.extraction && again(s.extraction),
+        mockup: s.mockup && again(s.mockup),
+        outputs,
+      }
+    })
+  } catch (error) {
+    if (!(error instanceof NotFoundError)) console.error(`Generation ${id}, healing:`, error)
+    return
+  }
+  console.log(`Generation ${id}: ${why}, running ${images} images again`)
+  healer.log = [...healer.log, { at: new Date().toISOString(), set: id, images, why }].slice(-20)
+  enqueue(id)
 }
 
 /** The outputs `batch` asks for, waiting for a brief. */
@@ -1380,6 +2046,11 @@ const PLAIN: Record<OutputMode, Record<Creativity, string>> = {
 /** What Nano Banana is asked for one output: the prompt, the images it names, the shape. */
 async function request(id: string, outputId: string, style: Promise<StyleRef | null>) {
   const set = await getSet(id)
+  if (isCitySet(set)) {
+    const output = set.outputs.find((o) => o.id === outputId)
+    if (!output) throw new Error("Unknown output")
+    return cityRequest(set, output)
+  }
   // A mockup set's one output: its photo with blank frames.
   if (set.kind === "mockup") {
     const photo = await readSetFile(id, set.original.file!)
@@ -1424,6 +2095,12 @@ async function draw(id: string, output: Output, style: Promise<StyleRef | null>)
     await updateOutput(id, output.id, { ...stored.asset })
   } catch (error) {
     if (error instanceof NotFoundError && error.message === "Unknown generation") throw error
+    // Vertex stayed busy all along: it goes the batch way instead of failing,
+    // online in the lane when there's room, else in a batch job (see `send`).
+    if (error instanceof StayedBusyError && batchConfigured()) {
+      console.warn(`Generation ${id}, output ${output.id}: Vertex stayed busy, painting it the batch way`)
+      return submit(id, [output], () => style)
+    }
     console.error(`Generation ${id}, output ${output.id}:`, error)
     await updateOutput(id, output.id, { status: "error", error: message(error) }).catch(() => {})
   }
@@ -1446,11 +2123,13 @@ async function mockup(set: GenerationSet) {
   let blank = ready.outputs[0]
   if (blank.status === "pending" && !blank.job) {
     const none = () => Promise.resolve(null)
-    if (ready.batches.find((b) => b.id === blank.batch)?.options.delivery === "batch") await submit(set.id, [blank], none)
+    const batched = ready.batches.find((b) => b.id === blank.batch)?.options.delivery === "batch"
+    if (batchConfigured()) await submit(set.id, [blank], none, !batched)
     else await draw(set.id, blank, none())
     blank = (await getSet(set.id)).outputs[0]
   }
-  if (blank.job) return // in a batch job: the set runs again once it's back (see `settled`)
+  // Online in the lane or in a batch job: the set runs again once it's back (see `settled`).
+  if (painting(blank)) return
   if (blank.status !== "done") {
     await updateSet(set.id, (s) => ({ ...s, mockup: { status: "error", file: null, error: blank.error ?? "No blank mockup" } }))
     return

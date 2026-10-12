@@ -9,7 +9,9 @@ import { Swatches } from "@/components/styles/style-cover"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectSeparator,
   SelectTrigger,
   SelectValue,
@@ -67,7 +69,21 @@ export function StyleSelect({
             Loading styles…
           </p>
         ) : (
-          styles.map((style) => <StyleItem key={style.id} style={style} />)
+          <>
+            {styles.filter((s) => s.kind !== "city").map((style) => (
+              <StyleItem key={style.id} style={style} />
+            ))}
+            {styles.some((s) => s.kind === "city") && (
+              <SelectGroup>
+                <SelectLabel>City styles · their art only</SelectLabel>
+                {styles
+                  .filter((s) => s.kind === "city")
+                  .map((style) => (
+                    <StyleItem key={style.id} style={style} />
+                  ))}
+              </SelectGroup>
+            )}
+          </>
         )}
         <SelectSeparator />
         <Link

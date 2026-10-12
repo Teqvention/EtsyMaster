@@ -12,6 +12,8 @@ type Db = {
   sql: postgres.Sql
   /** Connections held by locks, apart from `sql`'s: see `exclusive`. */
   lockPool?: postgres.Sql
+  /** The one connection that listens for changes; it's idle while it waits, so it's exempt from `IDLE_SESSION`. */
+  listener?: postgres.Sql
   ready?: Promise<void>
   /** Called with every "changes" notification: "d <version> <key>" or "f <hash> <key>". */
   listeners: Set<(payload: string) => void>
@@ -21,14 +23,23 @@ type Db = {
 
 const global = globalThis as typeof globalThis & { __db?: Db }
 
-const connect = (max: number, idle = 30) =>
+/**
+ * How long a connection may sit idle before the database ends it. The
+ * database sees every server through Dokploy's proxy, so a laptop that
+ * sleeps leaves its connections open there: on 12 Oct 43 of them, idle for
+ * over an hour, filled it until it took no more ("too many clients"). The
+ * pools close idle connections well before this themselves.
+ */
+export const IDLE_SESSION = 15 * 60_000
+
+const connect = (max: number, idle = 30, timeout = true) =>
   postgres(process.env.DATABASE_URL ?? "", {
     max,
     idle_timeout: idle,
     connect_timeout: 15,
     // "relation already exists, skipping" and the like.
     onnotice: () => {},
-    connection: { application_name: `etsy@${hostname()}` },
+    connection: { application_name: `etsy@${hostname()}`, ...(timeout && { idle_session_timeout: IDLE_SESSION }) },
   })
 
 const db = (global.__db ??= { sql: connect(12), listeners: new Set(), resets: new Set() })
@@ -37,6 +48,7 @@ const db = (global.__db ??= { sql: connect(12), listeners: new Set(), resets: ne
 // every connection and waited forever for one more. Idle ones stay open a
 // while: one closing as a lock waits for a connection can lose that wait (see `reserve`).
 db.lockPool ??= connect(30, 600)
+db.listener ??= connect(1, 0, false)
 
 export const sql = db.sql
 /** Where locks hold their connection: never `sql`, which their work needs. */
@@ -58,7 +70,7 @@ async function setUp() {
     await tx`select pg_advisory_xact_lock(hashtextextended('schema', 0))`
     await tx.unsafe(SCHEMA)
   })
-  await sql.listen(
+  await db.listener!.listen(
     "changes",
     (payload) => db.listeners.forEach((listener) => listener(payload)),
     () => db.resets.forEach((reset) => reset())
@@ -99,9 +111,55 @@ export async function exclusive<T>(name: string, work: () => Promise<T>): Promis
   } finally {
     clearTimeout(slow)
     clearInterval(beat)
-    await connection`select set_config('idle_session_timeout', '0', false)`.catch(() => {})
+    await connection`select set_config('idle_session_timeout', ${IDLE_SESSION}, false)`.catch(() => {})
     connection.release()
   }
+}
+
+export type Claim = {
+  /** The connection holding it dropped: another server may hold the lock by now. */
+  lost: boolean
+  release: () => Promise<void>
+}
+
+/**
+ * Takes the lock `name` across every server and holds it until `release`,
+ * or until this server stops (its connection goes, and the lock with it);
+ * answers null at once when another holds it. For work that lasts longer
+ * than one call, like looking after a batch job until it's in.
+ */
+export async function claim(name: string): Promise<Claim | null> {
+  await ready()
+  const connection = await reserve()
+  void connection`select set_config('idle_session_timeout', ${LOCK_SILENCE}, false)`.catch(() => {})
+  const ok = await connection`select pg_try_advisory_lock(hashtextextended(${name}, 0)) as ok`
+    .then(([row]) => row.ok as boolean)
+    .catch(() => false)
+  const free = async () => {
+    await connection`select set_config('idle_session_timeout', ${IDLE_SESSION}, false)`.catch(() => {})
+    connection.release()
+  }
+  if (!ok) {
+    await free()
+    return null
+  }
+  const held: Claim = { lost: false, release: async () => {} }
+  // Kept talking, so the database doesn't take it for a server gone quiet (see `holdAlive`).
+  const beat = setInterval(
+    () =>
+      void connection`select 1`.catch(() => {
+        held.lost = true
+        clearInterval(beat)
+      }),
+    10_000
+  )
+  beat.unref?.()
+  held.release = async () => {
+    clearInterval(beat)
+    await connection`select pg_advisory_unlock(hashtextextended(${name}, 0))`.catch(() => {})
+    await free()
+  }
+  return held
 }
 
 const RESERVE_WAIT = 20_000

@@ -4,7 +4,8 @@ import path from "node:path"
 
 import sharp from "sharp"
 
-import { googlePaused, GooglePausedError } from "@/lib/google/pause"
+import { busy as slowDown, calm, pace, type PaceKind } from "@/lib/google/pace"
+import { deniedByGoogle, googlePaused, GooglePausedError, refused, rejectedByGoogle, wrong } from "@/lib/google/pause"
 
 import type { Quad } from "./types"
 
@@ -18,12 +19,21 @@ const VISION_MODEL = "gemini-3-flash-preview"
 
 type Key = { client_email: string; private_key: string; project_id: string; token_uri: string }
 
-let token: { value: string; expires: number; key: Key } | null = null
+type Token = { value: string; expires: number; key: Key }
+
+let token: Token | null = null
+/** The sign-in under way, which every call waiting for a token shares. */
+let signing: Promise<Token> | null = null
 
 // Every call to Google signs in here first, so the pause switch stops them all.
 export async function auth() {
   if (await googlePaused()) throw new GooglePausedError()
   if (token && token.expires > Date.now() + 60_000) return token
+  signing ??= signIn().finally(() => (signing = null))
+  return signing
+}
+
+async function signIn(): Promise<Token> {
   const file = process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (!file) throw new Error("Set GOOGLE_APPLICATION_CREDENTIALS in .env.local")
   const key: Key = JSON.parse(await readFile(path.resolve(process.cwd(), file), "utf8"))
@@ -46,8 +56,13 @@ export async function auth() {
     // Everything waits on this: a stalled answer mustn't hold it forever.
     signal: AbortSignal.timeout(30_000),
   })
-  const body = await response.json()
-  if (!body.access_token) throw new Error(`Google auth: ${body.error_description ?? body.error}`)
+  const body = await response.json().catch(() => ({}))
+  if (!body.access_token) {
+    const why = `${body.error_description ?? body.error ?? response.statusText}`
+    // A key that's been revoked, or an account that's gone, signs in no more.
+    if (response.status === 400 || refused(response.status)) void deniedByGoogle("Google sign-in", response.status, why)
+    throw new Error(`Google auth: ${why}`)
+  }
   token = { value: body.access_token, expires: Date.now() + body.expires_in * 1000, key }
   return token
 }
@@ -65,15 +80,36 @@ export type Part = {
 // nothing. Every model's calls go through a gate: a few at a time, and when
 // one is told to back off, half as many may go and they all pause a few
 // seconds — longer while it keeps happening, but never so long that a free
-// slot goes unused for long — and one more may go with each success. A call
-// keeps trying that way (and through dropped connections) for PATIENCE.
+// slot goes unused for long — and one more may go with each success. Every
+// try is also paced with every other server's (google/pace.ts).
+// A call keeps trying that way while others get through: waiting its turn
+// behind a dozen others is no reason to give up (it was until 12 Oct, and
+// with many images asked for at once every one past the first few failed).
+// It gives up with `StayedBusyError` once nothing has got through for anyone
+// for PATIENCE, or after LONGEST of its own; a dropped connection or a
+// passing server error is tried for PATIENCE.
 // Kept low since 11 Oct: Google suspended an account over bursts of requests
-// (20 at a time per model, each retried for 20 minutes).
-const MAX_PARALLEL = 3
+// (20 at a time per model, each retried for 20 minutes). Two, as the old
+// project's knowledge file has it for sync (google-bilder-batch-sync-wissen.md):
+// online lets about one image a minute through anyway.
+const MAX_PARALLEL = 2
+/** Gemini Flash calls at once: it has room to spare (12 Oct: 30 a minute from all servers, none turned away). */
+const MAX_PARALLEL_TEXT = 6
 const PATIENCE = 5 * 60_000
+const LONGEST = 30 * 60_000
 const MAX_PAUSE = 20_000
 
-type Gate = { limit: number; active: number; waiting: (() => void)[]; until: number; strikes: number }
+type Gate = {
+  limit: number
+  active: number
+  waiting: (() => void)[]
+  until: number
+  strikes: number
+  /** Since when calls have been told to back off with none getting through; 0 once one does. */
+  busySince: number
+  /** Calls waiting their turn or trying; when none are left, the next starts afresh. */
+  calls: number
+}
 
 // On globalThis, so every route (and a dev reload) shares the one gate per model.
 const global = globalThis as typeof globalThis & { __geminiGates?: Map<string, Gate> }
@@ -81,9 +117,15 @@ const gates = (global.__geminiGates ??= new Map())
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Calls at once the gate lets through for `model`, when nothing's busy. */
+const widest = (model: string) => (model === IMAGE_MODEL ? MAX_PARALLEL : MAX_PARALLEL_TEXT)
+
 function gateFor(model: string) {
   let gate = gates.get(model)
-  if (!gate) gates.set(model, (gate = { limit: MAX_PARALLEL, active: 0, waiting: [], until: 0, strikes: 0 }))
+  if (!gate) gates.set(model, (gate = { limit: widest(model), active: 0, waiting: [], until: 0, strikes: 0, busySince: 0, calls: 0 }))
+  // A gate from before these were fields: a dev reload keeps the old object.
+  gate.busySince ??= 0
+  gate.calls ??= 0
   return gate
 }
 
@@ -98,35 +140,67 @@ function leave(gate: Gate) {
   gate.waiting.shift()?.()
 }
 
+/** Which of the shared paces a model's calls draw on. */
+const paceOf = (model: string): PaceKind => (model === IMAGE_MODEL ? "image" : "text")
+
 async function generate(model: string, parts: Part[], generationConfig: object) {
   const gate = gateFor(model)
-  const start = Date.now()
-  for (let attempt = 1; ; attempt++) {
-    await enter(gate)
-    try {
-      const result = await generateOnce(model, parts, generationConfig)
-      gate.strikes = 0
-      if (gate.limit < MAX_PARALLEL) gate.limit++
-      return result
-    } catch (error) {
-      const busy = error instanceof BusyError
-      if (!(busy || dropped(error)) || Date.now() - start > PATIENCE) throw error
-      if (busy) {
-        gate.strikes++
-        gate.limit = Math.max(1, Math.floor(gate.limit / 2))
+  gate.calls++
+  // When this call first got its turn: the wait for it doesn't count.
+  let start = 0
+  try {
+    for (let attempt = 1; ; attempt++) {
+      await enter(gate)
+      start ||= Date.now()
+      try {
+        await pace(paceOf(model))
+        const result = await generateOnce(model, parts, generationConfig)
+        gate.strikes = 0
+        gate.busySince = 0
+        if (gate.limit < widest(model)) gate.limit++
+        void calm(paceOf(model))
+        return result
+      } catch (error) {
+        const busy = error instanceof BusyError
+        if (!(busy || passing(error))) throw error
+        const now = Date.now()
+        if (busy) {
+          gate.busySince ||= now
+          void slowDown(paceOf(model))
+        }
+        if ((busy && now - gate.busySince > PATIENCE) || now - start > LONGEST) {
+          throw new StayedBusyError(`${model}: Vertex stayed busy (its quota), try again in a few minutes`)
+        }
+        if (!busy && now - start > PATIENCE) throw error
+        if (busy) {
+          gate.strikes++
+          gate.limit = Math.max(1, Math.floor(gate.limit / 2))
+        }
+        const wait = Math.min(MAX_PAUSE, 2_000 * 2 ** Math.min(Math.max(gate.strikes, attempt) - 1, 4))
+        gate.until = Math.max(gate.until, now + wait * (0.75 + Math.random() * 0.5))
+      } finally {
+        leave(gate)
       }
-      const wait = Math.min(MAX_PAUSE, 2_000 * 2 ** Math.min(Math.max(gate.strikes, attempt) - 1, 4))
-      gate.until = Math.max(gate.until, Date.now() + wait * (0.75 + Math.random() * 0.5))
-    } finally {
-      leave(gate)
     }
+  } finally {
+    if (--gate.calls === 0) gate.busySince = 0
   }
 }
 
+/** Vertex said it's busy (429, 503). */
 class BusyError extends Error {}
 
-/** The connection failed (the laptop slept, Wi-Fi dropped): worth trying again. */
-const dropped = (error: unknown) => error instanceof TypeError && error.message === "fetch failed"
+/** Vertex failed on its side (500, 502, 504): it passes. */
+class ServerError extends Error {}
+
+/** Vertex said it's busy all along (see `generate`): worth asking again in a few minutes, or in a batch job. */
+export class StayedBusyError extends Error {}
+
+/** The connection failed (the laptop slept, Wi-Fi dropped) or stalled, or Vertex failed on its side: worth trying again. */
+const passing = (error: unknown) =>
+  error instanceof ServerError ||
+  (error instanceof TypeError && error.message === "fetch failed") ||
+  (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"))
 
 async function generateOnce(model: string, parts: Part[], generationConfig: object) {
   const { value, key } = await auth()
@@ -136,12 +210,18 @@ async function generateOnce(model: string, parts: Part[], generationConfig: obje
       method: "POST",
       headers: { Authorization: `Bearer ${value}`, "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig }),
+      // Nano Banana takes up to a minute or two; a call that's said nothing for far longer has stalled.
+      signal: AbortSignal.timeout(model === IMAGE_MODEL ? 5 * 60_000 : 3 * 60_000),
     }
   )
-  const body = await response.json()
+  const body = await response.json().catch(() => ({}))
   if (!response.ok) {
     const message = `${model}: ${body.error?.message ?? response.statusText}`
-    throw response.status === 429 || response.status === 503 ? new BusyError(message) : new Error(message)
+    if (response.status === 429 || response.status === 503) throw new BusyError(message)
+    if (response.status >= 500) throw new ServerError(message)
+    if (refused(response.status)) void deniedByGoogle(model, response.status, body.error?.message ?? response.statusText)
+    else if (wrong(response.status)) void rejectedByGoogle(model, response.status, body.error?.message ?? response.statusText)
+    throw new Error(message)
   }
   const candidate = body.candidates?.[0]
   if (!candidate?.content?.parts) {
@@ -239,6 +319,18 @@ export async function paint(prompt: string, images: Buffer[], aspect?: number) {
 }
 
 export const PAINT_MODEL = IMAGE_MODEL
+
+/**
+ * Nano Banana 2, painting what Nano Banana 2.1 can't get to while it's
+ * overloaded (see the online lane and `follow` in generation/run.ts). It
+ * costs twice as much (2K: about $0.10 online, $0.05 in batch, against $0.05
+ * and $0.025) and paints a little more dramatically, once adding lettering
+ * no one asked for; but on 12 Oct, a week after 2.1 came out, it painted the
+ * same requests in 14 s each without a single busy answer, while 2.1 took
+ * 20–168 s and turned 6 requests away 11 times, and its batch job had half
+ * its images in 9 minutes while 2.1's had 6 percent after 15.
+ */
+export const FALLBACK_MODEL = "gemini-3.1-flash-image"
 
 /** How Nano Banana is asked to paint: at `aspect`, else the first image's. */
 export async function paintConfig(images: Buffer[], aspect?: number) {

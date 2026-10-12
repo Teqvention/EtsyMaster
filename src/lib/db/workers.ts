@@ -3,7 +3,7 @@ import { hostname } from "node:os"
 
 import type postgres from "postgres"
 
-import { LOCK_SILENCE, locks, ready, reserve, sql } from "./sql"
+import { IDLE_SESSION, LOCK_SILENCE, locks, ready, reserve, sql } from "./sql"
 
 // Several dev servers share one database, but some work must happen once:
 // the upload worker, Artikel's bulk actions, the daily sync, the copywriter.
@@ -56,6 +56,9 @@ export function startInstance() {
       .catch((error) => console.warn("Database heartbeat:", (error as Error).message))
   void beat()
   setInterval(beat, HEARTBEAT).unref?.()
+  // FOLLOWER=1 keeps a server out of the running, e.g. one trying out a
+  // branch while the others carry on with the uploads and the sync.
+  if (process.env.FOLLOWER === "1") return console.log("Follower: background work stays with the other servers")
   void elect()
   setInterval(elect, ELECT).unref?.()
 }
@@ -75,7 +78,7 @@ async function elect() {
     await connection`select set_config('idle_session_timeout', ${LOCK_SILENCE}, false)`
     const [{ ok }] = await connection`select pg_try_advisory_lock(hashtextextended('leader', 0)) as ok`
     if (!ok) {
-      await connection`select set_config('idle_session_timeout', '0', false)`
+      await connection`select set_config('idle_session_timeout', ${IDLE_SESSION}, false)`
       connection.release()
       return
     }
@@ -102,8 +105,10 @@ export async function isLeader() {
     state.leadCheckedAt = Date.now()
     return true
   } catch {
+    // Two checks failing at once (as after the laptop slept): the first lets go.
     const lost = state.lead
     state.lead = null
+    if (!lost) return false
     lost.release()
     console.log("Background work moved to another server")
     return false

@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto"
 
-import { auth, imageOf, modelJpeg, PAINT_MODEL, paintConfig, type Part } from "./gemini"
+import { busy as slowDown, calm, pace } from "@/lib/google/pace"
+import { deniedByGoogle, heldBackByGoogle, refused, rejectedByGoogle, wrong } from "@/lib/google/pause"
+
+import { auth, FALLBACK_MODEL, imageOf, modelJpeg, PAINT_MODEL, paintConfig, type Part, StayedBusyError } from "./gemini"
+
+export { StayedBusyError }
 
 // Nano Banana in Vertex batch: half the price, no shared quota to wait for,
 // but back in minutes to hours. Vertex only reads a job from Cloud Storage,
@@ -30,12 +35,49 @@ const TRANSFER = () => AbortSignal.timeout(5 * 60_000)
 /** A download that's sent nothing for this long has stalled. */
 const STALLED = 2 * 60_000
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** An answer Google gave with an error, and its status: whether to ask again depends on it. */
+export class GoogleError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+  }
+}
+
+/** Google refusing us outright, or turning a request down as wrong, counts towards pausing everything (see google/pause.ts). */
+async function check(response: Response, where: string) {
+  if (!refused(response.status) && !wrong(response.status)) return
+  const text = (await response.clone().text().catch(() => "")).slice(0, 300) || response.statusText
+  if (refused(response.status)) void deniedByGoogle(where, response.status, text)
+  else void rejectedByGoogle(where, response.status, text)
+}
+
 async function upload(object: string, body: Buffer | string, type: string) {
-  const response = await fetch(
-    `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET()}/o?uploadType=media&name=${encodeURIComponent(object)}`,
-    { method: "POST", headers: await headers({ "Content-Type": type }), body: body as BodyInit, signal: TRANSFER() }
-  )
-  if (!response.ok) throw new Error(`Cloud Storage upload: ${(await response.text()).slice(0, 300)}`)
+  // A passing failure (5xx, a dropped connection) is tried again a couple of times.
+  for (let attempt = 1; ; attempt++) {
+    let response: Response
+    try {
+      response = await fetch(
+        `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET()}/o?uploadType=media&name=${encodeURIComponent(object)}`,
+        { method: "POST", headers: await headers({ "Content-Type": type }), body: body as BodyInit, signal: TRANSFER() }
+      )
+    } catch (error) {
+      if (attempt >= 3) throw error
+      await sleep(attempt * 5_000)
+      continue
+    }
+    if (response.ok) return
+    await check(response, "Cloud Storage")
+    if ((response.status === 429 || response.status >= 500) && attempt < 3) {
+      await response.body?.cancel().catch(() => {})
+      await sleep(attempt * 5_000)
+      continue
+    }
+    throw new GoogleError(`Cloud Storage upload: ${(await response.text()).slice(0, 300)}`, response.status)
+  }
 }
 
 // A 2K PNG answer runs past batch's 10 MB a line; a JPEG stays well under it.
@@ -90,12 +132,14 @@ export async function paintLines(folder: string, requests: PaintRequest[]) {
   )
 }
 
-/** Starts one batch job painting `lines` (from `paintLines`); answers with its name, to ask after it. */
-export async function startPaintBatch(name: string, lines: string[]) {
+/** Starts one batch job painting `lines` (from `paintLines`) with `model`; answers with its name, to ask after it. */
+export async function startPaintBatch(name: string, lines: string[], model = PAINT_MODEL) {
   const bucket = BUCKET()
   const folder = `batch/${name}`
   await upload(`${folder}/input.jsonl`, lines.join("\n") + "\n", "application/jsonl")
 
+  // Jobs start at least half a minute apart, across every server (see google/pace.ts).
+  await pace("job")
   const { key } = await auth()
   const response = await fetch(`${API}/projects/${key.project_id}/locations/global/batchPredictionJobs`, {
     method: "POST",
@@ -103,13 +147,19 @@ export async function startPaintBatch(name: string, lines: string[]) {
     signal: CALL(),
     body: JSON.stringify({
       displayName: name,
-      model: `publishers/google/models/${PAINT_MODEL}`,
+      model: `publishers/google/models/${model}`,
       inputConfig: { instancesFormat: "jsonl", gcsSource: { uris: [`gs://${bucket}/${folder}/input.jsonl`] } },
       outputConfig: { predictionsFormat: "jsonl", gcsDestination: { outputUriPrefix: `gs://${bucket}/${folder}/out` } },
     }),
   })
-  const body = await response.json()
-  if (!response.ok) throw new Error(`Batch job: ${body.error?.message ?? response.statusText}`)
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    await check(response, "Vertex batch jobs")
+    // Too many jobs at Vertex: the next one waits longer (the outbox tries again).
+    if (response.status === 429) void slowDown("job")
+    throw new GoogleError(`Batch job: ${body.error?.message ?? response.statusText}`, response.status)
+  }
+  void calm("job")
   return body.name as string
 }
 
@@ -124,7 +174,8 @@ export type JobState = "running" | "succeeded" | "failed"
  */
 export async function paintBatchState(job: string) {
   const response = await fetch(`${API}/${job}`, { headers: await headers(), signal: CALL() })
-  const body = await response.json()
+  await check(response, "Vertex batch jobs")
+  const body = await response.json().catch(() => ({}))
   // Gone at Vertex (deleted, or the project changed): it never brings anything in.
   if (response.status === 404) {
     return { state: "failed" as JobState, error: "Vertex no longer knows the job", ready: 0, total: 0, input: [] as string[], output: undefined }
@@ -155,7 +206,10 @@ export async function cancelPaintBatch(job: string) {
     body: "{}",
     signal: CALL(),
   })
-  if (!response.ok) throw new Error(`Batch cancel: ${(await response.text()).slice(0, 300)}`)
+  if (!response.ok) {
+    await check(response, "Vertex batch jobs")
+    throw new Error(`Batch cancel: ${(await response.text()).slice(0, 300)}`)
+  }
 }
 
 /** The lines of a job's `input` asking for `keys` (else all of them), by key, to send again. */
@@ -163,6 +217,7 @@ export async function inputLines(input: string[], keys?: Set<string>) {
   const found = new Map<string, string>()
   for (const uri of input) {
     const response = await fetch(gcsMedia(uri), { headers: await headers(), signal: TRANSFER() })
+    await check(response, "Cloud Storage")
     if (!response.ok) throw new Error(`Batch input ${uri}: ${response.statusText}`)
     for (const line of (await response.text()).split("\n")) {
       if (!line.trim()) continue
@@ -173,7 +228,7 @@ export async function inputLines(input: string[], keys?: Set<string>) {
   return found
 }
 
-export type OpenJob = { name: string; displayName: string; createdAt: string; input: string[] }
+export type OpenJob = { name: string; displayName: string; createdAt: string; input: string[]; model: string }
 
 /** This project's painting jobs Vertex hasn't finished yet (the newest few hundred). */
 export async function openPaintBatches(): Promise<OpenJob[]> {
@@ -185,14 +240,17 @@ export async function openPaintBatches(): Promise<OpenJob[]> {
       `${API}/projects/${key.project_id}/locations/global/batchPredictionJobs?pageSize=100${page && `&pageToken=${page}`}`,
       { headers: await headers(), signal: CALL() }
     )
-    const body = await response.json()
+    await check(response, "Vertex batch jobs")
+    const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(`Batch jobs: ${body.error?.message ?? response.statusText}`)
     for (const job of body.batchPredictionJobs ?? []) {
       if (!["JOB_STATE_QUEUED", "JOB_STATE_PENDING", "JOB_STATE_RUNNING"].includes(job.state)) continue
-      if (!String(job.model).endsWith(`/${PAINT_MODEL}`)) continue
+      const model = String(job.model).split("/").pop() ?? ""
+      if (model !== PAINT_MODEL && model !== FALLBACK_MODEL) continue
       open.push({
         name: job.name,
         displayName: job.displayName ?? "",
+        model,
         createdAt: job.createTime,
         input: job.inputConfig?.gcsSource?.uris ?? [],
       })
@@ -212,64 +270,110 @@ function gcsMedia(uri: string) {
 /** An answer: an image, or why not — neither when the job ended before it got to it. */
 export type PaintResult = { key: string; image?: Buffer; error?: string }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+/** How one try at painting a line online went (see `paintLineOnce`). */
+export type Attempt =
+  | { outcome: "image"; image: Buffer }
+  /** 429 or 503: Vertex's shared quota is out for now. */
+  | { outcome: "busy"; why: string }
+  /** A dropped or stalled connection, or a 5xx: it passes. */
+  | { outcome: "flaky"; why: string }
+  /** Answered without an image, for no reason given: another try usually paints. */
+  | { outcome: "empty"; why: string }
+  /** Held back by the safety filters: asking again won't change that. */
+  | { outcome: "blocked"; why: string }
+  /** Google refuses us outright (401, 403): see google/pause.ts. */
+  | { outcome: "refused"; why: string }
+  /** Refused for good, e.g. a bad request. */
+  | { outcome: "failed"; why: string }
 
-/** Thrown once Vertex has said it's busy for all of `paintLineNow`'s patience. */
-export class StayedBusyError extends Error {}
+/** Finish reasons that mean the safety filters held the image back. */
+export const BLOCKED = /SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/i
 
 /**
- * A line of a job's input painted online, now: its images stay in Cloud
- * Storage, which online calls read too. Vertex's shared quota answers 429
- * to most calls, so a busy answer or a dropped connection is asked again
- * after a pause that doubles to a minute: asked every second or two, dozens
- * of calls at once were 30+ requests a second of 429s (10 Oct, the evening
- * the project was suspended). Gives up with `StayedBusyError` after
- * `patience`; an answer without an image is tried again a couple of times.
- * Failing auth throws at once.
+ * One try at painting a line of a job's input online, now: its images stay
+ * in Cloud Storage, which online calls read too. Paced with every other
+ * server's tries (google/pace.ts), and a busy answer makes them all wait a
+ * little; trying again, and when, is up to the caller (the online lane in
+ * generation/run.ts). Asked every second or two, dozens of calls at once
+ * were 30+ requests a second of 429s (10 Oct, the evening the project was
+ * suspended).
  */
-export async function paintLineNow(line: string, patience = 30 * 60_000): Promise<PaintResult> {
+export async function paintLineOnce(line: string, model = PAINT_MODEL): Promise<Attempt> {
   const { request } = JSON.parse(line) as { request: { labels?: { key?: string } } & Record<string, unknown> }
-  const { labels, ...body } = request
-  const key = labels?.key ?? ""
-  const start = Date.now()
-  let empty = 0
-  let busy = 0
-  for (;;) {
-    const again = () => {
-      if (Date.now() - start > patience) throw new StayedBusyError(`${PAINT_MODEL}: Vertex stayed busy`)
-      const pause = Math.min(60_000, 2_000 * 2 ** Math.min(busy++, 5))
-      return sleep(pause * (0.75 + Math.random() * 0.5))
-    }
+  const { labels: _labels, ...body } = request
+  void _labels
+  const kind = model === PAINT_MODEL ? "image" : "imageFallback"
+  await pace(kind)
+  let response: Response
+  try {
     const { key: account } = await auth()
-    let response: Response
-    try {
-      response = await fetch(
-        `${API}/projects/${account.project_id}/locations/global/publishers/google/models/${PAINT_MODEL}:generateContent`,
-        {
-          method: "POST",
-          headers: await headers({ "Content-Type": "application/json" }),
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(5 * 60_000),
-        }
-      )
-    } catch {
-      await again()
+    response = await fetch(
+      `${API}/projects/${account.project_id}/locations/global/publishers/google/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: await headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(5 * 60_000),
+      }
+    )
+  } catch (error) {
+    // Paused meanwhile, or signing in failed: the caller decides.
+    if (!(error instanceof TypeError || error instanceof DOMException)) throw error
+    return { outcome: "flaky", why: `${model}: ${(error as Error).message}` }
+  }
+  if (response.status === 429 || response.status === 503) {
+    await response.body?.cancel().catch(() => {})
+    void slowDown(kind)
+    return { outcome: "busy", why: `${model}: busy (${response.status})` }
+  }
+  if (response.status >= 500) {
+    await response.body?.cancel().catch(() => {})
+    return { outcome: "flaky", why: `${model}: ${response.status} ${response.statusText}` }
+  }
+  const answer = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const why = `${model}: ${answer.error?.message ?? response.statusText}`
+    if (refused(response.status)) {
+      void deniedByGoogle(model, response.status, answer.error?.message ?? response.statusText)
+      return { outcome: "refused", why }
+    }
+    if (!wrong(response.status)) return { outcome: "failed", why }
+    void rejectedByGoogle(model, response.status, answer.error?.message ?? response.statusText)
+    return { outcome: "failed", why: `${model}: rejected (${response.status}): ${answer.error?.message ?? response.statusText}` }
+  }
+  void calm(kind)
+  const candidate = answer.candidates?.[0]
+  try {
+    return { outcome: "image", image: imageOf(candidate?.content?.parts) }
+  } catch {
+    const reason = candidate?.finishReason ?? answer.promptFeedback?.blockReason ?? "empty"
+    const why = `${model}: no image (${reason})`
+    if (!BLOCKED.test(reason)) return { outcome: "empty", why }
+    void heldBackByGoogle(model)
+    return { outcome: "blocked", why }
+  }
+}
+
+/**
+ * A line painted online, tried again while Vertex is busy (each try paced
+ * with every other server's, see `paintLineOnce`) for up to `patience`: for
+ * callers that wait for one image themselves (the Citys runner). Gives up
+ * with `StayedBusyError`; an answer without an image is tried twice more.
+ */
+export async function paintLineNow(line: string, patience = 30 * 60_000, model = PAINT_MODEL): Promise<PaintResult> {
+  const key = (JSON.parse(line) as { request?: { labels?: { key?: string } } }).request?.labels?.key ?? ""
+  const start = Date.now()
+  let misses = 0
+  for (;;) {
+    const attempt = await paintLineOnce(line, model)
+    if (attempt.outcome === "image") return { key, image: attempt.image }
+    if (attempt.outcome === "busy" || attempt.outcome === "flaky" || attempt.outcome === "refused") {
+      if (Date.now() - start > patience) throw new StayedBusyError(attempt.why)
+      await sleep(attempt.outcome === "refused" ? 60_000 : 5_000)
       continue
     }
-    if (response.status === 429 || response.status >= 500) {
-      await response.body?.cancel().catch(() => {})
-      await again()
-      continue
-    }
-    const answer = await response.json().catch(() => ({}))
-    if (!response.ok) return { key, error: `${PAINT_MODEL}: ${answer.error?.message ?? response.statusText}` }
-    const candidate = answer.candidates?.[0]
-    try {
-      return { key, image: imageOf(candidate?.content?.parts) }
-    } catch {
-      if (++empty < 3) continue
-      return { key, error: `${PAINT_MODEL}: no result (${candidate?.finishReason ?? answer.promptFeedback?.blockReason ?? "empty"})` }
-    }
+    if (attempt.outcome === "empty" && ++misses < 3) continue
+    return { key, error: attempt.why }
   }
 }
 
@@ -285,7 +389,8 @@ export async function* paintBatchResults(output: string): AsyncGenerator<PaintRe
       `https://storage.googleapis.com/storage/v1/b/${bucket}/o?prefix=${encodeURIComponent(prefix + "/")}${page && `&pageToken=${page}`}`,
       { headers: await headers(), signal: CALL() }
     )
-    const body = (await list.json()) as { items?: { name: string }[]; nextPageToken?: string }
+    await check(list, "Cloud Storage")
+    const body = (await list.json().catch(() => ({}))) as { items?: { name: string }[]; nextPageToken?: string }
     if (!list.ok) throw new Error(`Batch output ${output}: ${list.statusText}`)
     files.push(...(body.items ?? []).map((i) => i.name).filter((n) => n.endsWith(".jsonl")))
     page = body.nextPageToken ?? ""

@@ -1,3 +1,4 @@
+import { cityDraft, cityPrintFiles, composeCityPoster } from "@/lib/citys/upload-stages"
 import { loadTemplate, mapTemplate } from "@/lib/gelato/template"
 import { publicUrl, storageStatus, uploadPublic } from "@/lib/storage"
 import { createDrafts, getDraft, rewriteDraft } from "@/lib/uploads/store"
@@ -23,8 +24,25 @@ const exist = async (files: string[]) => (await Promise.all(files.map(hasFileUnd
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
 
+/** City posters: the photo set in its composition (or alone) as the poster the rest is made from. */
+async function compose(ctx: StageContext): Promise<StageResult> {
+  if (!ctx.item.city) return { note: "Not a city poster" }
+  const city = ctx.item.city
+  if (!city.poster || !(await hasFileUnder(city.poster))) {
+    ctx.progress("Setting the photo in its composition")
+    const poster = await composeCityPoster(ctx.item, `${itemDir(ctx.item.id)}/poster.jpg`)
+    await ctx.save({ city: { ...city, poster } })
+  }
+  return { note: city.compositionId ? "Set in its composition" : "The photo alone" }
+}
+
 /** The poster's draft (made now if it has none) with its copy written. */
 async function copy(ctx: StageContext): Promise<StageResult> {
+  // A city poster's copy comes from the city copywriter, written here.
+  if (ctx.item.city && !ctx.item.draftId) {
+    ctx.progress("Writing the city copy")
+    await ctx.save({ draftId: await cityDraft(ctx.item) })
+  }
   let draftId = ctx.item.draftId
   if (!draftId || !(await getDraft(draftId).catch(() => null))) {
     draftId = await findDraftId(ctx.item.groupId, ctx.item.outputId)
@@ -57,7 +75,11 @@ async function print(ctx: StageContext): Promise<StageResult> {
   const perSize = files?.length && files.every((f) => f.sizes.length === 1 && f.bandId === f.sizes[0])
   if (!files?.length || !perSize || !(await exist(files.map((f) => f.file)))) {
     ctx.progress("Making print files")
-    files = await makePrintFiles(await posterOf(ctx.item), ctx.orientation, `${itemDir(ctx.item.id)}/print`)
+    const dir = `${itemDir(ctx.item.id)}/print`
+    // A composition is drawn again at each size's own shape; anything else is cut or extended from the poster.
+    files = ctx.item.city?.compositionId
+      ? await cityPrintFiles(ctx.item, ctx.orientation, dir)
+      : await makePrintFiles(await posterOf(ctx.item), ctx.orientation, dir)
     await ctx.save({ printFiles: files })
   }
   if (!ctx.job.dryRun) {
@@ -159,8 +181,9 @@ async function dryLive(ctx: StageContext): Promise<StageResult> {
 
 const skipped: StageRun = async () => ({ note: "Skipped in a test run" })
 
-const LIVE: Record<Stage, StageRun> = { copy, print, media, gelato, listing, verify, live, postcheck }
+const LIVE: Record<Stage, StageRun> = { compose, copy, print, media, gelato, listing, verify, live, postcheck }
 const DRY: Record<Stage, StageRun> = {
+  compose,
   copy,
   print,
   media,

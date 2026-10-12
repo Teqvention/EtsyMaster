@@ -10,12 +10,14 @@ import { formatNumber } from "@/lib/etsy/format"
 import type { ArtikelRow, InternalTag } from "@/lib/artikel/types"
 import { cn } from "@/lib/utils"
 
+import { CityStatusLabel, OriginLabel, RankCell, STATUS_ORDER } from "./city-columns"
 import { Est, money, priceRange, shortDate, Signed, StateLabel, TagChip } from "./shared"
 
 // The listings, one dense row each: photo, title with its internal tags,
 // state, prices, the range's views, favourites and sales, and what the sales
-// left over after Etsy and Gelato. A click opens the listing; the box picks it
-// (Shift picks the run from the last one).
+// left over after Etsy and Gelato; our city shops' listings also show their
+// status, origin and the rank of their place. A click opens the listing; the
+// box picks it (Shift picks the run from the last one).
 
 export type SortKey =
   | "title"
@@ -31,6 +33,9 @@ export type SortKey =
   | "ads"
   | "endsAt"
   | "section"
+  | "status"
+  | "origin"
+  | "rank"
 
 export type Sort = { key: SortKey; desc: boolean }
 
@@ -59,6 +64,15 @@ const COLUMNS: { key: SortKey; label: string; hint: string; className?: string }
   { key: "section", label: "Section", hint: "Shop section", className: "w-32 text-left" },
 ]
 
+const CITY_COLUMNS: { key: SortKey; label: string; hint: string; className?: string }[] = [
+  { key: "status", label: "Status", hint: "Confirmed stays, replace frees the slot for a new poster, offline isn't live", className: "w-[6.5rem] text-left" },
+  { key: "origin", label: "Origin", hint: "robin: reference photos · old: the prompt system before · system: made here", className: "w-[4.5rem] text-left" },
+  { key: "rank", label: "Rank", hint: "The tier of its place in the city ranking, A best; F has shown no demand", className: "w-32 text-left" },
+]
+
+/** Keys sorted A–Z (or first to last) on the first click; the rest start with the most. */
+export const ASCENDING_FIRST: SortKey[] = ["title", "section", "endsAt", "status", "origin", "rank"]
+
 export const SORT_VALUE: Record<SortKey, (r: ArtikelRow) => number | string> = {
   title: (r) => r.title.toLowerCase(),
   state: (r) => r.state,
@@ -73,6 +87,9 @@ export const SORT_VALUE: Record<SortKey, (r: ArtikelRow) => number | string> = {
   ads: (r) => r.adsEstCents,
   endsAt: (r) => r.endsAt ?? Number.MAX_SAFE_INTEGER,
   section: (r) => (r.section ?? "").toLowerCase(),
+  status: (r) => STATUS_ORDER[r.city?.status ?? "none"] + (r.city ? 0 : 10),
+  origin: (r) => r.city?.origin ?? "~",
+  rank: (r) => (r.city ? (r.city.tier ?? "G") + (r.city.place ?? "~").toLowerCase() : "~"),
 }
 
 export function ArtikelTable({
@@ -82,6 +99,7 @@ export function ArtikelTable({
   selection,
   tags,
   showShop,
+  showCity,
   openId,
   onOpen,
   now,
@@ -92,6 +110,8 @@ export function ArtikelTable({
   selection: Selection
   tags: Map<string, InternalTag>
   showShop: boolean
+  /** Our city shops are among the rows: their status, origin and rank get columns. */
+  showCity: boolean
   openId: number | null
   onOpen: (listingId: number) => void
   /** Epoch ms of today: listings running out within two weeks show it. */
@@ -103,7 +123,7 @@ export function ArtikelTable({
 
   return (
     <div className="-mx-3 overflow-x-auto">
-      <table className="w-full min-w-[78rem] border-separate border-spacing-0 text-xs">
+      <table className={cn("w-full border-separate border-spacing-0 text-xs", showCity ? "min-w-[98rem]" : "min-w-[78rem]")}>
         <thead className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
           <tr>
             <th className="w-8 border-b pb-1.5 pl-3 text-left">
@@ -115,6 +135,7 @@ export function ArtikelTable({
               />
             </th>
             <SortHead column={{ key: "title", label: "Listing", hint: "A–Z" }} sort={sort} onSort={onSort} className="text-left" />
+            {showCity && CITY_COLUMNS.map((column) => <SortHead key={column.key} column={column} sort={sort} onSort={onSort} className={column.className} />)}
             {COLUMNS.map((column) => (
               <SortHead key={column.key} column={column} sort={sort} onSort={onSort} className={column.className} />
             ))}
@@ -180,6 +201,24 @@ export function ArtikelTable({
                     </span>
                   </div>
                 </td>
+                {showCity &&
+                  (row.city ? (
+                    <>
+                      <td className={cell}>
+                        <CityStatusLabel city={row.city} />
+                      </td>
+                      <td className={cell}>
+                        <OriginLabel origin={row.city.origin} />
+                      </td>
+                      <td className={cn(cell, "max-w-0")}>
+                        <RankCell city={row.city} />
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={3} className={cn(cell, "text-muted-foreground/60")} title="Not one of our city shops">
+                      —
+                    </td>
+                  ))}
                 <td className={cell}>
                   <StateLabel state={row.state} />
                 </td>

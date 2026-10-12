@@ -89,7 +89,7 @@ export function StyleDetail({ id }: { id: Promise<string> }) {
   return <Detail style={style} apply={apply} />
 }
 
-type Apply = (style: Style, options?: { expectRead?: boolean }) => void
+export type Apply = (style: Style, options?: { expectRead?: boolean }) => void
 
 function Detail({ style, apply }: { style: Style; apply: Apply }) {
   const router = useRouter()
@@ -228,6 +228,15 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
         }}
       />
 
+      {style.kind === "city" && (
+        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          A city style: it&apos;s read for how it shows a place too, and tried in the lab.{" "}
+          <Link href={`/citys/styles/${style.id}`} className="font-medium text-foreground underline underline-offset-2">
+            Open it in the city lab
+          </Link>
+        </p>
+      )}
+
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         <Moodboard
           style={style}
@@ -302,7 +311,7 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
   )
 }
 
-function StatusBadge({ style }: { style: Style }) {
+export function StatusBadge({ style }: { style: Style }) {
   if (style.incoming) {
     return (
       <Badge variant="secondary">
@@ -326,7 +335,7 @@ function StatusBadge({ style }: { style: Style }) {
 }
 
 /** The name as a heading that's edited in place: Enter or leaving saves, Escape reverts. */
-function NameField({ style, apply }: { style: Style; apply: Apply }) {
+export function NameField({ style, apply }: { style: Style; apply: Apply }) {
   const [value, setValue] = React.useState(style.name)
   const [saved, setSaved] = React.useState(style.name)
   if (saved !== style.name) {
@@ -373,7 +382,7 @@ function NameField({ style, apply }: { style: Style; apply: Apply }) {
 
 // --- The board ---
 
-function Moodboard({
+export function Moodboard({
   style,
   apply,
   uploading,

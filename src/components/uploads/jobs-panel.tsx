@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cancelItem, retryItem, retryItems, setJobStatus, setPipelinePaused } from "@/hooks/use-pipeline"
 import { SIZE_BY_KEY } from "@/lib/catalog/sizes"
 import { formatNumber } from "@/lib/etsy/format"
-import { STAGE_LABEL, STAGES, type JobItem, type PipelineState, type UploadJob } from "@/lib/pipeline/types"
+import { STAGE_LABEL, stagesOf, type JobItem, type PipelineState, type UploadJob } from "@/lib/pipeline/types"
 import { isOnEtsy, posterKey } from "@/lib/uploads/groups"
 import type { GroupPoster } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
@@ -568,13 +568,14 @@ function Details({ item, job }: { item: JobItem; job: UploadJob }) {
     }
   }, [item.id, item.updatedAt])
 
-  const at = STAGES.indexOf(shown.stage)
+  const stages = stagesOf(shown)
+  const at = stages.indexOf(shown.stage)
   const payloads = Object.entries(shown.payloads ?? {})
 
   return (
     <div className="flex max-h-[min(75svh,48rem)] min-w-0 flex-col gap-5 overflow-y-auto p-4">
       <ol className="flex flex-col gap-1.5" aria-label="Stages">
-        {STAGES.map((stage, index) => {
+        {stages.map((stage, index) => {
           const done = shown.done[stage]
           const current = index === at && shown.status !== "done"
           const state = done || index < at || shown.status === "done" ? "done" : current ? shown.status : "todo"

@@ -9,6 +9,9 @@
 //            the bucket under data/<key>), so listing or checking a file never
 //            asks the bucket
 // instances  the dev servers running now, each seen every few seconds
+// google_pace  a token bucket per kind of call to Google, so every server
+//            together keeps to one pace (see google/pace.ts, which also makes
+//            it on a server started before it existed)
 //
 // A change to a document or file tells every server (NOTIFY "changes",
 // "d <version> <key>" or "f <hash> <key>"), so their copies in memory stay current.
@@ -34,6 +37,14 @@ create table if not exists instances (
   host text not null,
   started_at timestamptz not null default now(),
   seen_at timestamptz not null default now()
+);
+
+create table if not exists google_pace (
+  name text primary key,
+  tokens double precision not null,
+  at timestamptz not null default now(),
+  cool_until timestamptz not null default now(),
+  strikes integer not null default 0
 );
 
 create index if not exists documents_prefix on documents (key text_pattern_ops);
