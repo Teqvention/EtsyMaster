@@ -167,11 +167,11 @@ const ANALYSIS_PROMPT = (title: string) => `You are an art director for a succes
 Return:
 - summary: one vivid line of what the poster shows.
 - subject, setting, action: the main character/object, where it is, what it's doing (empty string if not applicable).
-- style: medium and rendering in precise art terms (e.g. "gouache illustration, thick visible brush strokes, flat shading, slightly naive proportions", "Japanese woodblock print, bold outlines, flat colour, washi texture").
+- style: medium and rendering in precise art terms — how loose or tight, how thick the paint, how much detail and where (e.g. "gouache illustration, loose visible brush strokes, flat shading, slightly naive proportions, few details", "Japanese woodblock print, bold outlines, flat colour, washi texture").
 - palette: 4–7 dominant colours as hex, most dominant first.
 - composition: framing, viewpoint, placement, negative space, borders.
 - typography: the exact words on the poster and how they're lettered, or null if there is no text.
-- mood: the feeling it gives.
+- mood: the feeling it gives, precisely: the characters' expressions and body language (e.g. eyes closed in bliss, smug side-eye), the energy (calm, cheeky, exuberant), the warmth of the light, the humour.
 - audience: who buys it and which room it's for.
 - hook: why it sells — the concept, joke, contrast or feeling that makes people buy it.
 - swaps: ideas for new posters on the same hook. subjects: 6 other characters/objects that would work just as well; settings: 6 other places; props: 6 other props/activities. Make them specific, funny or charming where the original is, and commercially appealing.`

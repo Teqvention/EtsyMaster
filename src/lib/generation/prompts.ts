@@ -19,7 +19,7 @@ const RULES = `Rules:
 // Variants keep the reference's art style, palette and rendering at every
 // level; only composition and layout move, further at each step.
 const VARIANT_LEVELS: Record<Creativity, string> = {
-  minimal: "minimal — very close to the reference: the same subject, elements, layout and framing, freshly redrawn, but never a copy — make two or three subtle yet visible changes (a pose or expression, the shape or position of a small element, a slightly shifted crop, a swapped minor detail), so it reads as the same poster's sibling, not its duplicate.",
+  minimal: "minimal — very close to the reference: the same subject, elements, layout and framing, freshly redrawn, but never a copy — make two or three subtle yet visible changes to small things (the shape or position of a small object, a pattern, a background detail, a slightly shifted crop, a swapped minor prop), so it reads as the same poster's sibling, not its duplicate. Characters keep their exact expression, gaze, pose and energy.",
   subtle: "subtle — close to the reference: the same subject, elements and overall layout, with a few small changes to the arrangement (order, count or spacing of elements, a slightly different crop or angle) and one or two new details; side by side it is clearly a different print of the same poster.",
   low: "low — still close to the reference: the same subject, elements and kind of layout, gently recomposed — one noticeable change to the arrangement, balance or framing (e.g. the main subject moved or turned, elements regrouped, a tighter or wider crop) while everything else stays near the original.",
   medium: "medium — the same subject in a new composition and layout: a different viewpoint, scale, framing or grouping, with new supporting elements that fit the theme.",
@@ -35,12 +35,19 @@ const STYLED_LEVELS: Record<Creativity, string> = {
 }
 
 const IDEA_LEVELS: Record<Creativity, string> = {
-  minimal: "minimal — change one small thing about the scene (a prop, a detail or the wording) and keep everything else as it is.",
+  minimal: "minimal — change one small thing about the scene (a prop, a detail or the wording) and keep everything else as it is, the characters' expressions included.",
   subtle: "subtle — change one thing about the scene (a character, a prop or the place) in a small way and keep everything else close.",
   low: "low — change one thing about the scene (a different character, OR a different place, OR a different prop/activity) and keep everything else close.",
-  medium: "medium — change two or three things (e.g. new character in a new place) and compose a new scene; same joke or feeling.",
-  high: "high — a bold new scenario on the same hook: anything can change except the art style and the reason people buy it.",
+  medium: "medium — change two or three things (e.g. new character in a new place) and compose a new scene — new viewpoint or framing welcome; the same joke and the same feeling.",
+  high: "high — a bold new scenario on the same hook: a surprising idea, scene, perspective or composition. The look and the feeling stay exactly the reference's — the creativity goes into the idea, never into a new style or mood.",
 }
+
+// Every level keeps how the reference feels and how it's painted: a new idea
+// that drifts into a quieter, moodier or more detailed picture reads as
+// another artist (Robin, 13 Oct: a lion in a dark library after a tiger in
+// a sunny bar; a blissful cat turned grumpy at the lowest level).
+const KEEP_FEELING = (analysis?: PosterAnalysis) =>
+  `Keep the reference's feeling in every brief${analysis?.mood ? ` (${analysis.mood})` : ""}: the characters' expressions, body language and energy, the warmth of the light, the humour. Never a quieter, sadder, darker, moodier, more dramatic or more serious picture. Keep its simplicity too: about as many elements as the reference, anything new simplified the way the reference simplifies (a library is a few shelves of colour blocks, not a hundred books). Describe things plainly — never words that ask for more detail or finish than the reference has (cluttered, intricate, detailed, ornate, glossy, realistic).`
 
 export type BriefRequest = {
   mode: OutputMode
@@ -108,6 +115,7 @@ function briefPrompt({ mode, levels, analysis, title, style, feedback, avoid, ba
       : style
         ? `Task: write ${levels.length} briefs that redraw the reference's picture in the style below, each at its creativity level. Describe concretely how the style's medium, palette, lighting and texture apply to this picture.`
         : `Task: write ${levels.length} briefs for new posters that redraw the reference at the given creativity levels. Every brief keeps the reference's art style, medium, rendering, texture, palette and lighting exactly — only the composition and layout change, as far as its level allows. Each must differ from every other brief.`,
+    !style && KEEP_FEELING(analysis),
     base &&
       `Start from our own earlier poster, the second image ("${base.title}": ${base.brief}). The shop owner liked enough of it to want more: each brief develops it further — keep what works, change what the notes ask for, and at higher creativity move further away from it.`,
     inspiration?.length &&
@@ -116,7 +124,9 @@ function briefPrompt({ mode, levels, analysis, title, style, feedback, avoid, ba
     feedback && `The shop owner asked for this — follow it in every brief: ${feedback}`,
     `Creativity per brief, in order:\n${lines.join("\n")}`,
     avoid.length > 0 && `Already made — make each new brief clearly different from these:\n${avoid.slice(-30).map((a) => `- ${a}`).join("\n")}`,
-    `Each brief: 3–6 sentences an illustrator can paint from — subject and what it does, setting, composition and framing, palette (name colours), rendering and texture, lighting, any lettering (new words only, or none). Be specific and visual; no vague adjectives. Each "title" is 2–5 words naming the picture.`,
+    style
+      ? `Each brief: 3–6 sentences an illustrator can paint from — subject and what it does, setting, composition and framing, palette (name colours), rendering and texture, lighting, any lettering (new words only, or none). Be specific and visual; no vague adjectives. Each "title" is 2–5 words naming the picture.`
+      : `Each brief: 3–6 sentences an illustrator can paint from — the subject and what it does, its expression and body language, the setting and props, the composition and framing, any lettering (new words only, or none). Be specific and visual; no vague adjectives. Don't describe the palette, light, texture or rendering: the painter takes them from the reference, and spelling them out makes it exaggerate them — say "in the reference's exact look" and name colours only for new objects, from the reference's palette. Each "title" is 2–5 words naming the picture.`,
     `Never name the original artist, shop, brands or copyrighted characters.`,
   ]
     .filter(Boolean)
@@ -158,6 +168,15 @@ function styleText(s: StyleGuide) {
     .join("\n")
 }
 
+/** How the reference's look and feeling carry over when no saved style replaces them. */
+const SAME_HAND = `Paint it by the reference's own hand:
+- The same paint handling: strokes as big, loose and thick — or as flat and clean — as the reference's, relative to the canvas; the same edges, outlines and surface texture. No heavier impasto, no smoother finish.
+- No refining: no finer lines, no extra detail, nothing glossier, sharper or more realistic than the reference. Paint anything new as simply as the reference paints its own things.
+- Animals and figures as the reference paints them: fur as broad strokes or patches of colour, faces simplified the same way — never a finely furred, realistic or cleanly illustrated animal.
+- No more objects than the art direction names: a new setting stays as sparse and as softly painted as the reference's.
+- The same palette, saturation, contrast and kind of light: nothing darker, more muted or moodier.
+- The same feeling: the characters' expressions, body language and energy, the warmth and the humour of the reference.`
+
 /** What Nano Banana is told for one output; images go in the order the text names them. */
 export function paintPrompt({
   mode,
@@ -189,12 +208,12 @@ export function paintPrompt({
   return [
     ...images,
     mode === "idea"
-      ? "Paint a NEW, ORIGINAL poster on the reference's concept: keep its art style, rendering, palette and selling hook, but show the new idea below — not the reference's scene."
+      ? "Paint a NEW, ORIGINAL poster on the reference's concept: keep its art style, rendering, palette and selling hook, but show the new idea below — not the reference's scene. It must look like the next poster of the same series, by the same artist."
       : style
         ? "Paint a NEW, ORIGINAL poster after the reference, as the art direction below says."
         : "Paint a NEW, ORIGINAL poster after the reference, as the art direction below says. Match the reference's art style, medium, rendering, texture, palette and lighting exactly; change only the composition and layout.",
     `Art direction: ${brief}`,
-    style && `Style: ${styleText(style)}`,
+    style ? `Style: ${styleText(style)}` : SAME_HAND,
     feedback && `Notes from the shop owner (most important): ${feedback}`,
     RULES,
   ]

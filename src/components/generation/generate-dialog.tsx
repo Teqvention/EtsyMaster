@@ -383,7 +383,7 @@ function Section({
   )
 }
 
-function CountField({
+export function CountField({
   label,
   value,
   min,
@@ -431,7 +431,7 @@ function CountField({
   )
 }
 
-function CreativityField({ group, onChange }: { group: GenerateGroup; onChange: (creativity: Creativity[]) => void }) {
+export function CreativityField({ group, onChange }: { group: GenerateGroup; onChange: (creativity: Creativity[]) => void }) {
   const mix = group.count > 1 && group.creativity.length > 1
   const counts = CREATIVITIES.map((level) => ({
     level,

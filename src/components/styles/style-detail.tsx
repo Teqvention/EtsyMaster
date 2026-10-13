@@ -15,10 +15,12 @@ import {
   SparklesIcon,
   Trash2Icon,
   UploadIcon,
+  WandSparklesIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { AutoScaleDialog } from "@/components/styles/auto-scale"
 import { GuidePanel, isStale } from "@/components/styles/style-guide"
 import { SourcePicker } from "@/components/styles/source-picker"
 import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
@@ -99,6 +101,7 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
   const [fromSaved, setFromSaved] = React.useState(false)
   const [confirm, setConfirm] = React.useState<"delete" | "reread" | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+  const [scaling, setScaling] = React.useState(false)
 
   const running = style.guideStatus === "running"
   const room = MAX_IMAGES - style.images.length - (style.incoming ?? 0)
@@ -194,7 +197,31 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
         <NameField style={style} apply={apply} />
         <StatusBadge style={style} />
         <div className="ml-auto flex items-center gap-2">
+          {style.autoSet && style.kind !== "city" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              nativeButton={false}
+              render={<Link href={`/generation/${style.autoSet}`} />}
+            >
+              <ImagesIcon />
+              Scaled posters
+            </Button>
+          )}
           {addMenu}
+          {style.kind !== "city" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={style.images.length === 0 || !!style.incoming}
+              onClick={() => setScaling(true)}
+              title="New posters in this style, planned and painted from the whole board"
+              className="active:scale-[0.97]"
+            >
+              {style.studyStatus === "running" ? <LoaderCircleIcon className="animate-spin" /> : <WandSparklesIcon />}
+              {style.studyStatus === "running" ? "Studying the board…" : "Autonomous scale"}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -266,6 +293,13 @@ function Detail({ style, apply }: { style: Style; apply: Apply }) {
         onOpenChange={setFromSaved}
         style={style}
         onDone={(next) => apply(next)}
+      />
+      <AutoScaleDialog
+        open={scaling}
+        onOpenChange={setScaling}
+        styleId={style.id}
+        name={style.name}
+        count={style.images.length}
       />
 
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>

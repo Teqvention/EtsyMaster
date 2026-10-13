@@ -356,7 +356,14 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
                 <p className="text-muted-foreground">{output.brief}</p>
                 {output.feedback && (
                   <p className="mt-2 border-l-2 border-brand/50 pl-2 text-xs text-muted-foreground">
-                    Your notes: {output.feedback}
+                    {output.auto ? "Repainted with" : "Your notes"}: {output.feedback}
+                  </p>
+                )}
+                {output.check && (
+                  <p className="mt-2 text-xs text-muted-foreground tabular-nums">
+                    <span className="font-medium text-foreground">Auto check</span> · style {output.check.style} ·
+                    feeling {output.check.feeling} · poster {output.check.appeal}
+                    {output.check.notes && <span className="block pt-0.5">{output.check.notes}</span>}
                   </p>
                 )}
               </PopoverContent>

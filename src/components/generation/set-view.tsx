@@ -17,6 +17,7 @@ import {
   PaletteIcon,
   RepeatIcon,
   SparklesIcon,
+  WandSparklesIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -39,6 +40,7 @@ import {
   timeAgo,
 } from "@/components/generation/parts"
 import { AddToStyleMenuItems } from "@/components/styles/add-to-style"
+import { AutoScaleDialog } from "@/components/styles/auto-scale"
 import { StyleFromImagesDialog } from "@/components/styles/style-from-images"
 import { useStyles } from "@/hooks/use-styles"
 import { Button } from "@/components/ui/button"
@@ -139,6 +141,7 @@ function Loaded({ set }: { set: GenerationSet }) {
   const [generating, setGenerating] = React.useState(false)
   const [inspiring, setInspiring] = React.useState(false)
   const [styling, setStyling] = React.useState(false)
+  const [scaling, setScaling] = React.useState(false)
   const styles = useStyles()
   const active = isActive(set)
   const { failed, stage, review, approved } = progress(set)
@@ -165,7 +168,8 @@ function Loaded({ set }: { set: GenerationSet }) {
     const map = new Map<string, Group>()
     for (const o of set.outputs) {
       if (!keep(o)) continue
-      const key = `${o.batch}|${o.poster}|${o.mode}`
+      // An Autonomous scale run is one group, whatever board images its posters take after.
+      const key = o.auto ? `${o.batch}|auto` : `${o.batch}|${o.poster}|${o.mode}`
       const group = map.get(key) ?? {
         key,
         batch: batches.get(o.batch)?.batch ?? null,
@@ -241,15 +245,21 @@ function Loaded({ set }: { set: GenerationSet }) {
             <time dateTime={set.createdAt} title={new Date(set.createdAt).toLocaleString()}>
               {timeAgo(set.createdAt)}
             </time>
-            <a
-              href={set.source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 underline-offset-4 hover:text-foreground hover:underline"
-            >
-              Etsy
-              <ExternalLinkIcon className="size-3" />
-            </a>
+            {set.style ? (
+              <Link href={`/styles/${set.style.id}`} className="underline-offset-4 hover:text-foreground hover:underline">
+                Style
+              </Link>
+            ) : (
+              <a
+                href={set.source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 underline-offset-4 hover:text-foreground hover:underline"
+              >
+                Etsy
+                <ExternalLinkIcon className="size-3" />
+              </a>
+            )}
           </div>
         </div>
 
@@ -360,15 +370,22 @@ function Loaded({ set }: { set: GenerationSet }) {
                 Create style
               </Button>
             )}
-            <Button
-              size="sm"
-              disabled={set.posters.length === 0}
-              onClick={() => setGenerating(true)}
-              className="active:scale-[0.97]"
-            >
-              <SparklesIcon />
-              Generate more
-            </Button>
+            {set.style ? (
+              <Button size="sm" onClick={() => setScaling(true)} className="active:scale-[0.97]">
+                <WandSparklesIcon />
+                Scale more
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={set.posters.length === 0}
+                onClick={() => setGenerating(true)}
+                className="active:scale-[0.97]"
+              >
+                <SparklesIcon />
+                Generate more
+              </Button>
+            )}
           </div>
         </div>
 
@@ -411,7 +428,11 @@ function Loaded({ set }: { set: GenerationSet }) {
               key={group.key}
               set={set}
               group={group}
-              poster={many && !poster ? set.posters.find((p) => p.index === group.poster) : undefined}
+              poster={
+                many && !poster && !group.key.endsWith("|auto")
+                  ? set.posters.find((p) => p.index === group.poster)
+                  : undefined
+              }
               styleName={styleName}
               onOpen={open}
             />
@@ -420,6 +441,15 @@ function Loaded({ set }: { set: GenerationSet }) {
       </main>
 
       <CompareViewer viewing={viewing} onChange={setViewing} />
+      {set.style && (
+        <AutoScaleDialog
+          open={scaling}
+          onOpenChange={setScaling}
+          styleId={set.style.id}
+          name={set.style.name}
+          count={set.style.files.length}
+        />
+      )}
       <GenerateDialog
         open={generating}
         onOpenChange={setGenerating}
@@ -757,7 +787,10 @@ function GroupSection({
   const working = outputs.filter((o) => o.status === "pending" || o.status === "running").length
   const levels = CREATIVITIES.filter((c) => outputs.some((o) => o.creativity === c))
 
-  const title = from
+  const auto = outputs.some((o) => o.auto)
+  const title = auto
+    ? "Autonomous scale"
+    : from
     ? `More like “${from.title ?? CREATIVITY_LABEL[from.creativity]}”`
     : options?.inspiration
       ? `New ideas after ${options.inspiration.length} approved`
@@ -766,7 +799,17 @@ function GroupSection({
         : style
           ? `Variants in ${style}`
           : "Variants"
-  const icon = from ? <RepeatIcon /> : mode === "idea" ? <LightbulbIcon /> : style ? <PaletteIcon /> : <SparklesIcon />
+  const icon = auto ? (
+    <WandSparklesIcon />
+  ) : from ? (
+    <RepeatIcon />
+  ) : mode === "idea" ? (
+    <LightbulbIcon />
+  ) : style ? (
+    <PaletteIcon />
+  ) : (
+    <SparklesIcon />
+  )
 
   async function decideAll(review: "approved" | "rejected") {
     try {

@@ -26,6 +26,8 @@ import {
   startPaintBatch,
 } from "@/lib/mockups/vertex-batch"
 import { cityRequest, cityWork, isCitySet } from "@/lib/citys/generate"
+import { autoRequest, expandAuto, planAuto, prepareAuto } from "@/lib/styles/auto"
+import { reviewAuto } from "@/lib/styles/auto-check"
 import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
@@ -393,6 +395,16 @@ async function poster(id: string) {
     }
   }
 
+  // A style's Autonomous scale set: its posters are the board's, described by the style's study.
+  if (set.style) {
+    try {
+      await prepareAuto(id)
+    } catch (error) {
+      console.error(`Generation ${id}, studying the style:`, error)
+      return blockOutputs(id, `Couldn't study the style: ${message(error)}`)
+    }
+  }
+
   // 2. What each one is (best effort: prompts work without it, just less well).
   set = await getSet(id)
   await Promise.all(
@@ -430,16 +442,25 @@ async function poster(id: string) {
     if (!styles.has(styleId)) styles.set(styleId, loadStyle(styleId))
     return styles.get(styleId)!
   }
-  const delivery = new Map(set.batches.map((b) => [b.id, b.options.delivery ?? "now"]))
-  const waiting = set.outputs.filter((o) => o.status === "pending")
-  const batched = waiting.filter((o) => delivery.get(o.batch) === "batch")
-  const now = waiting.filter((o) => !batched.includes(o))
-  await Promise.all([
-    // Through the online lane, which sends what it can't get to soon to a batch
-    // job; drawn here only where there's no batch bucket for that.
-    ...(batchConfigured() ? [now.length ? submit(id, now, styleOf, true) : null] : now.map((o) => draw(id, o, styleOf(o)))),
-    batched.length ? submit(id, batched, styleOf) : null,
-  ])
+  // Waiting outputs with a brief (`only` of them, if given) go out.
+  const dispatch = async (only?: string[]) => {
+    const current = await getSet(id)
+    const delivery = new Map(current.batches.map((b) => [b.id, b.options.delivery ?? "now"]))
+    const waiting = current.outputs.filter(
+      (o) => o.status === "pending" && (!only || only.includes(o.id)) && !(o.auto && !o.brief)
+    )
+    const batched = waiting.filter((o) => delivery.get(o.batch) === "batch")
+    const now = waiting.filter((o) => !batched.includes(o))
+    await Promise.all([
+      // Through the online lane, which sends what it can't get to soon to a batch
+      // job; drawn here only where there's no batch bucket for that.
+      ...(batchConfigured() ? [now.length ? submit(id, now, styleOf, true) : null] : now.map((o) => draw(id, o, styleOf(o)))),
+      batched.length ? submit(id, batched, styleOf) : null,
+    ])
+  }
+  // Autonomous scale plans a few posters at a time; each few go out once planned.
+  if (set.style) await planAuto(id, dispatch)
+  await dispatch()
 }
 
 /**
@@ -1540,12 +1561,14 @@ async function bringIn(id: string, result: PaintResult, model?: string) {
   try {
     if (result.image) {
       const stored = await store(id, `out-${result.key}`, result.image)
-      await updateOutput(id, result.key, {
+      const set = await updateOutput(id, result.key, {
         ...stored.asset,
         job: undefined,
         error: undefined,
         model: model && model !== PAINT_MODEL ? model : undefined,
       })
+      // An Autonomous scale poster is looked at against its series (styles/auto-check.ts).
+      if (set.style && set.outputs.some((o) => o.id === result.key && o.auto)) void reviewAuto(id, result.key, enqueue)
     } else {
       await updateOutput(id, result.key, { status: "error", job: undefined, error: result.error })
     }
@@ -1782,10 +1805,10 @@ const healer = ((global as typeof global & { __generationHealer?: Healer }).__ge
 
 // The fields this code writes on a set, its batches and their options, and
 // its outputs (add a new one here too).
-const SET_FIELDS = new Set(["id", "kind", "folder", "source", "status", "createdAt", "updatedAt", "original", "layout", "posters", "extraction", "batches", "outputs", "jobs", "stopping", "doneAt", "mockup", "sceneId", "heals", "runner"])
-const BATCH_FIELDS = new Set(["id", "options", "createdAt", "expanded"])
+const SET_FIELDS = new Set(["id", "kind", "folder", "source", "status", "createdAt", "updatedAt", "original", "layout", "posters", "extraction", "batches", "outputs", "jobs", "stopping", "doneAt", "mockup", "sceneId", "heals", "runner", "style"])
+const BATCH_FIELDS = new Set(["id", "options", "createdAt", "expanded", "auto"])
 const OPTION_FIELDS = new Set(["variants", "ideas", "feedback", "posters", "from", "inspiration", "delivery"])
-const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "note", "id", "poster", "batch", "mode", "creativity", "styleId", "title", "brief", "feedback", "from", "inspiration", "job", "model", "review", "reviewedAt", "createdAt"])
+const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "note", "id", "poster", "batch", "mode", "creativity", "styleId", "title", "brief", "feedback", "from", "inspiration", "job", "model", "review", "reviewedAt", "createdAt", "auto", "refs", "check"])
 
 /**
  * Sets this code knows how to run: nothing on them it doesn't know. Other
@@ -1927,6 +1950,8 @@ async function heal(id: string, why: string, missing: string[] = []) {
 /** The outputs `batch` asks for, waiting for a brief. */
 function expand(set: GenerationSet, batch: Batch): Output[] {
   const { options } = batch
+  // Autonomous scale: its posters are planned later, anchor and all (styles/auto.ts).
+  if (batch.auto) return expandAuto(batch)
   const now = new Date().toISOString()
   const base = { status: "pending" as const, file: null, batch: batch.id, review: null, createdAt: now }
 
@@ -2022,7 +2047,8 @@ async function loadStyle(styleId: string): Promise<StyleRef | null> {
 /** Writes briefs for every waiting output, one art-director call per poster, mode and style. */
 async function plan(id: string) {
   const set = await getSet(id)
-  const todo = set.outputs.filter((o) => o.status === "pending" && !o.brief)
+  // Autonomous scale posters are planned their own way (see `planAuto`).
+  const todo = set.outputs.filter((o) => o.status === "pending" && !o.brief && !o.auto)
   const groups = new Map<string, Output[]>()
   for (const o of todo) {
     const key = `${o.poster}|${o.mode}|${o.mode === "variant" ? (o.styleId ?? "") : ""}|${o.feedback ?? ""}|${o.from ?? ""}|${o.inspiration?.join(",") ?? ""}`
@@ -2110,6 +2136,10 @@ async function request(id: string, outputId: string, style: Promise<StyleRef | n
     return { prompt: blankAgainPrompt(current.feedback, previous.length > 0), images: [photo, ...previous] }
   }
   const current = set.outputs.find((o) => o.id === outputId)!
+  if (current.auto) {
+    const { prompt, images, aspect } = await autoRequest(set, current)
+    return { prompt, images, aspect }
+  }
   const p = set.posters.find((q) => q.index === current.poster)
   if (!p?.file) throw new Error("Needs the extracted poster")
   const reference = await readSetFile(id, p.file)

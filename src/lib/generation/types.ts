@@ -104,7 +104,16 @@ export type Output = Asset & {
   createdAt: string
   /** A city poster: what kind, and how it was asked for (see citys/studio-types). */
   city?: CityOutputInfo
+  /** Planned by Autonomous scale (styles/auto.ts): its `poster` is the board image whose look it takes. */
+  auto?: boolean
+  /** More board images (poster indices) it was painted with, for their look. */
+  refs?: number[]
+  /** Autonomous scale: Gemini's look at it once painted, against its series (styles/auto-check.ts). */
+  check?: AutoCheck
 }
+
+/** Scores 1–10: the series' hand, its feeling, the poster on its own; `notes` say what to change. */
+export type AutoCheck = { style: number; feeling: number; appeal: number; notes: string }
 
 export type GenerateGroup = {
   count: number
@@ -189,6 +198,8 @@ export type Batch = {
   expanded: boolean
   /** A city set's batch: what it asks for instead of `options` (whose counts are then 0). */
   city?: CityRequest
+  /** An Autonomous scale batch (styles/auto.ts): `count` new posters spread over `levels`. */
+  auto?: { levels: Creativity[]; count: number }
 }
 
 export type SetStatus = "queued" | "running" | "done" | "error"
@@ -235,6 +246,8 @@ export type GenerationSet = {
   sceneId?: string
   /** A city set: the place its posters show (see citys/generate.ts); the Generation page leaves these to Citys. */
   city?: CitySetInfo
+  /** A style's Autonomous scale set: its posters are the board's images, `files[i]` the board file of poster i (styles/auto.ts). */
+  style?: { id: string; name: string; files: string[] }
   /**
    * Times what failed in it for a passing reason was run again by itself
    * (see `heal` in run.ts); 0 when asked for anew. Sets made before that

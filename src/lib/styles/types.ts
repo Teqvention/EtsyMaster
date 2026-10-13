@@ -68,6 +68,56 @@ export type Style = {
   /** "city": made for city posters, with `city` (Citys → Styles); a normal style when absent. */
   kind?: "city"
   city?: CityStyleData
+  /** What every image on the board is and what they share, read for Autonomous scale (styles/study.ts). */
+  study?: StyleStudy
+  studyStatus?: "running" | "error"
+  /** ISO 8601: when the study running now began (one older than a study takes was lost with its server). */
+  studyAt?: string
+  studyError?: string
+  /** The generation set Autonomous scale paints this style's new posters into (styles/auto.ts). */
+  autoSet?: string
+}
+
+/**
+ * The whole board, read image by image and then as one series: what each
+ * poster shows, how it's composed, what it makes you feel and how it's
+ * painted; the families of images painted by one hand; and the world, the
+ * feeling and the rules new posters keep. Numbers are 1-based into `files`.
+ */
+export type StyleStudy = {
+  /** Two or three sentences: what the series is and why buyers love it. */
+  essence: string
+  /** The feeling every poster shares, precisely, and what it never is. */
+  emotion: string
+  world: { subjects: string[]; settings: string[]; props: string[]; activities: string[] }
+  /** Recurring compositions: viewpoint, framing, where the subject sits. */
+  compositions: string[]
+  /** Images painted by one hand; every image is in one. */
+  families: { name: string; look: string; images: number[] }[]
+  images: StudyImage[]
+  /** What every new poster keeps. */
+  keep: string[]
+  /** What breaks the style, image models' defaults first. */
+  avoid: string[]
+  /** The board files read, in board order. */
+  files: string[]
+  /** ISO 8601 */
+  at: string
+}
+
+export type StudyImage = {
+  /** 1-based, into `StyleStudy.files`. */
+  n: number
+  title: string
+  subject: string
+  scene: string
+  composition: string
+  emotion: string
+  rendering: string
+  palette: string[]
+  text: string | null
+  /** 1–5: how strong a poster it is. */
+  strength: number
 }
 
 export type StyleSummary = Pick<
@@ -93,7 +143,9 @@ export type StyleSource = {
   images: { file: string; label: string; approved: boolean }[]
 }
 
-/** A moodboard reads best with a handful of images; more than this is noise. */
-export const MAX_IMAGES = 24
+/** As many as anyone adds, in practice: the guide reads a spread of them, Autonomous scale's study every one. */
+export const MAX_IMAGES = 1000
+/** Posters one Autonomous scale request asks for at most. */
+export const MAX_AUTO = 200
 /** At most this many go to Gemini when the guide is written. */
 export const READ_IMAGES = 10

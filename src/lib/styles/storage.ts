@@ -37,11 +37,20 @@ export function fileKey(id: string, file: string) {
 
 export const fileUrl = (id: string, file: string) => `/api/styles/${id}/files/${file}`
 
+/** Longer than any study of the board takes: one still "running" after this went with its server. */
+const STUDY_LOST = 15 * 60_000
+
 async function view(style: Stored): Promise<Style> {
   const stopped = style.guideStatus === "running" && !reading.has(style.id) && !(await isLive(style.runner))
   const dropped = !!style.incoming && !(await isLive(style.importer))
-  if (!stopped && !dropped) return style
-  return { ...style, ...(stopped && { guideStatus: "idle" as const }), ...(dropped && { incoming: undefined }) }
+  const lost = style.studyStatus === "running" && !(Date.now() - Date.parse(style.studyAt ?? "") < STUDY_LOST)
+  if (!stopped && !dropped && !lost) return style
+  return {
+    ...style,
+    ...(stopped && { guideStatus: "idle" as const }),
+    ...(dropped && { incoming: undefined }),
+    ...(lost && { studyStatus: undefined }),
+  }
 }
 
 async function read(id: string): Promise<Style> {
