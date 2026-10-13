@@ -1,4 +1,5 @@
 import { combine, remix, remixIdeas } from "@/lib/citys/composition/ai"
+import { improveRebuild } from "@/lib/citys/composition/rebuild"
 import type { CompositionData } from "@/lib/citys/composition/model"
 import {
   adoptCandidate,
@@ -8,6 +9,7 @@ import {
   duplicateComposition,
   getComposition,
   renameComposition,
+  markExample,
   restoreVersion,
   saveLayout,
 } from "@/lib/citys/composition/store"
@@ -43,7 +45,9 @@ export async function DELETE(_request: Request, { params }: Context) {
 
 // `{ action }`: ideas (five remix ideas), remix `{ ideas, free, creativity }`,
 // combine `{ styleId, count, creativity }`, adopt | drop | own `{ candidate, name? }`,
-// restore `{ version }`, duplicate.
+// restore `{ version }`, duplicate, improve `{ passes }` (more rounds of
+// comparing with the image it was rebuilt from; 0 only compares), example
+// `{ on }` (a good example of a best-selling layout).
 export async function POST(request: Request, { params }: Context) {
   const { id } = await params
   const body = ((await request.json().catch(() => ({}))) ?? {}) as Record<string, unknown>
@@ -68,6 +72,11 @@ export async function POST(request: Request, { params }: Context) {
         return restoreVersion(id, s(body.version))
       case "duplicate":
         return duplicateComposition(id)
+      case "improve":
+        await improveRebuild(id, Math.max(0, Math.min(8, Math.round(Number(body.passes ?? 3)) || 0)))
+        return getComposition(id)
+      case "example":
+        return markExample(id, body.on !== false)
       default:
         throw new Error("Unknown action")
     }

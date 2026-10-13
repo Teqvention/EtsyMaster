@@ -6,6 +6,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronRightIcon,
+  CornerDownRightIcon,
   LoaderCircleIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -776,6 +777,8 @@ function OursCellView({ cell }: { cell: OursCell | undefined }) {
 }
 
 function PlaceRow({ place: p, open, onOpen, all, ours }: { place: RankedPlace; open: boolean; onOpen: () => void; all: RankedPlace[]; ours?: OursCell }) {
+  // A sub-place sold by its own name sits right under its city, indented.
+  const sub = p.sub
   return (
     <>
       <tr
@@ -785,8 +788,10 @@ function PlaceRow({ place: p, open, onOpen, all, ours }: { place: RankedPlace; o
           open && "bg-accent/40"
         )}
       >
-        <td className="pr-2 align-top text-xs text-muted-foreground tabular-nums">{p.position}</td>
-        <td className="min-w-0 pr-3 align-top">
+        <td className="pr-2 align-top text-xs text-muted-foreground tabular-nums">
+          {sub ? <CornerDownRightIcon className="ml-auto size-3.5 text-muted-foreground/70" aria-label={`Under ${sub.parentName}`} /> : p.position}
+        </td>
+        <td className={cn("min-w-0 pr-3 align-top", sub && "pl-4")}>
           <div className="flex min-w-0 items-start gap-2">
             <TierBadge tier={p.tier} className="mt-px" />
             <div className="min-w-0">
@@ -802,15 +807,27 @@ function PlaceRow({ place: p, open, onOpen, all, ours }: { place: RankedPlace; o
                 >
                   {p.name}
                 </button>
-                {p.children.length > 0 && (
+                {p.children.length > 0 && !sub && (
                   <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground tabular-nums" title={p.children.map((c) => c.name).join(", ")}>
                     <ChevronRightIcon className={cn("size-3 transition-transform duration-150 ease-out", open && "rotate-90")} />
                     {p.children.length}
                   </span>
                 )}
+                {sub && (
+                  <span
+                    className="shrink-0 rounded-full bg-brand/10 px-1.5 text-[10px] font-medium text-brand"
+                    title={
+                      sub.test
+                        ? "Buyers seek it by its own name, but most of that is one listing: one test poster first"
+                        : "Buyers seek it by its own name in several shops: a poster and listing of its own, its name on the poster"
+                    }
+                  >
+                    {sub.test ? "Test poster first" : "Own poster"}
+                  </span>
+                )}
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                <span className="truncate">{placeLine(p)}</span>
+                <span className="truncate">{sub ? `${KIND_LABEL[p.kind] ?? p.kind} in ${sub.parentName}${sub.leads ? `, most of its sales` : ""} · by its own name` : placeLine(p)}</span>
                 {p.tags.slice(0, 3).map((t) => (
                   <span key={t} className="rounded-sm bg-muted px-1 text-[10px]">
                     {t}

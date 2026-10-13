@@ -1,6 +1,7 @@
 import { readDoc, updateDoc } from "@/lib/db/documents"
 import { askJson } from "@/lib/mockups/gemini"
 
+import { aliasKey, cityPark, rawKey } from "./folding"
 import { continentOf, nameKey, placeId } from "./geo"
 import {
   PLACE_KINDS,
@@ -32,36 +33,7 @@ export async function register(): Promise<PlaceRegister> {
   return held?.places ? held : EMPTY
 }
 
-/** A raw name's key in `known`: name, country and kind as read. */
-export const rawKey = (p: RawPlace) => `${nameKey(p.name)}|${p.country || "*"}|${p.kind}`
-
-const aliasKey = (name: string, country: string) => `${nameKey(name)}|${country || "*"}`
-
-/** The place a raw name stands for, if the register knows it. */
-export function resolve(reg: PlaceRegister, p: RawPlace): Place | null {
-  const id = reg.known[rawKey(p)] ?? reg.aliases[aliasKey(p.name, p.country)]
-  return (id && reg.places[id]) || null
-}
-
-/** A park named for a city's own green (Central Park, Hyde Park), not a national or state park out in nature. */
-export const cityPark = (kind: string, name: string) => kind === "park" && !/\b(national|state|provincial)\b/i.test(name)
-
-/** Whether a place folds into its parent in the ranking: districts, landmarks, beaches, and a city's own parks. */
-export function foldsInto(place: Place, parent: Place | undefined) {
-  if (SUB_KINDS.includes(place.kind)) return true
-  return cityPark(place.kind, place.name) && !!parent && (parent.kind === "city" || parent.kind === "town" || parent.kind === "district")
-}
-
-/** Follows a place up to the place it folds into in the ranking (itself unless it's a district, landmark, beach or a city's park). */
-export function rootOf(reg: PlaceRegister, place: Place): Place {
-  let current = place
-  for (let hops = 0; hops < 4 && current.parent; hops++) {
-    const parent = reg.places[current.parent]
-    if (!parent || parent.id === current.id || !foldsInto(current, parent)) break
-    current = parent
-  }
-  return current
-}
+// The rules of how places hang together (resolve, foldsInto, rootOf…) are in folding.ts.
 
 // --- Folding new names in ---
 

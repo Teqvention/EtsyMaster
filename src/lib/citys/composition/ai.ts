@@ -19,7 +19,7 @@ import {
   type TextCase,
 } from "./model"
 import { previewJpeg } from "./raster"
-import { addCandidates, changeComposition, getComposition, readCompositionFile, saveSource, setBusy, withVersion } from "./store"
+import { addCandidates, changeComposition, exampleCompositions, getComposition, readCompositionFile, saveSource, setBusy, withVersion } from "./store"
 
 // Gemini as the layout designer. It rebuilds a poster's layout from an
 // image (every text with its words, the nearest free Google Font, size,
@@ -28,6 +28,9 @@ import { addCandidates, changeComposition, getComposition, readCompositionFile, 
 // once and corrects it. It suggests five remixes and makes them, and
 // combines a layout with a style or another image. Layouts come back as a
 // flat list of elements on the 1000-wide canvas and are checked before use.
+// Remixes and combinations see the good examples (compositions marked as
+// best-selling layouts, as the posters they were rebuilt from) and the
+// shop's own rules for what sells.
 
 const PHOTO_ROLE_VALUES: PhotoRole[] = ["dominant", "vibrant", "muted", "dark", "light"]
 
@@ -237,12 +240,44 @@ function flat(e: CompositionElement): RawElement {
 
 // --- Remixes ---
 
+/**
+ * What the shop has learnt makes its city posters sell (Robin, 7 Oct, after
+ * measuring the best-selling layouts of other shops against our own).
+ */
+const PRINCIPLES = `What makes city posters like ours sell (the shop's own experience):
+- Everything sits in one calm block, every gap measured: the space under the last line of text equals the space between the photo and the text, margins are equal left and right, the place's name has exactly the room it needs.
+- A block of copy set justified fills its block exactly, edge to edge, often in 2 or 3 columns like a newspaper; no ragged holes, no orphaned last words.
+- The place's name leads, large; small type around it can carry a bold code on the left and "EST. 1624", the country or the coordinates on the right.
+- High quality and clean: one font pairing, generous margins, thin rules that align with the text, no heavy black areas.`
+
+/** Up to three good examples (not `except`), as the posters they were rebuilt from or as drawn. */
+async function examples(except: string): Promise<Buffer[]> {
+  const list = (await exampleCompositions().catch(() => [])).filter((c) => c.id !== except).slice(0, 3)
+  const images = await Promise.all(
+    list.map(async (c) => {
+      const original = c.rebuild ? await readCompositionFile(c.id, c.rebuild.original).catch(() => null) : null
+      const image = original ?? (await previewJpeg({ data: c, facts: SAMPLE_FACTS, photo: null, width: 700 }).catch(() => null))
+      return image ? sharp(image).resize(800, 800, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer() : null
+    })
+  )
+  return images.flatMap((i) => (i ? [i] : []))
+}
+
+/** The prompt's lines that introduce the good examples, numbered after `before` images. */
+const exampleNote = (before: number, count: number) =>
+  count
+    ? `\n\nImage${count > 1 ? `s ${before + 1}–${before + count} are` : ` ${before + 1} is`} good example${count > 1 ? "s" : ""}: best-selling city posters. Learn what makes them work (hierarchy, proportions, margins, how type sizes relate, spacing) and design to that standard, without copying one of them.`
+    : ""
+
 export async function remixIdeas(id: string) {
   const c = await getComposition(id)
   const preview = await previewJpeg({ data: c, facts: SAMPLE_FACTS, photo: null, width: 700 })
+  const shown = await examples(id)
   const answer = await askJson<{ ideas?: string[] }>(
-    `You are a poster designer with a sharp eye for typography and layout. The image is a city poster layout (the grey area is where the photo goes). Suggest exactly 5 remixes of it, each one sentence of at most 16 words, each a clearly different, tasteful direction a buyer would love on a wall: other typography, another arrangement, another frame for the photo, a colour block, a rule system, a bolder or quieter version. Keep each one sellable as a city poster.`,
-    [preview],
+    `You are a poster designer with a sharp eye for typography and layout. Image 1 is a city poster layout (the grey area is where the photo goes). Suggest exactly 5 remixes of it, each one sentence of at most 16 words, each a clearly different, tasteful direction a buyer would love on a wall: other typography, another arrangement, another frame for the photo, a colour block, a rule system, a bolder or quieter version. Keep each one sellable as a city poster.${exampleNote(1, shown.length)}
+
+${PRINCIPLES}`,
+    [preview, ...shown],
     { schema: { type: "OBJECT", properties: { ideas: { type: "ARRAY", items: STR } }, required: ["ideas"] }, temperature: 0.9 }
   )
   const ideas = (answer.ideas ?? []).filter((t) => typeof t === "string" && t.trim()).slice(0, 5).map((text) => ({ id: newElementId(), text: text.trim() }))
@@ -257,19 +292,21 @@ const CREATIVITY = [
   "Make a new layout in the instruction's spirit; keep only the place's information and a photo frame.",
 ]
 
-async function remake(data: CompositionData, instruction: string, creativity: number, images: Buffer[] = []) {
+async function remake(data: CompositionData, instruction: string, creativity: number, images: Buffer[] = [], shown: Buffer[] = []) {
   const json = JSON.stringify(data.elements.map((e) => flat(e)))
   const answer = await askJson<RawLayout>(
     `You redesign a city poster layout. ${instruction}
 ${CREATIVITY[Math.min(4, Math.max(0, creativity - 1))]}
 
-Design with real care for posters: generous, consistent margins (at least 50 units at the edges), one clear hierarchy (the place's name leads), type sizes that suit each other, letter spacing that suits the case, lines and boxes that align with the text, nothing crammed. Keep the placeholders. Keep exactly one photo frame.
+Design with real care for posters: generous, consistent margins (at least 50 units at the edges), one clear hierarchy (the place's name leads), type sizes that suit each other, letter spacing that suits the case, lines and boxes that align with the text, nothing crammed. Keep the placeholders. Keep exactly one photo frame.${exampleNote(images.length, shown.length)}
+
+${PRINCIPLES}
 
 ${LAYOUT_RULES}
 
 THE LAYOUT NOW (ratio ${data.ratio.toFixed(4)}, background ${data.background.kind === "fixed" ? data.background.hex : data.background.fallback}):
 ${json}`,
-    images,
+    [...images, ...shown],
     { schema: LAYOUT_SCHEMA, temperature: 0.7 + creativity * 0.05 }
   )
   return toLayout({ ...answer, ratio: data.ratio })
@@ -285,7 +322,8 @@ export async function remix(id: string, ideaIds: string[], free: string, creativ
   void (async () => {
     try {
       const made = []
-      for (const ask of asks) made.push({ label: ask, data: await remake(c, `Do this: ${ask}`, creativity) })
+      const shown = await examples(id)
+      for (const ask of asks) made.push({ label: ask, data: await remake(c, `Do this: ${ask}`, creativity, [], shown) })
       await addCandidates(id, made)
       await changeComposition(id, (x) => ({ ...x, busy: undefined, remixes: (x.remixes ?? []).filter((r) => !ideaIds.includes(r.id)) }))
     } catch (error) {
@@ -306,12 +344,13 @@ export async function combine(id: string, { styleId, image, count, creativity }:
   void (async () => {
     try {
       const images = image ? [await sharp(image).rotate().resize(1400, 1400, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer()] : []
+      const shown = await examples(id)
       const made = []
       for (let i = 0; i < n; i++) {
         const instruction = style
           ? `Bring it together with the style "${style.name}": its palette (${style.guide!.palette.map((p) => `${p.hex} ${p.role}`).join(", ")}), its mood (${style.guide!.mood}) and its lettering (${style.guide!.typography ?? "none"}): typography, colours and decorative elements that sit naturally with posters painted in it. Variant ${i + 1} of ${n}: make it different from the others.`
           : `Image 1 is another poster. Combine our layout with what makes that poster's layout good (its typography, arrangement, framing or colour use) into a new layout. Variant ${i + 1} of ${n}: make it different from the others.`
-        made.push({ label: style ? `With ${style.name}${n > 1 ? ` (${i + 1})` : ""}` : `With the image${n > 1 ? ` (${i + 1})` : ""}`, data: await remake(c, instruction, creativity, images) })
+        made.push({ label: style ? `With ${style.name}${n > 1 ? ` (${i + 1})` : ""}` : `With the image${n > 1 ? ` (${i + 1})` : ""}`, data: await remake(c, instruction, creativity, images, shown) })
       }
       await addCandidates(id, made)
       await setBusy(id, null)

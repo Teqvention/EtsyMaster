@@ -41,18 +41,23 @@ export async function fontFile(family: string, weight: number, italic: boolean):
   return data
 }
 
+/** A font's file: the nearest weight the family has when that one's missing (print and editor alike). */
+export function fontData(spec: TextElement["font"]): Promise<Buffer> {
+  return fontFile(spec.family, spec.weight, spec.italic).catch(async (error) => {
+    const weights = (await familyOf(spec.family))?.weights ?? []
+    const nearest = [...weights].sort((a, b) => Math.abs(a - spec.weight) - Math.abs(b - spec.weight))[0]
+    if (!nearest || nearest === spec.weight) throw error
+    return fontFile(spec.family, nearest, false)
+  })
+}
+
 /** A font parsed, held in memory; the nearest weight the family has when that one's missing. */
 export function loadFont(spec: TextElement["font"]): Promise<Font> {
   const key = fontKey(spec)
   let font = parsed.get(key)
   if (!font) {
     font = (async () => {
-      const data = await fontFile(spec.family, spec.weight, spec.italic).catch(async (error) => {
-        const weights = (await familyOf(spec.family))?.weights ?? []
-        const nearest = weights.sort((a, b) => Math.abs(a - spec.weight) - Math.abs(b - spec.weight))[0]
-        if (!nearest || nearest === spec.weight) throw error
-        return fontFile(spec.family, nearest, false)
-      })
+      const data = await fontData(spec)
       return opentype.parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
     })()
     font.catch(() => parsed.delete(key))

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon, XIcon } from "lucide-react"
+import { CornerDownRightIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { TierBadge } from "@/components/citys/tier"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
@@ -154,11 +154,12 @@ export function CityRail({
                   on ? "bg-accent" : "[@media(hover:hover)]:hover:bg-accent/60"
                 )}
               >
+                {c.sub && <CornerDownRightIcon className="-mr-1 size-3 shrink-0 text-muted-foreground/70" aria-hidden />}
                 <TierBadge tier={c.tier} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{c.name}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    {c.countryName}
+                    {c.sub ? `in ${c.sub.parentName}${c.sub.test ? " · test poster first" : " · own poster"}` : c.countryName}
                     {have && <span className="ml-1 text-emerald-700 dark:text-emerald-400">· {c.coverage!.confirmed + c.coverage!.open} ours</span>}
                     {!!c.coverage?.replace && <span className="ml-1 text-amber-700 dark:text-amber-400">· {c.coverage.replace} to replace</span>}
                   </span>

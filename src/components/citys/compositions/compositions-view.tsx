@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { CopyIcon, FileImageIcon, LayoutTemplateIcon, LoaderCircleIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { CopyIcon, FileImageIcon, LayoutTemplateIcon, LoaderCircleIcon, MoreHorizontalIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -11,11 +11,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { CompositionSummary } from "@/lib/citys/composition/model"
+import { cn } from "@/lib/utils"
 
 // Citys → Compositions: the layouts city photos are set in for print, the
 // place's name, country, coordinates and words around the photo. One starts
 // from our starter layout or is rebuilt from a poster image; the upload
-// picks one per group of posters.
+// picks one per group of posters. A star marks a good example (remixes learn
+// from those), a percentage how alike a rebuilt one came out.
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init, headers: init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined })
@@ -133,8 +135,14 @@ export function CompositionsView() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2.5">
+                  {c.example && <StarIcon className="size-3.5 shrink-0 fill-amber-400 text-amber-500" aria-label="Good example" />}
                   <span className="truncate text-sm font-medium">{c.name}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">v{c.version}</span>
+                  {c.score !== undefined && (
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums" title="How alike the poster it was rebuilt from">
+                      {Math.round(c.score)} %
+                    </span>
+                  )}
+                  <span className={cn("shrink-0 text-xs text-muted-foreground tabular-nums", c.score === undefined && "ml-auto")}>v{c.version}</span>
                 </div>
               </Link>
               <DropdownMenu>

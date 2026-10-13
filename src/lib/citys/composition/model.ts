@@ -76,6 +76,8 @@ export type TextElement = ElementBase & {
   /** Shrinks the font until the text fits its box (a long city name on one line). */
   fit: "none" | "shrink"
   opacity?: number
+  /** The words as printed on the poster it was rebuilt from: what a comparison with it is set in. */
+  literal?: string
 }
 
 export type RectElement = ElementBase & { type: "rect"; fill: Color; radius: number; stroke?: { width: number; color: Color }; opacity?: number }
@@ -101,6 +103,25 @@ export type CompositionData = {
 }
 
 export type CompositionVersion = { id: string; number: number; data: CompositionData; note: string; at: string }
+
+/**
+ * How closely the layout matches the poster it was rebuilt from: the
+ * score (0–100: its ink where the original's is, and its pixels like the
+ * original's, the photo aside), each pass's, and the images compared
+ * (the flat original, ours set in the original's words, where they differ).
+ */
+export type Rebuild = {
+  score: number
+  passes: { score: number; note: string }[]
+  original: string
+  ours: string
+  diff: string
+  /** The original's photo, out of its frame: what the photo frame shows when the two are laid over each other. */
+  photo?: string
+  /** The poster came out of a photo of it (a mockup), not a design file. */
+  fromPhoto: boolean
+  at: string
+}
 export type CompositionCandidate = { id: string; label: string; data: CompositionData; at: string }
 
 export type Composition = CompositionData & {
@@ -113,6 +134,10 @@ export type Composition = CompositionData & {
   candidates: CompositionCandidate[]
   /** Five ways to remix it, from the last time it was asked. */
   remixes?: { id: string; text: string }[]
+  /** Rebuilt from an image: how closely it matches it. */
+  rebuild?: Rebuild
+  /** A good example of a best-selling layout: remixes and new layouts learn from these. */
+  example?: boolean
   /** Building it from an image, remixing it…: what's going on, while it is. */
   busy?: string
   busyError?: string
@@ -120,9 +145,11 @@ export type Composition = CompositionData & {
   updatedAt: string
 }
 
-export type CompositionSummary = Pick<Composition, "id" | "name" | "ratio" | "version" | "createdAt" | "updatedAt" | "busy"> & {
+export type CompositionSummary = Pick<Composition, "id" | "name" | "ratio" | "version" | "createdAt" | "updatedAt" | "busy" | "example"> & {
   elements: number
   preview: string
+  /** Rebuilt from an image: how alike it came out (0–100). */
+  score?: number
 }
 
 // --- What a place puts into the placeholders ---
@@ -139,6 +166,8 @@ export type PlaceFacts = {
   tagline: string
   /** A paragraph about the place, 60 to 110 words. */
   description: string
+  /** A longer text about the place, 220 to 300 words, for posters with columns of copy. */
+  story?: string
   /** When it was founded, as a year or century ("1837", "c. 880"), or "". */
   founded: string
   /** Its best known sight. */
@@ -155,6 +184,7 @@ export const PLACEHOLDERS: { token: string; label: string }[] = [
   { token: "{lng}", label: "Longitude" },
   { token: "{tagline}", label: "Tagline" },
   { token: "{description}", label: "Paragraph" },
+  { token: "{story}", label: "Long text (columns)" },
   { token: "{founded}", label: "Founded" },
   { token: "{landmark}", label: "Landmark" },
 ]
@@ -165,6 +195,8 @@ const degrees = (value: number | null, positive: string, negative: string) =>
 /** The text with its placeholders filled from the place. */
 export function fillText(text: string, facts: PlaceFacts) {
   const coords = facts.lat !== null && facts.lng !== null ? `${degrees(facts.lat, "N", "S")}, ${degrees(facts.lng, "E", "W")}` : ""
+  // A text led by the place's name in bold ("**{city}** {story}") doesn't say the name twice.
+  const led = (copy: string) => (/\*\*\{city\}\*\*\s*\{(story|description)\}/.test(text) ? withoutLead(copy, facts.city) : copy)
   const values: Record<string, string> = {
     city: facts.city,
     country: facts.country,
@@ -174,11 +206,18 @@ export function fillText(text: string, facts: PlaceFacts) {
     lat: degrees(facts.lat, "N", "S"),
     lng: degrees(facts.lng, "E", "W"),
     tagline: facts.tagline,
-    description: facts.description,
+    description: led(facts.description),
+    story: led(facts.story || facts.description),
     founded: facts.founded,
     landmark: facts.landmark,
   }
   return text.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match)
+}
+
+/** Copy without the place's name it starts with: "Chicago rises from…" after a bold "Chicago" reads "rises from…". */
+function withoutLead(copy: string, name: string) {
+  if (!name || !copy.toLowerCase().startsWith(name.toLowerCase())) return copy
+  return copy.slice(name.length).replace(/^[\s,]+/, "")
 }
 
 export function applyCase(text: string, c: TextCase) {
@@ -199,6 +238,8 @@ export const SAMPLE_FACTS: PlaceFacts = {
   tagline: "The windy city on the lake",
   description:
     "Chicago rises from the shore of Lake Michigan, a city of bold architecture and big shoulders. Its skyline grew from the ashes of the Great Fire of 1871 into one of the most admired in the world, from the steel and glass of the Loop to the bridges over the river. Summer brings festivals to the lakefront, winter brings the wind that gave the city its name.",
+  story:
+    "Chicago rises from the shore of Lake Michigan, a city of bold architecture and big shoulders. After the Great Fire of 1871 it rebuilt itself with a daring that gave the world the skyscraper, and its skyline still reads like a history of modern building, from the terracotta towers of the Loop to the steel and glass that crowd the river. The river itself is part of the story: engineers reversed its flow in 1900, and today architecture boats glide past the old bridges every summer evening. Neighbourhoods each keep their own character, from the brownstones of Lincoln Park to the murals of Pilsen and the jazz and blues clubs of the South Side. Millennium Park draws crowds to its gleaming sculpture and open air concerts, while the lakefront trail runs for eighteen miles beside beaches that feel far from the city. Winters are long and the wind lives up to the city's nickname, but the first warm days fill every terrace and ball park. Deep dish pizza, the Art Institute's great collections and the view from a hundred floors up all belong to a visit, and so does a walk along the lake at dawn.",
   founded: "1837",
   landmark: "Willis Tower",
 }

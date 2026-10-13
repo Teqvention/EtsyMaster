@@ -12,8 +12,15 @@ import { cn } from "@/lib/utils"
 // (renderSvg, the fonts' own outlines), with a frame over each element to
 // pick it, drag it and pull its edges. Moves snap to the canvas's centre
 // and edges and to the other elements' edges, and say so with a guide.
+// Rebuilt from a poster, the original can lie over it: on one side of a
+// line drawn across (dragged left and right), or in difference, where
+// whatever matches goes black and whatever is off lights up; editing goes
+// on underneath.
 
 export type Box = { x: number; y: number; w: number; h: number }
+
+/** The original over the canvas: left of `at` (0–1 across) on a slider, or in difference. */
+export type Overlay = { src: string; mode: "slider" | "difference"; at: number }
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const
 type Handle = (typeof HANDLES)[number]
@@ -33,6 +40,8 @@ export function CompositionCanvas({
   onSelect,
   onBox,
   maxHeight,
+  overlay,
+  onOverlayAt,
 }: {
   data: CompositionData
   ratio: number
@@ -45,6 +54,8 @@ export function CompositionCanvas({
   /** A move or resize, in canvas units; `merge` groups one drag into one undo step. */
   onBox: (id: string, box: Box, merge: string) => void
   maxHeight: number
+  overlay?: Overlay | null
+  onOverlayAt?: (at: number) => void
 }) {
   const fonts = useLoadedFonts(fontsOf(data))
   const wrap = React.useRef<HTMLDivElement>(null)
@@ -167,6 +178,12 @@ export function CompositionCanvas({
 
   const current = elements.find((e) => e.id === selected)
 
+  function slide(event: React.PointerEvent<HTMLDivElement>) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    const box = event.currentTarget.parentElement!.getBoundingClientRect()
+    onOverlayAt?.(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)))
+  }
+
   return (
     <div ref={wrap} className="flex w-full justify-center">
       <div
@@ -175,6 +192,16 @@ export function CompositionCanvas({
         onPointerDown={() => onSelect(null)}
       >
         <div className="absolute inset-0" dangerouslySetInnerHTML={{ __html: svg }} />
+        {overlay && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={overlay.src}
+            alt=""
+            draggable={false}
+            className={cn("pointer-events-none absolute inset-0 size-full", overlay.mode === "difference" && "mix-blend-difference")}
+            style={overlay.mode === "slider" ? { clipPath: `inset(0 ${(1 - overlay.at) * 100}% 0 0)` } : undefined}
+          />
+        )}
         {elements.map((el) =>
           el.hidden ? null : (
             <div
@@ -216,6 +243,33 @@ export function CompositionCanvas({
         {guides.y.map((y) => (
           <div key={`y${y}`} className="pointer-events-none absolute right-0 left-0 h-px bg-pink-500" style={{ top: y * scale }} />
         ))}
+        {overlay?.mode === "slider" && (
+          <div
+            role="slider"
+            aria-label="Original and ours"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(overlay.at * 100)}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              const step = e.key === "ArrowLeft" ? -0.02 : e.key === "ArrowRight" ? 0.02 : 0
+              if (!step) return
+              e.preventDefault()
+              e.stopPropagation()
+              onOverlayAt?.(Math.min(1, Math.max(0, overlay.at + step)))
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              e.currentTarget.setPointerCapture(e.pointerId)
+            }}
+            onPointerMove={slide}
+            className="group/slider absolute top-0 bottom-0 z-10 w-5 -translate-x-1/2 cursor-ew-resize touch-none outline-none"
+            style={{ left: `${overlay.at * 100}%` }}
+          >
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-brand" />
+            <div className="absolute top-1/2 left-1/2 flex h-8 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-brand bg-background shadow-sm transition-transform duration-150 ease-out group-focus-visible/slider:ring-3 group-focus-visible/slider:ring-ring/50 group-active/slider:scale-95" />
+          </div>
+        )}
       </div>
     </div>
   )

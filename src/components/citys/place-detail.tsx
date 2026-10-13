@@ -14,7 +14,8 @@ import { PLACE_KINDS, SETTINGS, type PlaceKind, type RankedPlace, type Setting }
 import { formatCompact, formatNumber, formatRate } from "@/lib/etsy/format"
 
 // One place opened in the ranking: its districts and landmarks with their
-// own numbers, its best listings across the shops, and what the register
+// own numbers (and, sold by their own name, their own tier and whether one
+// is worth a poster of its own), its best listings across the shops, and what the register
 // says about it, put right by hand when Gemini got it wrong (another kind,
 // size or setting, its tags, or folded into the place it really is).
 
@@ -30,8 +31,19 @@ export function PlaceDetail({ place, all }: { place: RankedPlace; all: RankedPla
             {place.children.map((c) => (
               <li key={c.id} className="grid grid-cols-[minmax(0,1fr)_3.5rem_3rem_2.5rem] items-center gap-2 border-b py-1 text-xs last:border-b-0">
                 <span className="min-w-0">
-                  <span className="block truncate font-medium">{c.name}</span>
-                  <span className="text-[10px] text-muted-foreground capitalize">{c.kind}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-medium">{c.name}</span>
+                    {c.poster && <span className="shrink-0 rounded-full bg-brand/10 px-1.5 text-[10px] font-medium text-brand">{c.poster === "test" ? "Test poster" : "Own poster"}</span>}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    <span className="capitalize">{c.kind}</span>
+                    {c.own && (
+                      <span title="The listings that lead with its own name, scored on the places' own scale">
+                        {" "}
+                        · by its own name {c.own.tier} {c.own.score} · {formatRate(c.own.spm)} sales/mo in {c.own.shops} shop{c.own.shops === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </span>
                 </span>
                 <span className="text-right tabular-nums" title="Sales a month">
                   {formatRate(c.spm)}

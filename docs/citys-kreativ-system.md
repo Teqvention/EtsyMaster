@@ -1,6 +1,7 @@
 # Citys: das Kreativ-System (Levels, Sky, Stil-Treue, Sets, Produce)
 
-**Stand:** 12.10.2026. Wie ein Citys-Bild entsteht und warum. Code: `src/lib/citys/prompts.ts` (alle Texte für
+**Stand:** 13.10.2026. Wie ein Citys-Bild entsteht und warum (dazu: Kompositionen 1:1 nachbauen, Abschnitt 15;
+Unterorte und Ranking, Abschnitt 16). Code: `src/lib/citys/prompts.ts` (alle Texte für
 Gemini und Nano Banana), `skies.ts` (die Himmel), `generate.ts` (was pro Referenz gemalt wird), `produce.ts`
 (Produktionen), `briefs.ts` (Orts-Briefings). Die Oberfläche: Stealer → „… per photo“, Stil-Seite → „Produce cities“.
 
@@ -267,3 +268,87 @@ lockeren Stilen (der Pink-Sketch hat dickere, wackeligere Linien als unsere Bild
     Dächer-Panorama.
 
 **Gesamt seit 12.10.: über 180 Sync-Bilder, 0 Malfehler** (Ausfälle nur durch den Netzwerkausfall am 13.10.).
+
+## 15 · Kompositionen 1:1 nachbauen (13.10.)
+
+Ziel: Eine Poster-Komposition (PNG des Designs oder Mockup-Foto mit dem Poster) wird so nachgebaut, dass sie im eigenen
+Wortlaut Pixel für Pixel auf dem Original liegt; danach wird sie zur Vorlage für jeden Ort. Code:
+`src/lib/citys/composition/` — `sheet.ts` (Poster aus dem Foto, Licht), `measure.ts` (Messen), `fit.ts`
+(Schrift einpassen), `fontmatch.ts` (Schrift finden), `rebuild.ts` (Ablauf, Vergleich, Vorlage), `render.ts` (Satz).
+
+**Ablauf (Composition → „From an image“):**
+1. **Poster aus dem Foto:** Gemini nennt grob die vier Ecken, die Pixel finden die Papierkanten, entzerrt auf ein
+   Druckformat, Rahmenreste weg. Danach **gleichmäßiges Licht** (`evenLight`): Papierhelligkeit Zelle für Zelle aus dem
+   Papier selbst, das Foto ausgespart, jede Stelle auf Papierweiß gehoben (Glas-Reflexe, Rahmenschatten: 190–226 → eben).
+2. **Messen** (1000 breit, 1 Pixel = 1 Einheit): Papierfarbe, Fotorahmen (auch mit dunstigem, fast weißem Himmel:
+   Bänder über einer Dunstzone gehören zum Foto, wenn ihre Kanten die des Fotos sind), jede Zeile, jeder Absatz mit
+   Spalten, Linien, Farbfelder (Farbleisten werden in einzelne Felder geteilt), Symbole. Für Fließtext je Zeile das
+   **x-Höhen-Band auf 0,1 px** (Grauwert-Profil, Halbwertskanten) — aneinanderstoßende Zeilen verlieren sonst Ober-
+   und Unterlängen (12 statt 16 px → Schrift 25 % zu klein). Zusammengewachsene Doppelzeilen werden an der dünnsten
+   Stelle getrennt.
+3. **Gemini liest die Marken** (mit nummeriertem Overlay): Rolle (city, country, code, story …), Wortlaut, Schriftart,
+   und für Absätze **jede gedruckte Zeile** (mit Trennstrichen) sowie fett gesetzte Wörter als `**…**`.
+4. **Schrift finden:** jede Kandidatin (Geminis Tipp + Google Fonts derselben Art) wird gesetzt und mit den Pixeln
+   verglichen — Titel nach Tintenhöhe, Fließtext nach x-Höhe und Grundlinie, Blocksatz-Zeilen über die Wortabstände.
+   Die Weichheit eines Fotos wird einmal geeicht (sonst gewinnt immer die fettere Schrift); das Gewicht bleibt bei
+   Fließtext höchstens einen Schritt von Geminis Einschätzung. Jede gedruckte Zeile muss in der Schrift in die Spalte
+   passen; wo das Original eng gesetzt ist, bekommt der Absatz genau die nötige negative Laufweite.
+5. **Satz und Vergleich in Schleife:** gezeichnet im Wortlaut des Originals (mit dessen Zeilenumbrüchen, die Zeilen
+   bleiben im Blocksatz; mit dessen Foto), verglichen (Hälfte Tinte deckungsgleich auf 1 px, Hälfte Pixel gleich, Foto
+   ausgenommen). Jede Korrektur (Lage, Größe, Laufweite) wird einzeln probiert und nur behalten, wenn das ganze Poster
+   näher kommt; einmal schaut Gemini auf die Schrift. Ergebnis: Score, Bilder (Original, Nachbau, Differenz).
+6. **Vorlage:** Wörter werden Platzhalter; ein fetter Ortsname vorne im Text bleibt als `**{city}** {story}`
+   (die Geschichte wiederholt den Namen dann nicht).
+
+**Im Editor:** Score-Leiste über der Fläche („72,5 % alike“), Original darüberlegen (**Slider** zum Ziehen oder
+**Difference**: schwarz = deckungsgleich, hell = Abweichung; bearbeiten geht dabei weiter), „Check“ (nur neu
+vergleichen, nach Handkorrekturen), „Improve“ (3 Durchgänge), Dialog mit den Vergleichsbildern und allen Durchgängen.
+**„Good example“** markiert eine Komposition als Bestseller-Beispiel: Remix und Combine sehen bis zu drei Beispiele
+(als Originalposter) und die Shop-Regeln (gleiche Abstände Foto–Text–Unterkante, Textblock im Blocksatz voll
+ausgefüllt, Ortsname führt, Kopfzeile Kürzel links / EST. oder Land rechts, clean, keine schweren Schwarzflächen).
+Neu im Renderer: Silbentrennung im Blocksatz, `**fett**` im Text, Zeilenumbruch mit Blocksatz für Nachbauten; der
+Editor lädt bei fehlendem Schriftschnitt den nächsten (wie der Druck) statt eines grauen Kastens.
+
+**Tests (13.10., Google pausiert → Etiketten von Hand, Rest echt):**
+
+| Poster | vorher | jetzt | Rest |
+|---|---|---|---|
+| NYC Mockup (Farbe, 3 Spalten) | 72,5 | **94,4** | Fließtext-Schrift (Alegreya 500 −5 statt Garamond-artig) |
+| NYC Schwarzweiß (CitysInBlack-Stil) | – | **92,0** | Fließtext-Schrift; fetter Lead jetzt drin |
+| Japan (Traposto) | – | **82,0** | Fließtext sehr schmal gesetzt (≈ 22 % enger als normal; vermutlich gestaucht) |
+
+Offen: Ein echter Durchlauf aller sieben Beispiele aus den Downloads mit Gemini-Etiketten, sobald Google wieder
+läuft; horizontale Stauchung (scaleX) als eigene Eigenschaft, falls weitere Shops gestauchten Text nutzen.
+
+## 16 · Unterorte und Ranking (13.10.)
+
+Verglichen mit den Ranking-Systemen der drei anderen Worktrees (variante-a/b/c). Ergebnis: Im Register fehlt kein
+relevanter Ort; die Lücke war die Faltung.
+
+- **Faltung nur in Siedlungen** (`src/lib/citys/folding.ts`): Ein District, Landmark, Strand oder Stadtpark zählt nur
+  bei einer Stadt, einem Ort oder einem Stadtteil mit. In einer Region, einem Park, auf einer Insel oder Küste ist er ein
+  eigener Ort (vorher stand County Clare auf A wegen der Cliffs of Moher, Page wegen des Antelope Canyon, Wiltshire wegen
+  Stonehenge). Jetzt: Cliffs of Moher B #108 als eigener Ort, Milford Sound und Mont-Saint-Michel ebenso.
+- **Unterorte mit eigenem Poster:** Jeder Unterort wird auch nach seinem **eigenen Namen** gemessen (Listings, deren
+  Titel ihn vor der Stadt nennt: „Central Park Print, New York“). Mit eigenem Tier A–C auf der Skala der Orte, in
+  3 Shops (oder im oberen Viertel von 2) und ≥ 0,5 Verkäufen oder ≥ 5 Favoriten im Monat bekommt er **eine eigene Zeile
+  direkt unter seiner Stadt** („Own poster“; „Test poster first“, wenn > 60 % davon ein Listing ist; „most of its
+  sales“, wenn er die halbe Nachfrage der Stadt trägt). Er bleibt bei der Stadt mitgezählt. Im Stealer und Ranking
+  eingerückt, mit eigenen Referenzen (seine eigenen Listings), eigenen Fakten (`{city}` = Unterort, `{region}` = Stadt),
+  eigener Abdeckung (unsere Listings, die mit seinem Namen beginnen).
+  Im aktuellen Scope („Real“, 8 Shops) z. B.: Central Park A, Brooklyn A, Bondi Beach A, La Jolla A, Golden Gate
+  Bridge B, Brooklyn Bridge B, Queens B, Shibuya Crossing B, Waikiki Beach C, Antelope Canyon C (trägt Page), Taj
+  Mahal C (Test). Über alle 22 Shops sind es laut Analyse ≈ 70 städtische Unterorte (Waikiki dort 8,9 Verk./Monat).
+- **Ranking:** Lift jetzt gegen den Schnitt des eigenen Shops (große Kataloge drücken ihre Orte nicht mehr, ein
+  Hit-Shop hebt sie nicht); ein Ort aus einem einzigen jungen Listing ist höchstens C. Spitze unverändert, Bewegung
+  nur im langen Schwanz.
+- **Register korrigiert** (Backup vorher: `~/Etsy Master/.cache/backup-citys-places-*.json`): San Diego Stadt statt
+  Region, Hawaii Bundesstaat, County Clare Region; zusammengelegt: Mount Rainier/Grand Teton/Denali → ihr Nationalpark,
+  Kilimanjaro NP → Mount Kilimanjaro, Connemara NP → Connemara, Amalfi Coast FR → IT, Venice AT → IT, Hong Kong CN → HK,
+  Puerto Rico (Insel) → Land, San Juan US → PR, Niagara Falls US → CA, Patagonia CL → AR, Rocky Mountains CA → US,
+  Lake Superior CA → US. Nicht angefasst: Paris CA (eine Produktion verweist darauf).
+- **Nicht übernommen:** B's Hierarchie mit Roll-up in alle Vorfahren (Städte unter Bundesstaaten), reine Perzentile,
+  C's feste Rang-Tiers. **Später sinnvoll:** geprüfte Ortsfakten aus dem alten Projekt (`~/claude/Etsy/daten/orte.json`)
+  als Vorbelegung, Titel-Zuordnung ohne Gemini für bekannte Namen, Etsy-Suchvolumen als Zusatzsignal.
+- Hinweis: Das Ranking steht seit 13.10. 06:47 auf Scope „Real“ (8 von 22 Shops) — für „welche Orte fehlen“ alle
+  Shops wählen.

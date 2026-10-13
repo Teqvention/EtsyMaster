@@ -50,6 +50,8 @@ export async function listCompositions(): Promise<CompositionSummary[]> {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       ...(c.busy && { busy: c.busy }),
+      ...(c.example && { example: true }),
+      ...(c.rebuild && { score: c.rebuild.score }),
       elements: c.elements.length,
       preview: `/api/citys/compositions/${c.id}/preview?v=${Date.parse(c.updatedAt).toString(36)}`,
     }))
@@ -133,6 +135,17 @@ export async function candidateAsComposition(id: string, candidateId: string, na
   const made = await createComposition(name, k.data)
   await dropCandidate(id, candidateId)
   return made
+}
+
+/** Marks a composition as a good example of a best-selling layout (or not): remixes and new layouts learn from these. */
+export function markExample(id: string, on: boolean) {
+  return changeComposition(id, (c) => ({ ...c, example: on || undefined }))
+}
+
+/** The good examples, newest first. */
+export async function exampleCompositions(): Promise<Composition[]> {
+  const all = await readDocs<Composition>("citys/compositions/")
+  return [...all.values()].filter((c) => c?.example && Array.isArray(c.elements)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
 export async function setBusy(id: string, busy: string | null, error?: string) {

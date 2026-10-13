@@ -6,12 +6,14 @@ import * as React from "react"
 import {
   ArrowLeftIcon,
   BoxIcon,
+  CheckCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
   FileImageIcon,
+  GaugeIcon,
   HistoryIcon,
   ImageIcon,
   LayoutGridIcon,
@@ -33,7 +35,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { CompositionCanvas, type Box } from "@/components/citys/compositions/canvas"
+import { CompositionCanvas, type Box, type Overlay } from "@/components/citys/compositions/canvas"
 import { ColorField, ElementProperties, Group } from "@/components/citys/compositions/properties"
 import { useMockupHistory } from "@/components/citys/compositions/history"
 import { Button } from "@/components/ui/button"
@@ -65,7 +67,10 @@ import { cn } from "@/lib/utils"
 // print sizes (each can be nudged on its own), a sample place to try long
 // names and short ones, and Gemini's tools: build from an image, five
 // remixes to try, a combination with a style or another poster. Variants
-// come back as 1–5 to look at and adopt.
+// come back as 1–5 to look at and adopt. A layout rebuilt from a poster
+// shows how alike it came out, and can be laid over the original (in the
+// original's words and photo) while it's edited, checked again, improved by
+// more passes, and marked as a good example for remixes to learn from.
 
 const RATIOS = [
   { value: 3 / 4, label: "3 : 4" },
@@ -88,6 +93,16 @@ const SAMPLES: { label: string; facts: PlaceFacts }[] = [
 ]
 
 type Loaded = { composition: Composition; at: number }
+
+type Compare = "off" | "slider" | "difference"
+
+/** The layout in the words printed on the poster it was rebuilt from. */
+const literally = (d: CompositionData): CompositionData => ({
+  ...d,
+  elements: d.elements.map((e) => (e.type === "text" && e.literal !== undefined ? { ...e, text: e.literal, case: "none" as const } : e)),
+})
+
+const fileUrl = (id: string, name: string) => `/api/citys/compositions/${id}/files/${name}`
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init, headers: init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined })
@@ -167,6 +182,10 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
   const [candidate, setCandidate] = React.useState<string | null>(null)
   const [sizesOpen, setSizesOpen] = React.useState(false)
   const [versioning, setVersioning] = React.useState(false)
+  const [compare, setCompare] = React.useState<Compare>("off")
+  const [at, setAt] = React.useState(0.5)
+  const [checkOpen, setCheckOpen] = React.useState(false)
+  const [originalPhoto, setOriginalPhoto] = React.useState<PhotoInput>(null)
   const importInput = React.useRef<HTMLInputElement>(null)
   const savedData = React.useRef(JSON.stringify(dataOf(composition)))
   const version = React.useRef(composition.version)
@@ -182,6 +201,16 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
       setPalette(await json<Palette>(`/api/citys/palette?photo=${ref.set}/${ref.file}`).catch(() => DEFAULT_PALETTE))
     }, () => {})
   }, [])
+
+  // The original's photo, for its frame when the two are laid over each other.
+  const rebuild = composition.rebuild
+  React.useEffect(() => {
+    if (!rebuild?.photo) return
+    const href = fileUrl(composition.id, rebuild.photo)
+    const img = new Image()
+    img.onload = () => setOriginalPhoto({ href, width: img.naturalWidth, height: img.naturalHeight })
+    img.src = href
+  }, [composition.id, rebuild?.photo])
 
   // A new version from the server (built from an image, a variant adopted): it replaces what's shown.
   React.useEffect(() => {
@@ -214,7 +243,11 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
 
   const shownCandidate = composition.candidates.find((c) => c.id === candidate) ?? null
   const view = shownCandidate ? shownCandidate.data : data
-  const ratio = size ? SIZE_BY_KEY[size].widthMm / SIZE_BY_KEY[size].heightMm : view.ratio
+  // Laid over the original: at the layout's own shape, in the original's words and photo.
+  const comparing = !!rebuild && compare !== "off" && !shownCandidate
+  const shownData = React.useMemo(() => (comparing ? literally(view) : view), [comparing, view])
+  const overlay: Overlay | null = comparing ? { src: fileUrl(composition.id, rebuild.original), mode: compare, at } : null
+  const ratio = size && !comparing ? SIZE_BY_KEY[size].widthMm / SIZE_BY_KEY[size].heightMm : view.ratio
   const current = view.elements.find((e) => e.id === selected) ?? null
   const shownFacts = sample === 0 ? facts : SAMPLES[sample].facts
 
@@ -364,6 +397,16 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
             <FileImageIcon />
             From an image
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-pressed={!!composition.example}
+            title="Good examples show remixes and new layouts what best-selling posters look like"
+            onClick={() => action({ action: "example", on: !composition.example }, composition.example ? "No longer a good example" : "Marked as a good example")}
+          >
+            <StarIcon className={cn(composition.example && "fill-amber-400 text-amber-500")} />
+            Good example
+          </Button>
           <RemixPopover composition={composition} onAsk={(body) => action(body)} busy={!!composition.busy} />
           <CombinePopover composition={composition} onStyle={(body) => action(body, "Combining: the variants show as 1–5")} reload={reload} busy={!!composition.busy} />
           <Button size="sm" variant="outline" onClick={() => setSizesOpen(true)}>
@@ -412,6 +455,18 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
       )}
       {composition.busyError && !composition.busy && <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{composition.busyError}</p>}
 
+      {rebuild && (
+        <RebuildBar
+          rebuild={rebuild}
+          compare={compare}
+          onCompare={setCompare}
+          busy={!!composition.busy}
+          onCheck={() => action({ action: "improve", passes: 0 })}
+          onImprove={() => action({ action: "improve", passes: 3 })}
+          onShowCheck={() => setCheckOpen(true)}
+        />
+      )}
+
       <div className="grid items-start gap-4 lg:grid-cols-[14rem_minmax(0,1fr)_18rem]">
         <Layers
           elements={view.elements}
@@ -429,9 +484,18 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <div className="flex flex-wrap gap-1" role="group" aria-label="Print size">
-              <SizeChip on={!size} onClick={() => setSize(null)} label="Layout" />
+              <SizeChip on={!size || comparing} onClick={() => setSize(null)} label="Layout" />
               {OFFERED.map((s) => (
-                <SizeChip key={s.key} on={size === s.key} onClick={() => setSize(s.key)} label={s.cm.replace(" cm", "").replace(/ \(A\d\)/, "")} tweaked={!!data.sizes[s.key] && Object.keys(data.sizes[s.key]!).length > 0} />
+                <SizeChip
+                  key={s.key}
+                  on={size === s.key && !comparing}
+                  onClick={() => {
+                    setSize(s.key)
+                    setCompare("off")
+                  }}
+                  label={s.cm.replace(" cm", "").replace(/ \(A\d\)/, "")}
+                  tweaked={!!data.sizes[s.key] && Object.keys(data.sizes[s.key]!).length > 0}
+                />
               ))}
             </div>
             <div className="ml-auto flex items-center gap-1">
@@ -440,7 +504,7 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
               ))}
             </div>
           </div>
-          {size && (
+          {size && !comparing && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               Moving and sizing here only changes {SIZE_BY_KEY[size].cm}.
               {data.sizes[size] && (
@@ -452,16 +516,18 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
           )}
           <div className="rounded-lg bg-muted/50 p-6">
             <CompositionCanvas
-              data={view}
+              data={shownData}
               ratio={ratio}
-              size={size ?? undefined}
+              size={comparing ? undefined : (size ?? undefined)}
               facts={shownFacts}
-              photo={photo}
+              photo={comparing ? (originalPhoto ?? photo) : photo}
               palette={palette}
               selected={selected}
               onSelect={setSelected}
               onBox={onBox}
               maxHeight={720}
+              overlay={overlay}
+              onOverlayAt={setAt}
             />
           </div>
         </div>
@@ -503,6 +569,7 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
         </aside>
       </div>
 
+      {rebuild && <CheckDialog open={checkOpen} onOpenChange={setCheckOpen} id={composition.id} rebuild={rebuild} />}
       <SizesDialog open={sizesOpen} onOpenChange={setSizesOpen} data={view} facts={shownFacts} photo={photo} palette={palette} onEdit={(s) => {
         setSize(s)
         setSizesOpen(false)
@@ -523,6 +590,99 @@ function Editor({ composition, reload, onLoaded }: { composition: Composition; r
         }}
       />
     </div>
+  )
+}
+
+/**
+ * A rebuilt layout's standing against its original: how alike, laying the
+ * original over it, comparing again after changes by hand, more passes.
+ */
+function RebuildBar({
+  rebuild,
+  compare,
+  onCompare,
+  busy,
+  onCheck,
+  onImprove,
+  onShowCheck,
+}: {
+  rebuild: NonNullable<Composition["rebuild"]>
+  compare: Compare
+  onCompare: (c: Compare) => void
+  busy: boolean
+  onCheck: () => void
+  onImprove: () => void
+  onShowCheck: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-1.5">
+      <button
+        type="button"
+        onClick={onShowCheck}
+        title="How closely the layout, set in the original's words, covers the original's ink and pixels (the photo aside). Open the last check."
+        className="flex items-center gap-1.5 rounded-md px-1 text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <GaugeIcon className="size-4 text-muted-foreground" />
+        <span className="font-semibold tabular-nums">{rebuild.score.toFixed(1)} %</span>
+        <span className="text-muted-foreground">alike</span>
+      </button>
+      <div className="flex items-center gap-1" role="group" aria-label="Lay the original over it">
+        <span className="mr-1 text-xs text-muted-foreground">Original</span>
+        <SizeChip on={compare === "off"} onClick={() => onCompare("off")} label="Hidden" />
+        <SizeChip on={compare === "slider"} onClick={() => onCompare("slider")} label="Slider" />
+        <SizeChip on={compare === "difference"} onClick={() => onCompare("difference")} label="Difference" />
+      </div>
+      {compare === "difference" && <span className="text-xs text-muted-foreground">Black where they match, light where ours is off.</span>}
+      <div className="ml-auto flex items-center gap-1.5">
+        <Button size="sm" variant="ghost" onClick={onCheck} disabled={busy} title="Compare with the original again, after changes by hand">
+          <CheckCheckIcon />
+          Check
+        </Button>
+        <Button size="sm" variant="outline" onClick={onImprove} disabled={busy} title="Three more passes of measuring and correcting">
+          <WandSparklesIcon />
+          Improve
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** The last comparison: the original, ours in its words, where they differ, and each pass's score. */
+function CheckDialog({ open, onOpenChange, id, rebuild }: { open: boolean; onOpenChange: (open: boolean) => void; id: string; rebuild: NonNullable<Composition["rebuild"]> }) {
+  const images = [
+    { label: "Original", name: rebuild.original },
+    { label: "Ours, in its words", name: rebuild.ours },
+    { label: "Where they differ", name: rebuild.diff },
+  ]
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>
+            {rebuild.score.toFixed(1)} % alike{rebuild.fromPhoto && <span className="ml-2 text-sm font-normal text-muted-foreground">taken out of a photo</span>}
+          </DialogTitle>
+          <DialogDescription>
+            Checked {new Date(rebuild.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. In the differences, red is ink only the original has, blue ink only ours has.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {images.map((image) => (
+            <figure key={image.name} className="flex flex-col gap-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={fileUrl(id, image.name)} alt={image.label} className="w-full rounded-md border bg-white" />
+              <figcaption className="text-xs text-muted-foreground">{image.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+        <ol className="flex flex-wrap gap-1.5 text-xs">
+          {rebuild.passes.map((p, i) => (
+            <li key={i} className="rounded-md border px-2 py-0.5 tabular-nums">
+              <span className="text-muted-foreground">{p.note}</span> {p.score.toFixed(1)}
+            </li>
+          ))}
+        </ol>
+      </DialogContent>
+    </Dialog>
   )
 }
 

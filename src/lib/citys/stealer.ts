@@ -49,7 +49,7 @@ export type CoverageSummary = Pick<Coverage, "confirmed" | "replace" | "offline"
 
 export type StealerCityRow = Pick<
   RankedPlace,
-  "id" | "name" | "tier" | "score" | "position" | "country" | "countryName" | "region" | "kind" | "size" | "setting" | "tags" | "spm" | "favMonth" | "shops"
+  "id" | "name" | "tier" | "score" | "position" | "country" | "countryName" | "region" | "kind" | "size" | "setting" | "tags" | "spm" | "favMonth" | "shops" | "sub"
 > & { refs: number; photos: number; coverage: CoverageSummary | null }
 
 export type StealerState = {
@@ -91,6 +91,7 @@ export async function stealerState(): Promise<StealerState> {
       spm: p.spm,
       favMonth: p.favMonth,
       shops: p.shops,
+      ...(p.sub && { sub: p.sub }),
       refs: entries.length,
       photos: entries.filter(isPhoto).length,
       coverage: c ? { confirmed: c.confirmed, replace: c.replace, offline: c.offline, open: c.open } : null,

@@ -2,7 +2,8 @@ import { listAccounts } from "@/lib/accounts/store"
 import { readDoc } from "@/lib/db/documents"
 import { listings as syncedListings } from "@/lib/sync/store"
 
-import { register, resolve, rootOf } from "./places"
+import { leadsWith, resolve, rootOf } from "./folding"
+import { register } from "./places"
 import { shopRead } from "./read"
 import { citySettings } from "./settings"
 import type { PlaceRegister } from "./types"
@@ -60,7 +61,7 @@ export async function ourCoverage(): Promise<Map<string, Coverage>> {
     for (const l of list) {
       if (l.state !== "active" && l.state !== "inactive" && l.state !== "expired") continue
       const r = read.listings[l.listingId]
-      const roots = rootsOf(reg, r?.p ?? [], r?.k === "set")
+      const roots = rootsOf(reg, r?.p ?? [], r?.k === "set", l.title)
       const entry = status.listings[l.listingId]
       const own: OurListing = {
         listingId: l.listingId,
@@ -90,13 +91,15 @@ export async function ourCoverage(): Promise<Map<string, Coverage>> {
 }
 
 /** The places (roots) a listing's raw places stand for; a set gives each of its places. */
-export function rootsOf(reg: PlaceRegister, raws: Parameters<typeof resolve>[1][], set: boolean) {
+export function rootsOf(reg: PlaceRegister, raws: Parameters<typeof resolve>[1][], set: boolean, title = "") {
   const ids: string[] = []
   for (const raw of set ? raws : raws.slice(0, 1)) {
     const place = resolve(reg, raw)
     if (!place) continue
     const root = rootOf(reg, place)
     if (!ids.includes(root.id)) ids.push(root.id)
+    // Sold by a sub-place's own name ("Waikiki Print, Honolulu"): it covers the sub-place's row too.
+    if (root.id !== place.id && title && leadsWith(title, place, root) && !ids.includes(place.id)) ids.push(place.id)
   }
   return ids
 }

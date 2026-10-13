@@ -32,8 +32,16 @@ export const PLACE_KINDS = [
 ] as const
 export type PlaceKind = (typeof PLACE_KINDS)[number]
 
-/** Kinds that sit inside a city (or a region, park…) and fold into it in the ranking. */
+/** Kinds that sit inside a city and fold into it in the ranking. */
 export const SUB_KINDS: PlaceKind[] = ["district", "landmark", "beach"]
+
+/**
+ * What a district, landmark or beach folds into: a city, a town, or a
+ * district of one. One out in a region, a park, on an island or a coast
+ * (Cliffs of Moher in County Clare, Milford Sound in Fiordland) is a place
+ * of its own, sold by its own name, its parent kept as where it is.
+ */
+export const SETTLEMENT_KINDS: PlaceKind[] = ["city", "town", "district"]
 
 export const SIZES = ["big", "mid", "small"] as const
 /** Cities over a million, between a hundred thousand and a million, and under. */
@@ -208,13 +216,26 @@ export type RankedPlace = PlaceStats & {
   position: number
   /** Districts, landmarks and beaches folded into it (their numbers are in its own). */
   children: RankedChild[]
+  /**
+   * A sub-place sold by its own name (Central Park, Waikiki Beach): its own
+   * row, right under its parent, with the demand of the listings that lead
+   * with its name (still counted in its parent's too). `leads`: it carries
+   * half its parent's demand or more; `test`: most of it is one listing,
+   * worth a single test poster first.
+   */
+  sub?: { parent: string; parentName: string; leads?: boolean; test?: boolean }
   /** Its best listings, for a glance. */
   top: { listingId: number; shopId: number; shop: string; title: string; image: string; spm: number; fav: number }[]
   /** How its sales split by the shops' secondary tags. */
   looks: Record<string, number>
 }
 
-export type RankedChild = Pick<RankedPlace, "id" | "name" | "kind" | "listings" | "spm" | "favMonth" | "shops">
+export type RankedChild = Pick<RankedPlace, "id" | "name" | "kind" | "listings" | "spm" | "favMonth" | "shops"> & {
+  /** The listings that lead with its own name ("Waikiki Print, Honolulu"), scored on the places' own scale. */
+  own?: { listings: number; spm: number; favMonth: number; shops: number; score: number; tier: Tier }
+  /** Worth a poster and listing of its own (a row of its own under its parent), or a single test poster first. */
+  poster?: "yes" | "test"
+}
 
 export type RankingShop = {
   shopId: number

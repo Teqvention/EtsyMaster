@@ -22,9 +22,34 @@ import {
 // (opentype.js): line breaks, kerning, letter spacing, justified columns and
 // shrinking a long name to fit, then drawn as outlines, so no browser or
 // print renderer ever substitutes a font or breaks a line differently.
+// Words between ** are set in the family's bold (a lead-in like
+// "**New York City** is the city that never sleeps").
 
 export type Fonts = Map<string, Font>
 export const fontKey = (f: TextElement["font"]) => `${f.family}|${f.weight}|${f.italic ? 1 : 0}`
+
+/** The bold a text's ** runs are set in: its family, three steps heavier, 700 at least. */
+export const boldOf = (f: TextElement["font"]): TextElement["font"] => ({ ...f, weight: Math.min(900, Math.max(700, f.weight + 300)) })
+
+/** A word set in bold carries this mark in front while lines are broken and drawn. */
+const BOLD = "\u0001"
+const isBold = (word: string) => word.startsWith(BOLD)
+const bare = (word: string) => (isBold(word) ? word.slice(1) : word)
+
+/** A paragraph's words, those inside ** marked bold (the marks themselves gone). */
+function wordsOf(paragraph: string) {
+  let bold = false
+  const words: string[] = []
+  for (const token of paragraph.split(/\s+/).filter(Boolean)) {
+    const opens = token.startsWith("**")
+    const word = token.replaceAll("**", "")
+    if (word) words.push(bold || opens ? BOLD + word : word)
+    if ((token.match(/\*\*/g) ?? []).length % 2) bold = !bold
+  }
+  return words
+}
+
+type Faces = { regular: Font; bold?: Font }
 
 /** The photo to set in the photo frames: its address (or data URI) and size in pixels. */
 export type PhotoInput = { href: string; width: number; height: number } | null
@@ -121,18 +146,71 @@ function measure(font: Font, text: string, size: number, tracking: number) {
   return font.getAdvanceWidth(text, size, { kerning: true, tracking }) - (tracking / 1000) * size
 }
 
-function breakLines(font: Font, text: string, size: number, tracking: number, width: number) {
+// --- Hyphens ---
+
+const VOWEL = /[aeiouy]/
+const KEEP = new Set(["th", "ch", "sh", "ph", "wh", "gh", "ck", "ng", "qu", "gn", "kn", "wr", "sc"])
+const SUFFIXES = ["tion", "sion", "ment", "ness", "ings", "ing", "able", "ible", "ful", "less", "ous", "ity", "ence", "ance", "ally", "ward", "ship"]
+
+/**
+ * Where an English word may break with a hyphen (indexes to break before),
+ * by plain rules: before a common ending, between a vowel and a consonant
+ * that leads the next syllable, between two consonants that don't belong
+ * together; never within the first two letters or the last three.
+ */
+export function hyphenPoints(word: string): number[] {
+  const core = word.toLowerCase()
+  if (core.length < 6 || !/^[a-z]+$/.test(core)) return []
+  const points = new Set<number>()
+  for (const s of SUFFIXES) if (core.endsWith(s) && core.length - s.length >= 3) points.add(core.length - s.length)
+  for (let i = 2; i <= core.length - 3; i++) {
+    const a = core[i - 1]
+    const b = core[i]
+    const c = core[i + 1]
+    if (VOWEL.test(a) && !VOWEL.test(b) && VOWEL.test(c)) points.add(i)
+    else if (!VOWEL.test(a) && !VOWEL.test(b) && VOWEL.test(c) && i >= 3 && VOWEL.test(core[i - 2]) && !KEEP.has(a + b)) points.add(i)
+  }
+  return [...points].filter((i) => i >= 2 && i <= core.length - 3).sort((x, y) => x - y)
+}
+
+/** A line break that keeps the line justified: how a rebuild sets the original's own lines. */
+export const LINE_BREAK = "\u2028"
+
+function breakLines(faces: Faces, text: string, size: number, tracking: number, width: number, hyphens = false) {
+  const font = faces.regular
   const space = font.getAdvanceWidth(" ", size, { kerning: false, tracking })
+  const width_ = (word: string) => measure(isBold(word) && faces.bold ? faces.bold : font, bare(word), size, tracking)
   const lines: Line[] = []
   let widest = 0
-  for (const paragraph of text.split(/\n/)) {
-    const words = paragraph.split(/\s+/).filter(Boolean)
+  // Paragraphs end in a line set as it is; a line break inside one keeps its line justified.
+  const segments = text.split(/\n/).flatMap((paragraph) => {
+    const parts = paragraph.split(LINE_BREAK)
+    return parts.map((part, i) => ({ part, last: i === parts.length - 1 })).filter(({ part, last }) => part.trim() || (last && parts.length === 1))
+  })
+  for (const { part: paragraph, last } of segments) {
+    const words = wordsOf(paragraph)
     let current: string[] = []
     let currentWidth = 0
-    for (const word of words) {
-      const w = measure(font, word, size, tracking)
-      widest = Math.max(widest, w)
+    for (let k = 0; k < words.length; k++) {
+      const word = words[k]
+      const w = width_(word)
       if (current.length && currentWidth + space + w > width) {
+        // Justified copy breaks a long word with a hyphen where its first part still fits the line.
+        if (hyphens) {
+          const mark = isBold(word) ? BOLD : ""
+          const [, lead, core, tail] = bare(word).match(/^([^A-Za-z]*)([A-Za-z]+)(.*)$/) ?? []
+          const points = core ? hyphenPoints(core) : []
+          const fits = points.reverse().find((i) => currentWidth + space + width_(`${mark}${lead}${core.slice(0, i)}-`) <= width)
+          if (fits !== undefined) {
+            const head = `${mark}${lead}${core.slice(0, fits)}-`
+            current.push(head)
+            lines.push({ words: current, width: currentWidth + space + width_(head), last: false })
+            current = []
+            currentWidth = 0
+            words.splice(k + 1, 0, `${mark}${core.slice(fits)}${tail}`)
+            continue
+          }
+        }
         lines.push({ words: current, width: currentWidth, last: false })
         current = [word]
         currentWidth = w
@@ -140,17 +218,18 @@ function breakLines(font: Font, text: string, size: number, tracking: number, wi
         currentWidth = current.length ? currentWidth + space + w : w
         current.push(word)
       }
+      widest = Math.max(widest, w)
     }
-    lines.push({ words: current, width: currentWidth, last: true })
+    lines.push({ words: current, width: currentWidth, last })
   }
   return { lines, widest, space }
 }
 
 /** The text set at `size`: its lines per column, and whether it fits the box. */
-function setText(el: TextElement, font: Font, text: string, size: number) {
+function setText(el: TextElement, faces: Faces, text: string, size: number) {
   const columns = Math.max(1, Math.min(3, Math.round(el.columns)))
   const colWidth = (el.w - el.gap * (columns - 1)) / columns
-  const { lines, widest, space } = breakLines(font, text, size, el.tracking, colWidth)
+  const { lines, widest, space } = breakLines(faces, text, size, el.tracking, colWidth, el.align === "justify")
   const perColumn = Math.ceil(lines.length / columns)
   const lineHeight = size * el.leading
   const fits = widest <= colWidth + 0.5 && perColumn * lineHeight <= el.h + 0.5
@@ -163,14 +242,16 @@ function textSvg(el: TextElement, input: RenderInput, palette: Palette, overflow
   if (!text.trim()) return input.editing ? `<rect x="${n(el.x)}" y="${n(el.y)}" width="${n(el.w)}" height="${n(el.h)}" fill="none" stroke="#B9C0C5" stroke-dasharray="6 6"/>` : ""
   if (!font) return input.editing ? `<rect x="${n(el.x)}" y="${n(el.y)}" width="${n(el.w)}" height="${n(el.h)}" fill="#E8EBED"/>` : ""
 
+  const faces: Faces = { regular: font, bold: text.includes("**") ? input.fonts.get(fontKey(boldOf(el.font))) : undefined }
   let size = el.size
-  let set = setText(el, font, text, size)
+  let set = setText(el, faces, text, size)
   if (el.fit === "shrink") {
     for (let i = 0; i < 40 && !set.fits && size > el.size * 0.3; i++) {
       size *= 0.95
-      set = setText(el, font, text, size)
+      set = setText(el, faces, text, size)
     }
   }
+  const faceOf = (word: string) => (isBold(word) && faces.bold ? faces.bold : font)
   if (!set.fits) overflow.push(el.id)
 
   const scale = size / font.unitsPerEm
@@ -190,10 +271,12 @@ function textSvg(el: TextElement, input: RenderInput, palette: Palette, overflow
       const gap = justify ? set.space + (set.colWidth - line.width) / (line.words.length - 1) : set.space
       const lineWidth = justify ? set.colWidth : line.width
       let x = el.align === "center" ? left + (set.colWidth - lineWidth) / 2 : el.align === "right" ? left + set.colWidth - lineWidth : left
-      if (justify) {
+      // Word by word when justified or when some words are bold; else the line at once (its kerning across spaces kept).
+      if (justify || line.words.some(isBold)) {
         for (const word of line.words) {
-          paths.push(font.getPath(word, x, baseline, size, { kerning: true, tracking: el.tracking }).toPathData(2))
-          x += measure(font, word, size, el.tracking) + gap
+          const face = faceOf(word)
+          paths.push(face.getPath(bare(word), x, baseline, size, { kerning: true, tracking: el.tracking }).toPathData(2))
+          x += measure(face, bare(word), size, el.tracking) + gap
         }
       } else {
         paths.push(font.getPath(line.words.join(" "), x, baseline, size, { kerning: true, tracking: el.tracking }).toPathData(2))
@@ -230,9 +313,13 @@ function iconSvg(icon: IconName, x: number, y: number, w: number, h: number, col
   return `<path transform="translate(${n(ox)} ${n(oy)}) scale(${n(s)})" d="${ICON_PATHS[icon]}" fill="${filled ? color : "none"}" stroke="${filled ? "none" : color}" stroke-width="${n(stroke / Math.max(s, 0.01))}" stroke-linecap="round" stroke-linejoin="round"/>`
 }
 
-/** Every font a composition's text needs. */
+/** Every font a composition's text needs (and the bold of those with ** runs, as printed or as rebuilt). */
 export function fontsOf(data: CompositionData) {
   const found = new Map<string, TextElement["font"]>()
-  for (const el of data.elements) if (el.type === "text") found.set(fontKey(el.font), el.font)
+  for (const el of data.elements) {
+    if (el.type !== "text") continue
+    found.set(fontKey(el.font), el.font)
+    if (el.text.includes("**") || el.literal?.includes("**")) found.set(fontKey(boldOf(el.font)), boldOf(el.font))
+  }
   return [...found.values()]
 }
