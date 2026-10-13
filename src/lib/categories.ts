@@ -10,6 +10,11 @@ function names(list: unknown): string[] {
   return Array.isArray(list) ? list.filter((c): c is string => typeof c === "string") : []
 }
 
+/** Changes the names in the document `key`, after every other change to them on any server. */
+export async function changeNames(key: string, change: (names: string[]) => string[]) {
+  await updateDoc<unknown>(key, [], (list) => change(names(list)))
+}
+
 /** Every name in the document `key` or on `filed`, A–Z, with how many of `filed` are under it. */
 export async function listNames(key: string, filed: (string | undefined)[]): Promise<CategorySummary[]> {
   const byKey = new Map<string, string>()
@@ -27,8 +32,8 @@ export async function listNames(key: string, filed: (string | undefined)[]): Pro
 }
 
 /** Adds a name to the document `key` unless one like it is there; returns the name as stored. */
-export async function addName(key: string, name: string) {
-  const clean = name.trim().replace(/\s+/g, " ").slice(0, 40)
+export async function addName(key: string, name: string, longest = 40) {
+  const clean = name.trim().replace(/\s+/g, " ").slice(0, longest)
   if (!clean) throw new Error("Name is empty")
   let stored = clean
   await updateDoc<unknown>(key, [], (list) => {

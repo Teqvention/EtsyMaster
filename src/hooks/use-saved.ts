@@ -2,7 +2,9 @@
 
 import * as React from "react"
 
+import { changeCategories, refreshCategories } from "@/hooks/use-categories"
 import type { Listing } from "@/lib/etsy/types"
+import { isWithin, movedFolder } from "@/lib/saved/folders"
 import type { SavedListing, SaveRequest } from "@/lib/saved/types"
 
 // Listings filed into folders, for the shop gallery's badges and the Saved
@@ -106,6 +108,56 @@ async function change(apply: (list: SavedListing[]) => SavedListing[], init: Req
   } catch (error) {
     set(before)
     throw error
+  }
+}
+
+/**
+ * Moves (or renames) a folder with everything in it to the path `to`, into a
+ * folder of that name if there is one. Shows at once; answers the new path.
+ */
+export async function moveSavedFolder(from: string, to: string) {
+  await (loading ?? (saved === null ? refreshSaved() : null))
+  const before = saved ?? []
+  const move = (path: string) => movedFolder(path, from, to)
+  set(before.map((s) => (isWithin(s.folder, from) ? { ...s, folder: move(s.folder) } : s)))
+  changeCategories("saved", (list) => {
+    const kept = new Map<string, { name: string; count: number }>()
+    for (const c of list) {
+      const name = move(c.name)
+      kept.set(name.toLowerCase(), { name, count: (kept.get(name.toLowerCase())?.count ?? 0) + c.count })
+    }
+    return [...kept.values()]
+  })
+  try {
+    const response = await fetch("/api/saved/folders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to }),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error ?? response.statusText)
+    set(result.saved)
+    return result.name as string
+  } catch (error) {
+    set(before)
+    throw error
+  } finally {
+    refreshCategories("saved")
+  }
+}
+
+/** Takes away an empty folder, and the empty folders in it. */
+export async function deleteSavedFolder(name: string) {
+  changeCategories("saved", (list) => list.filter((c) => !isWithin(c.name, name)))
+  try {
+    const response = await fetch("/api/saved/folders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? response.statusText)
+  } finally {
+    refreshCategories("saved")
   }
 }
 

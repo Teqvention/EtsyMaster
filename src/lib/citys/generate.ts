@@ -191,13 +191,13 @@ async function ownSet(set: GenerationSet & { city: CitySetInfo }, output: Output
 // --- Running a city set (from run.ts) ---
 
 export type CityHelpers = {
-  draw: (id: string, output: Output) => Promise<void>
-  submit: (id: string, outputs: Output[]) => Promise<void>
+  /** Paints `outputs`: in a batch job, or with `now` online first (the lane), the rest in a batch job. */
+  submit: (id: string, outputs: Output[], now?: boolean) => Promise<void>
   halt: (id: string) => Promise<unknown>
 }
 
 /** What run.ts's `work` does for a city set: its reference ready, outputs for new batches, briefs, then the painting. */
-export async function cityWork(id: string, { draw, submit, halt }: CityHelpers) {
+export async function cityWork(id: string, { submit, halt }: CityHelpers) {
   let set = await getSet(id)
   const ready = await reference(set)
   if (!ready) {
@@ -223,7 +223,8 @@ export async function cityWork(id: string, { draw, submit, halt }: CityHelpers) 
   const delivery = new Map(set.batches.map((b) => [b.id, b.city?.delivery ?? "now"]))
   const waiting = set.outputs.filter((o) => o.status === "pending" && !o.job)
   const batched = waiting.filter((o) => delivery.get(o.batch) === "batch")
-  await Promise.all([...waiting.filter((o) => !batched.includes(o)).map((o) => draw(id, o)), batched.length ? submit(id, batched) : null])
+  const now = waiting.filter((o) => !batched.includes(o))
+  await Promise.all([now.length ? submit(id, now, true) : null, batched.length ? submit(id, batched) : null])
 }
 
 /** The reference poster, taken out of the listing photo if the Stealer hadn't yet; false when it can't be. */

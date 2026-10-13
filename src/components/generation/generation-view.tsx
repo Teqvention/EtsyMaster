@@ -55,6 +55,7 @@ import {
   useGenerations,
 } from "@/hooks/use-generations"
 import type { GenerationKind, GenerationSet, Output } from "@/lib/generation/types"
+import { describeFolder } from "@/lib/saved/folders"
 import { cn } from "@/lib/utils"
 
 // Everything generated, newest first, one row per listing photo: the photo,
@@ -122,7 +123,7 @@ export function GenerationView() {
 
   const folderItems = [
     { value: ALL_FOLDERS, label: "All folders" },
-    ...folders.map((f) => ({ value: f, label: f })),
+    ...folders.map((f) => ({ value: f, label: describeFolder(f) })),
   ]
 
   const open = (set: GenerationSet, output: Output) =>
@@ -345,7 +346,7 @@ function SetRow({ set, onOpen }: { set: GenerationSet; onOpen: (output: Output) 
         )}
         <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
           {set.source.shop && <span className="truncate">{set.source.shop}</span>}
-          <span>{set.folder}</span>
+          <span>{describeFolder(set.folder)}</span>
           <time dateTime={set.createdAt} title={new Date(set.createdAt).toLocaleString()}>
             {timeAgo(set.createdAt)}
           </time>

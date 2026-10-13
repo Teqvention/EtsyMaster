@@ -312,8 +312,11 @@ async function work(id: string) {
     if (isCitySet(set)) {
       const none = () => Promise.resolve(null)
       await cityWork(id, {
-        draw: (setId, output) => draw(setId, output, none()),
-        submit: (setId, outputs) => submit(setId, outputs, none),
+        // Now images go the lane's way too, paced and with the fallback, overflowing into a batch job.
+        submit: (setId, outputs, now) =>
+          batchConfigured()
+            ? submit(setId, outputs, none, now)
+            : Promise.all(outputs.map((o) => draw(setId, o, none()))).then(() => {}),
         halt,
       })
     } else if (set.kind === "poster") await poster(id)
@@ -1419,7 +1422,8 @@ async function handOver(name: string, shares: Share[]) {
     ).catch((error) => {
       if (!(error instanceof NotFoundError)) throw error
     })
-    if (moving.length) send({ set, outputs: moving, lines: moving.map((o) => lines.get(o)!) })
+    const model = shares[0].job.model
+    if (moving.length) send({ set, outputs: moving, lines: moving.map((o) => lines.get(o)!), ...(model && { model }) })
   }
   return `${lines.size} sent again`
 }
@@ -1518,8 +1522,8 @@ async function collect(name: string, shares: Share[], { state, error, output, in
       return null
     })
     if (after?.status === "queued") enqueue(set)
-    // Ended for falling behind: the fallback paints the rest.
-    const model = shares.some(({ job: j }) => j.rescue) ? FALLBACK_MODEL : undefined
+    // Ended for falling behind: the fallback paints the rest; a fallback job's rest stays with the fallback.
+    const model = shares.some(({ job: j }) => j.rescue || j.model === FALLBACK_MODEL) ? FALLBACK_MODEL : undefined
     if (resend.length) send({ set, outputs: resend, lines: resend.map((o) => again.get(o)!), ...(model && { model }) })
   }
   // How long a job of this size took, to tune `MAX_JOB` by.
@@ -1727,20 +1731,22 @@ async function resetSet(set: GenerationSet) {
 // those of them still to be painted go out again from here). Every minute
 // one server looks (a lock keeps it to one at a time), and a set whose
 // failures are worth another try (`worthRetrying`) runs again: at once when
-// its server stopped, else `HEAL_AFTER` after it last changed, up to
-// `MAX_HEALS` times. Safety blocks, bad requests and what was stopped or
-// cancelled by hand stay failed. Only sets asked for since this came in
-// (they have `heals`) and that this code knows how to run (`ours`), changed
-// within `HEAL_WINDOW`: older failures wait for a Retry by hand.
+// its server stopped, else `HEAL_AFTER` after it last changed, waiting
+// longer each time up to an hour, for as long as `HEAL_WINDOW`: an order
+// left overnight keeps going, however often Google was busy. Safety blocks,
+// bad requests and what was stopped or cancelled by hand stay failed. Only
+// sets asked for since this came in (they have `heals`) and that this code
+// knows how to run (`ours`): older failures wait for a Retry by hand.
 // Each server also looks after itself every minute: it starts its batch
 // polling again should a pass have hung (on a connection the laptop's sleep
 // took), and sends out again images of its own sets still marked as
 // painting that nothing here paints.
 
 const HEAL_EVERY = 60_000
-const HEAL_AFTER = [60_000, 3 * 60_000, 10 * 60_000, 20 * 60_000]
-const MAX_HEALS = HEAL_AFTER.length
-const HEAL_WINDOW = 6 * 60 * 60_000
+const HEAL_AFTER = [60_000, 3 * 60_000, 10 * 60_000, 20 * 60_000, 30 * 60_000, 60 * 60_000]
+/** Enough for a day and more of hourly tries, so nothing failing for a passing reason waits for a click. */
+const MAX_HEALS = 40
+const HEAL_WINDOW = 3 * 24 * 60 * 60_000
 /** A pass (healing, or asking after batch jobs) that's got nowhere this long has hung. */
 const HUNG_PASS = 10 * 60_000
 /**
@@ -1811,7 +1817,8 @@ function healDue(set: GenerationSet): string | null {
   if (failed.some((a) => a.error === INTERRUPTED)) return "its server stopped"
   // Whatever still paints comes in first.
   if (set.status === "queued" || set.status === "running") return null
-  return Date.now() - Date.parse(set.updatedAt) >= HEAL_AFTER[set.heals] ? "failed for a passing reason" : null
+  const wait = HEAL_AFTER[Math.min(set.heals, HEAL_AFTER.length - 1)]
+  return Date.now() - Date.parse(set.updatedAt) >= wait ? "failed for a passing reason" : null
 }
 
 /** Images of `set` (run here) still marked as painting that nothing on this server paints any more. */
@@ -2180,12 +2187,15 @@ async function mockup(set: GenerationSet) {
     const image = await readSetFile(set.id, blank.file!)
     // Made again: the new blank goes under the scene there is, unless it's been deleted.
     const there = set.sceneId && (await getScene(set.sceneId).catch(() => null))
+    // The photo helps find every frame and what stands in front of one.
     const scene = there
-      ? await replaceBlank(there.id, image)
-      : await createSceneFromBlank(mockupName(set.source.title), image, {
-          category: set.folder,
-          shop: set.source.shop ?? undefined,
-        })
+      ? await replaceBlank(there.id, image, photo)
+      : await createSceneFromBlank(
+          mockupName(set.source.title),
+          image,
+          { category: set.folder, shop: set.source.shop ?? undefined },
+          photo
+        )
     const stored = await store(set.id, "mockup", await readSceneFile(scene.id, roomFile(scene)))
     await updateSet(set.id, (s) => ({
       ...s,

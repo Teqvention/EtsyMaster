@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { restorePosters } from "@/hooks/use-uploads"
+import { describeFolder } from "@/lib/saved/folders"
 import { posterKey } from "@/lib/uploads/groups"
 import type { RemovedView } from "@/lib/uploads/types"
 
@@ -77,7 +78,7 @@ export function RemovedLog({ removed }: { removed: RemovedView[] }) {
                     {entry.title}
                   </span>
                   <span className="truncate text-[11px] text-muted-foreground">
-                    {entry.folder} · {timeAgo(entry.removedAt)}
+                    {describeFolder(entry.folder)} · {timeAgo(entry.removedAt)}
                   </span>
                 </span>
                 <Button

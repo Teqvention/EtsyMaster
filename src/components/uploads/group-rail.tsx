@@ -7,6 +7,7 @@ import { shortTitle } from "@/components/generation/parts"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatNumber } from "@/lib/etsy/format"
+import { describeFolder } from "@/lib/saved/folders"
 import { canUpload, posterKey, statusOf, type PosterUploads } from "@/lib/uploads/groups"
 import type { UploadGroup } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
@@ -130,7 +131,7 @@ export function GroupRail({
             }
             title={shortTitle(group.source.title)}
             fullTitle={group.source.title}
-            meta={`${group.folder} · ${formatNumber(c.total)} poster${c.total === 1 ? "" : "s"}`}
+            meta={`${describeFolder(group.folder)} · ${formatNumber(c.total)} poster${c.total === 1 ? "" : "s"}`}
             counts={c}
             strip={group.posters.map((p) => p.thumb)}
             action={

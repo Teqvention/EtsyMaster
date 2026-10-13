@@ -3,6 +3,7 @@ import sharp from "sharp"
 import { addName, listNames } from "@/lib/categories"
 import { changeDoc, deleteDoc, readDoc, readDocs, updateDoc, writeDoc } from "@/lib/db/documents"
 import { deleteFile, deleteFiles, fileInfo, getFile, listFiles, putFile } from "@/lib/storage/files"
+import { applyTagChange, countTags, joinTags, spellChange, tagUnder, type Tag, type TagChange } from "@/lib/tags"
 
 import { isTemplate } from "./motion"
 import type { CategorySummary, Scene, SceneSummary, Template } from "./types"
@@ -45,6 +46,7 @@ export async function listScenes(): Promise<SceneSummary[]> {
           name: scene.name,
           order: scene.order,
           category: scene.category,
+          tags: sceneTags(scene),
           shop: scene.shop,
           width: scene.width,
           height: scene.height,
@@ -73,8 +75,18 @@ export async function getScene(id: string): Promise<Scene> {
   return scene
 }
 
+/**
+ * Writes the scene, all but where it's filed: its category and tags change
+ * only through `tagScenes`, so an editor open since keeps none it had.
+ */
 export async function saveScene(scene: Scene) {
-  if (!(await changeDoc(docKey(scene.id), () => scene))) throw new NotFoundError("Unknown scene")
+  const saved = await changeDoc<Scene>(docKey(scene.id), (stored) => {
+    const next: Scene = { ...scene }
+    delete next.category
+    delete next.tags
+    return { ...next, ...(stored.category && { category: stored.category }), ...(stored.tags && { tags: stored.tags }) }
+  })
+  if (!saved) throw new NotFoundError("Unknown scene")
   // Images no layer points at any more (replaced by edits) go too, and
   // previews of clips that changed or went.
   const used = new Set(["thumb.jpg"])
@@ -126,8 +138,8 @@ export async function createScene(
   about: Pick<Scene, "category" | "source" | "shop"> = {}
 ): Promise<Scene> {
   const existing = new Set([...(await readDocs<Scene>("mockups/", "/scene")).values()].map((s) => s.id))
-  // Taken by the export, reference, templates, categories and chains routes.
-  existing.add("export").add("reference").add("templates").add("categories").add("chains")
+  // Taken by the export, reference, templates, categories, chains, scan and tags routes.
+  for (const route of ["export", "reference", "templates", "categories", "chains", "scan", "tags"]) existing.add(route)
   const category = about.category ? await addCategory(about.category) : undefined
   let id = slug(name)
   for (let n = 2; existing.has(id); n++) id = `${slug(name)}-${n}`
@@ -261,9 +273,53 @@ export async function toListingJpeg(
 // their own).
 const CATEGORIES = "mockups/categories"
 
-/** Every category, A–Z, with how many scenes are in it. */
+/** Every category (primary tag), A–Z, with how many scenes carry it. */
 export async function listCategories(): Promise<CategorySummary[]> {
-  return listNames(CATEGORIES, (await listScenes()).map((s) => s.category))
+  const scenes = [...(await readDocs<Scene>("mockups/", "/scene")).values()]
+  return listNames(CATEGORIES, scenes.flatMap((s) => sceneTags(s).map((t) => t.primary)))
+}
+
+// --- Tags ---
+
+// A scene's primary tags are its categories, the first one kept in
+// `category` (see lib/tags.ts), each with secondary tags under it.
+
+/** Every tag the scene carries, its category first. */
+export function sceneTags(scene: Pick<Scene, "category" | "tags">): Tag[] {
+  const category = scene.category
+  const first = category ? { primary: category, secondary: tagUnder(scene.tags ?? [], category)?.secondary ?? [] } : null
+  return joinTags(first, scene.tags)
+}
+
+/**
+ * Changes the tags of the scenes `ids`, each in one step on its document; a
+ * tag in use already keeps the spelling it was first given. Answers each
+ * scene's tags as they are now (scenes gone are left out).
+ */
+export async function tagScenes(ids: string[], change: TagChange): Promise<{ id: string; tags: Tag[] }[]> {
+  const scenes = [...(await readDocs<Scene>("mockups/", "/scene")).values()]
+  const known = countTags(scenes.map(sceneTags))
+  // Categories named but carried by none keep their spelling too.
+  for (const { name } of await listNames(CATEGORIES, [])) {
+    if (!known.some((t) => t.name.toLowerCase() === name.toLowerCase())) known.push({ name, count: 0, secondary: [] })
+  }
+  const spelled = spellChange(change, known)
+  // A new primary tag is a category from now on, even before anything's in it.
+  if (spelled.type === "primary" && spelled.on) await addCategory(spelled.primary)
+  const done = await Promise.all(
+    ids.map(async (id) => {
+      const scene = await changeDoc<Scene>(docKey(id), (stored) => withTags(stored, applyTagChange(sceneTags(stored), spelled)))
+      return scene && { id, tags: sceneTags(scene) }
+    })
+  )
+  return done.filter((d) => d !== null)
+}
+
+function withTags(scene: Scene, tags: Tag[]): Scene {
+  const next: Scene = { ...scene }
+  delete next.category
+  delete next.tags
+  return tags.length ? { ...next, category: tags[0].primary, tags } : next
 }
 
 /** Adds a category unless one by that name exists; returns the name as stored. */

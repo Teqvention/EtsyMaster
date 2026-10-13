@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { ArrowDownToLineIcon, FolderIcon, FolderInputIcon, LayoutGridIcon, Rows3Icon } from "lucide-react"
+import { ArrowDownToLineIcon, EyeOffIcon, FolderIcon, FolderInputIcon, LayoutGridIcon, Rows3Icon } from "lucide-react"
 
 import { useListingSelection } from "@/components/listings/split-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
@@ -30,6 +30,7 @@ import { refreshCategories } from "@/hooks/use-categories"
 import { useSaved, useSavedFolder } from "@/hooks/use-saved"
 import { useSelection } from "@/hooks/use-selection"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ShopCalibration } from "@/lib/etsy/calibrate"
 import {
@@ -41,6 +42,7 @@ import {
   formatRate,
 } from "@/lib/etsy/format"
 import type { Listing } from "@/lib/etsy/types"
+import { describeFolder } from "@/lib/saved/folders"
 import { cn } from "@/lib/utils"
 
 // A shop's listings, best sellers first: as big photos, or as a table of
@@ -187,6 +189,28 @@ function useLayout() {
   return [layout, change] as const
 }
 
+const HIDE_FILED_KEY = "etsy-research:shop-listings-hide-filed"
+
+/** Whether listings already filed into a folder are left out, as last picked in this browser. */
+function useHideFiled() {
+  const [hide, setHide] = React.useState(() => {
+    try {
+      return localStorage.getItem(HIDE_FILED_KEY) === "1"
+    } catch {
+      return false
+    }
+  })
+  const change = React.useCallback((next: boolean) => {
+    setHide(next)
+    try {
+      localStorage.setItem(HIDE_FILED_KEY, next ? "1" : "0")
+    } catch {
+      // Not remembered; filed listings show next time.
+    }
+  }, [])
+  return [hide, change] as const
+}
+
 /** Every listing ranked by `sort`, best first; ties go to estimated sales a month, then revenue. */
 export function gallerySort(listings: Listing[], sort: GallerySort) {
   const { by } = SORTS.find((s) => s.value === sort)!
@@ -231,11 +255,27 @@ export function ListingGallery({
   const { select: openDetails } = useListingSelection()
   const [shown, setShown] = React.useState(STEP)
   const [layout, setLayout] = useLayout()
-  // Keywords and the focus narrow the grid; a tile keeps its rank in the whole shop.
+  // Keywords, the focus and hiding what's filed narrow the grid; a tile keeps its rank in the whole shop.
   const [keywords, setKeywords] = React.useState<string[]>([])
   const [focus, setFocus] = React.useState<Focus>("all")
+  const [hideFiled, setHideFiled] = useHideFiled()
+  const saved = useSaved()
+  // Listings saved per folder (lower-cased) for the folder picker, and where each is.
+  const { counts, folderOf } = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    const folderOf = new Map<number, string>()
+    for (const s of saved ?? []) {
+      counts.set(s.folder.toLowerCase(), (counts.get(s.folder.toLowerCase()) ?? 0) + 1)
+      folderOf.set(s.listingId, s.folder)
+    }
+    return { counts, folderOf }
+  }, [saved])
   const ranks = React.useMemo(() => new Map(all.map((l, i) => [l.id, i + 1])), [all])
-  const tagged = React.useMemo(() => withAnyTag(all, keywords), [all, keywords])
+  const filed = React.useMemo(() => all.filter((l) => folderOf.has(l.id)).length, [all, folderOf])
+  const tagged = React.useMemo(
+    () => withAnyTag(hideFiled ? all.filter((l) => !folderOf.has(l.id)) : all, keywords),
+    [all, keywords, hideFiled, folderOf]
+  )
   const focusCounts = React.useMemo(
     () => new Map(FOCUS.map((f) => [f.value, tagged.filter(f.matches).length])),
     [tagged]
@@ -247,7 +287,6 @@ export function ListingGallery({
   const sorts = SORTS.filter((s) => s.value !== "gained" || all.some((l) => l.rank?.favoritesGained))
   const ids = React.useMemo(() => listings.map((l) => l.id), [listings])
   const selection = useSelection(ids)
-  const saved = useSaved()
 
   // What the open context menu files: the pick, or the tile right-clicked
   // outside it (which becomes the pick, as in Finder).
@@ -285,17 +324,6 @@ export function ListingGallery({
     },
     [more, shown]
   )
-
-  // Listings saved per folder (lower-cased) for the folder picker, and where each is.
-  const { counts, folderOf } = React.useMemo(() => {
-    const counts = new Map<string, number>()
-    const folderOf = new Map<number, string>()
-    for (const s of saved ?? []) {
-      counts.set(s.folder.toLowerCase(), (counts.get(s.folder.toLowerCase()) ?? 0) + 1)
-      folderOf.set(s.listingId, s.folder)
-    }
-    return { counts, folderOf }
-  }, [saved])
 
   // The lowest-ranked listing already filed, to carry on searching from there.
   const lastFiled = React.useMemo(
@@ -451,6 +479,26 @@ export function ListingGallery({
             : "Click to select, then steal them into categories. Right-click to steal in one go"}
         </p>
         <div className="flex items-center gap-1">
+          {(filed > 0 || hideFiled) && (
+            <Toggle
+              size="sm"
+              pressed={hideFiled}
+              onPressedChange={(next) => {
+                setHideFiled(next)
+                setShown(STEP)
+              }}
+              title={
+                hideFiled
+                  ? "Showing only listings in no folder yet: click to show the filed ones too"
+                  : "Show only listings in no folder yet"
+              }
+              className="text-muted-foreground aria-pressed:text-foreground"
+            >
+              <EyeOffIcon />
+              Hide filed
+              <span className="tabular-nums">{formatNumber(filed)}</span>
+            </Toggle>
+          )}
           {lastFiled >= 0 && (
             <Button
               variant="ghost"
@@ -546,6 +594,18 @@ export function ListingGallery({
       </ContextMenu>
       )}
       {more && <div ref={sentinel} aria-hidden className="h-px" />}
+      {!loading && hideFiled && ranked.length === 0 && filed > 0 && (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-3 py-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            {keywords.length || focus !== "all"
+              ? "Every listing that matches is filed in a folder already."
+              : "Every listing of this shop is filed in a folder already."}
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => setHideFiled(false)}>
+            Show the filed ones
+          </Button>
+        </div>
+      )}
 
       <SelectionBar
         count={selection.count}
@@ -650,7 +710,7 @@ function GalleryTile({
         {folder && (
           <span className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-[11px] font-medium shadow-sm backdrop-blur-sm transition-[opacity,transform] duration-200 ease-out-strong starting:scale-95 starting:opacity-0">
             <FolderIcon className="size-3 shrink-0" />
-            <span className="truncate">{folder}</span>
+            <span className="truncate">{describeFolder(folder)}</span>
           </span>
         )}
       </span>

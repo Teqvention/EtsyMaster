@@ -1,5 +1,6 @@
 import type { AnalysisPlan } from "@/lib/etsy/analysis"
 import type { CountSnapshot, Listing, ListingShop, ShopReview } from "@/lib/etsy/types"
+import type { Tag } from "@/lib/tags"
 
 export type ShopAnalysisSummary = {
   plan: AnalysisPlan
@@ -16,11 +17,11 @@ export type ShopAnalysisSummary = {
 }
 
 /**
- * What a shop is filed under: one primary tag ("City") and the secondary tags
+ * What a shop is filed under: a primary tag ("City") and the secondary tags
  * that narrow it down ("Cartoon", "Funky"), as first typed; matched
- * case-insensitively.
+ * case-insensitively. A shop can carry several (see `lib/tags.ts`).
  */
-export type ShopTag = { primary: string; secondary: string[] }
+export type ShopTag = Tag
 
 /** A shop in the Shops page's list. */
 export type ShopVisit = {
@@ -28,7 +29,10 @@ export type ShopVisit = {
   /** ISO 8601 */
   viewedAt: string
   analysis: ShopAnalysisSummary | null
+  /** The first primary tag, where versions before several were possible read it. */
   tag?: ShopTag
+  /** Every primary tag, `tag` first; read through `tagsOf`, which settles where the two disagree. */
+  tags?: ShopTag[]
   /** ISO 8601: when the tag was last set or taken off; the later one wins where copies meet. */
   tagChangedAt?: string
   /** Flat labels from before tags had a primary one: read into `tag` when loaded. */

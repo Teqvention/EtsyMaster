@@ -2,6 +2,8 @@
 // poster slot somewhere in the stack. Coordinates are scene pixels, origin
 // top left. Stored as the document mockups/<id>/scene next to its layer images.
 
+import type { Tag } from "@/lib/tags"
+
 export type Point = [number, number]
 
 /** Corners clockwise from top left: TL, TR, BR, BL. */
@@ -83,8 +85,13 @@ export type Scene = {
   name: string
   /** Place in the Etsy listing; 1 is the thumbnail. */
   order: number
-  /** Set of mockups it belongs to; matched case-insensitively. */
+  /**
+   * Set of mockups it belongs to, matched case-insensitively: its first
+   * primary tag, where versions before tags read it.
+   */
   category?: string
+  /** Every primary tag with its secondary ones, `category` first; read through `sceneTags`. */
+  tags?: Tag[]
   /** Where its picture came from, e.g. the file a room was drawn in. */
   source?: string
   /** The Etsy shop it was stolen from, by name. */
@@ -168,7 +175,7 @@ export type ClipSummary = Pick<Clip, "id" | "name" | "duration" | "video"> & {
 export type SceneSummary = Pick<
   Scene,
   "id" | "name" | "order" | "width" | "height" | "category" | "shop"
-> & { thumb: string | null; clips: ClipSummary[] }
+> & { tags: Tag[]; thumb: string | null; clips: ClipSummary[] }
 
 export type CategorySummary = { name: string; count: number }
 

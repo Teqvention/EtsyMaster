@@ -7,10 +7,13 @@ import * as React from "react"
 import {
   CircleAlertIcon,
   CheckIcon,
+  ChevronRightIcon,
+  CornerDownRightIcon,
   ExternalLinkIcon,
   FolderIcon,
   FolderInputIcon,
   FolderOpenIcon,
+  FolderPlusIcon,
   FrameIcon,
   HeartIcon,
   LayersIcon,
@@ -18,7 +21,6 @@ import {
   PaletteIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  PlusIcon,
   SparklesIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -27,6 +29,7 @@ import { toast } from "sonner"
 import { GenerateDialog } from "@/components/generation/generate-dialog"
 import { LikedView } from "@/components/listings/liked-view"
 import { CategoryPicker } from "@/components/mockups/category-picker"
+import { FolderTree, LISTINGS_DRAG } from "@/components/saved/folder-tree"
 import { fromSaved, MockupDialog, mockupPhotos } from "@/components/saved/mockup-dialog"
 import { SelectionBar, SelectMark } from "@/components/selection"
 import { StyleFromSavedDialog } from "@/components/styles/style-from-saved"
@@ -60,33 +63,50 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { generate, isActive, retryGeneration, useGenerations } from "@/hooks/use-generations"
 import { useLikes } from "@/hooks/use-likes"
 import { createCategory, refreshCategories, useCategories } from "@/hooks/use-categories"
 import { removeFromSaved, saveToFolder, useSaved } from "@/hooks/use-saved"
 import { useSelection } from "@/hooks/use-selection"
-import { formatCurrency } from "@/lib/etsy/format"
+import { formatCurrency, formatNumber } from "@/lib/etsy/format"
 import type { GenerateOptions, GenerationKind, GenerationSet } from "@/lib/generation/types"
+import {
+  ancestry,
+  childFolder,
+  describeFolder,
+  findFolder,
+  folderName,
+  folderTree,
+  isWithin,
+  MAX_DEPTH,
+  sameFolder,
+  type FolderNode,
+} from "@/lib/saved/folders"
 import type { SavedListing } from "@/lib/saved/types"
 import { MAX_IMAGES } from "@/lib/styles/types"
 import { cn } from "@/lib/utils"
 
 // Saved: liked listings, and the folders listings are filed into from a
-// shop's gallery. A folder's posters are where generation starts: its
+// shop's gallery. Folders nest as deep as needed (see lib/saved/folders.ts):
+// the bar shows them as a tree, and an open folder shows its listings and
+// those of every folder in it, with a row of chips per level to go deeper,
+// as the Shops page's tags do. Listings and folders are dragged onto a
+// folder in the bar to move them there.
+// A folder's posters are where generation starts: its
 // mockups (a blank mockup scene per photo, in a mockup category picked for
 // them: folders aren't mockup categories), its posters (taken out of the photo and redrawn as new designs) and
 // a style (their look, read off a moodboard of them).
-// What's open lives in the URL: `?folder=` a folder, `?liked` the likes,
-// neither every folder at once ("All", where Generate all starts from).
-
-type Folder = { name: string; count: number; busy: boolean }
+// What's open lives in the URL: `?folder=` a folder's path (`&direct` for
+// only what's in it itself), `?liked` the likes, neither every folder at once
+// ("All", where Generate all starts from).
 
 export function SavedView({ currency }: { currency: string }) {
   const saved = useSaved()
   const categories = useCategories("saved")
   const likes = useLikes()
   const sets = useGenerations()
-  const [param, open] = useOpenFolder()
+  const [param, direct, open] = useOpenFolder()
   const [collapsed, storeCollapsed] = useFoldersCollapsed()
   // The bar slides only when toggled here, not when the remembered state
   // arrives after hydration.
@@ -100,37 +120,66 @@ export function SavedView({ currency }: { currency: string }) {
     refreshCategories("saved")
   }, [])
 
-  const folders = React.useMemo(() => {
-    const byKey = new Map<string, Folder>()
-    for (const { name } of categories) byKey.set(name.toLowerCase(), { name, count: 0, busy: false })
+  // The folders as a tree, counting what's saved in each.
+  const tree = React.useMemo(() => {
+    const own = new Map<string, { name: string; count: number }>()
+    for (const { name } of categories) own.set(name.toLowerCase(), { name, count: 0 })
     for (const { folder } of saved ?? []) {
-      const entry = byKey.get(folder.toLowerCase()) ?? { name: folder, count: 0, busy: false }
-      byKey.set(folder.toLowerCase(), { ...entry, count: entry.count + 1 })
+      const entry = own.get(folder.toLowerCase()) ?? { name: folder, count: 0 }
+      own.set(folder.toLowerCase(), { ...entry, count: entry.count + 1 })
     }
-    // Busy by where the listing is saved: a mockup set's folder is its mockup category.
+    return folderTree([...own.values()])
+  }, [categories, saved])
+  // Listings in each folder itself (lower-cased path), for moving.
+  const counts = React.useMemo(() => {
+    const map = new Map<string, number>()
+    for (const { folder } of saved ?? []) map.set(folder.toLowerCase(), (map.get(folder.toLowerCase()) ?? 0) + 1)
+    return map
+  }, [saved])
+  // Busy by where the listing is saved (a mockup set's folder is its mockup
+  // category), and so are the folders it's in.
+  const busy = React.useMemo(() => {
     const folderOf = new Map((saved ?? []).map((s) => [s.listingId, s.folder]))
+    const paths = new Set<string>()
     for (const set of sets ?? []) {
-      const entry = byKey.get((folderOf.get(set.source.listingId) ?? set.folder).toLowerCase())
-      if (entry && isActive(set)) entry.busy = true
+      if (!isActive(set)) continue
+      const folder = folderOf.get(set.source.listingId) ?? set.folder
+      if (!findFolder(tree, folder)) continue
+      for (const path of ancestry(folder)) paths.add(path.toLowerCase())
     }
-    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [categories, saved, sets])
-  const counts = React.useMemo(() => new Map(folders.map((f) => [f.name.toLowerCase(), f.count])), [folders])
+    return paths
+  }, [saved, sets, tree])
 
-  const current =
-    param === LIKED || param === null
-      ? param
-      : (folders.find((f) => f.name.toLowerCase() === param.toLowerCase())?.name ?? param)
-  const items = React.useMemo(
-    () =>
-      current === LIKED
-        ? []
-        : current === null
-          ? // Folder by folder, as All shows them (and Shift-click runs over them).
-            (saved ?? []).toSorted((a, b) => a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" }))
-          : (saved ?? []).filter((s) => s.folder.toLowerCase() === current.toLowerCase()),
-    [saved, current]
-  )
+  const node = param !== null && param !== LIKED ? findFolder(tree, param) : null
+  const current = param === LIKED || param === null ? param : (node?.path ?? param)
+  const items = React.useMemo(() => {
+    if (current === LIKED) return []
+    // Folder by folder, as the headings show them (and Shift-click runs over them).
+    if (current === null) {
+      return (saved ?? []).toSorted((a, b) => a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" }))
+    }
+    // What's in the folder itself first, then each folder in it.
+    const inside = (saved ?? []).filter((s) => (direct ? sameFolder(s.folder, current) : isWithin(s.folder, current)))
+    return inside.toSorted(
+      (a, b) =>
+        Number(!sameFolder(a.folder, current)) - Number(!sameFolder(b.folder, current)) ||
+        a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" })
+    )
+  }, [saved, current, direct])
+
+  async function dropListings(ids: number[], to: string) {
+    const listings = (saved ?? []).filter((s) => ids.includes(s.listingId) && !sameFolder(s.folder, to))
+    if (!listings.length) return
+    const from = Map.groupBy(listings, (l) => l.folder)
+    try {
+      await saveToFolder(listings, to)
+      toast.success(`Moved ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} to ${describeFolder(to)}`, {
+        action: { label: "Undo", onClick: () => from.forEach((back, folder) => saveToFolder(back, folder)) },
+      })
+    } catch (error) {
+      toast.error(`Couldn't move: ${(error as Error).message}`)
+    }
+  }
 
   const expand = collapsed ? (
     <Button variant="ghost" size="icon-sm" aria-label="Show folders" title="Show folders" onClick={() => setCollapsed(false)}>
@@ -141,11 +190,13 @@ export function SavedView({ currency }: { currency: string }) {
   return (
     <div className="flex items-start">
       <FolderBar
-        folders={folders}
+        tree={tree}
+        busy={busy}
         total={saved?.length ?? 0}
         liked={Object.keys(likes).length}
         current={current}
         onOpen={open}
+        onDropListings={dropListings}
         collapsed={collapsed}
         animated={animated}
         onCollapse={() => setCollapsed(true)}
@@ -167,7 +218,17 @@ export function SavedView({ currency }: { currency: string }) {
             </div>
           </div>
         ) : (
-          <FolderView key={current ?? ALL_KEY} folder={current} items={items} sets={sets} counts={counts} expand={expand} />
+          <FolderView
+            key={current ?? ALL_KEY}
+            folder={current}
+            tree={tree}
+            direct={direct}
+            items={items}
+            sets={sets}
+            counts={counts}
+            expand={expand}
+            onOpen={open}
+          />
         )}
       </div>
     </div>
@@ -182,7 +243,7 @@ function PaneHeader({
   children,
 }: {
   icon: React.ReactNode
-  title: string
+  title: React.ReactNode
   count?: number
   before?: React.ReactNode
   children?: React.ReactNode
@@ -192,7 +253,7 @@ function PaneHeader({
       {before}
       <h2 className="flex min-w-0 items-center gap-2 text-base font-semibold [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
         {icon}
-        <span className="truncate">{title}</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate">{title}</span>
         {count !== undefined && <span className="text-sm font-normal text-muted-foreground tabular-nums">{count}</span>}
       </h2>
       {children && <div className="ml-auto flex items-center gap-2">{children}</div>}
@@ -203,28 +264,30 @@ function PaneHeader({
 // --- Folder bar ---
 
 function FolderBar({
-  folders,
+  tree,
+  busy,
   total,
   liked,
   current,
   onOpen,
+  onDropListings,
   collapsed,
   animated,
   onCollapse,
 }: {
-  folders: Folder[]
+  tree: FolderNode[]
+  busy: ReadonlySet<string>
   /** Listings saved in any folder. */
   total: number
   liked: number
-  /** A folder, all of them (null) or `LIKED`. */
+  /** A folder's path, all of them (null) or `LIKED`. */
   current: string | null
   onOpen: (folder: string | null) => void
+  onDropListings: (ids: number[], to: string) => void
   collapsed: boolean
   animated: boolean
   onCollapse: () => void
 }) {
-  const [adding, setAdding] = React.useState(false)
-
   return (
     <div
       inert={collapsed}
@@ -235,7 +298,7 @@ function FolderBar({
       )}
     >
       <nav
-        aria-label="Folders"
+        aria-label="Saved"
         className="ml-4 flex max-h-[calc(100svh-var(--header-height)-4rem)] w-56 flex-col gap-0.5 overflow-y-auto rounded-xl border bg-muted/40 p-1.5 lg:ml-6"
       >
         <div className="flex items-center justify-between py-0.5 pr-0.5 pl-2">
@@ -248,7 +311,7 @@ function FolderBar({
           icon={<LayersIcon />}
           name="All"
           count={total}
-          busy={folders.some((f) => f.busy)}
+          busy={busy.size > 0}
           current={current === null}
           onClick={() => onOpen(null)}
         />
@@ -259,37 +322,13 @@ function FolderBar({
           current={current === LIKED}
           onClick={() => onOpen(LIKED)}
         />
-
-        <div className="mt-2 flex items-center justify-between py-0.5 pr-0.5 pl-2">
-          <span className="text-xs font-medium text-muted-foreground">Folders</span>
-          <Button variant="ghost" size="icon-xs" aria-label="New folder" title="New folder" onClick={() => setAdding(true)}>
-            <PlusIcon />
-          </Button>
-        </div>
-        {adding && (
-          <NewFolder
-            onDone={(name) => {
-              setAdding(false)
-              if (name) onOpen(name)
-            }}
-          />
-        )}
-        {folders.map((folder) => (
-          <FolderButton
-            key={folder.name}
-            icon={current?.toLowerCase() === folder.name.toLowerCase() ? <FolderOpenIcon /> : <FolderIcon />}
-            name={folder.name}
-            count={folder.count}
-            busy={folder.busy}
-            current={current?.toLowerCase() === folder.name.toLowerCase()}
-            onClick={() => onOpen(folder.name)}
-          />
-        ))}
-        {folders.length === 0 && !adding && (
-          <p className="px-2 py-1.5 text-xs text-pretty text-muted-foreground">
-            Select listings in a shop and right-click to file them into a folder.
-          </p>
-        )}
+        <FolderTree
+          tree={tree}
+          busy={busy}
+          current={current === LIKED ? null : current}
+          onOpen={onOpen}
+          onDropListings={onDropListings}
+        />
       </nav>
     </div>
   )
@@ -328,16 +367,138 @@ function FolderButton({
   )
 }
 
-function NewFolder({ onDone }: { onDone: (name: string | null) => void }) {
+// --- Where a folder is, and the folders in it ---
+
+/** The open folder's path, its parents to click back to: "robin › Cats › Black". */
+function FolderTitle({ path, onOpen }: { path: string; onOpen: (path: string) => void }) {
+  const steps = ancestry(path)
+  return (
+    <>
+      {steps.slice(0, -1).map((step) => (
+        <React.Fragment key={step}>
+          <button
+            type="button"
+            onClick={() => onOpen(step)}
+            className="min-w-0 shrink truncate rounded-sm font-normal text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {folderName(step)}
+          </button>
+          <ChevronRightIcon aria-hidden className="size-3.5! text-muted-foreground/70" />
+        </React.Fragment>
+      ))}
+      <span className="min-w-0 truncate">{folderName(path)}</span>
+    </>
+  )
+}
+
+/**
+ * Under the open folder's header, as the Shops page's tag chips: one row per
+ * level from the top folder down, each with the folders in it, the one taken
+ * pressed; the open folder's row also offers what's in it itself and a new
+ * folder inside.
+ */
+function FolderChips({
+  tree,
+  path,
+  direct,
+  onOpen,
+}: {
+  tree: FolderNode[]
+  path: string
+  direct: boolean
+  onOpen: (path: string, direct?: boolean) => void
+}) {
+  const [adding, setAdding] = React.useState(false)
+  const chain = ancestry(path).flatMap((p) => findFolder(tree, p) ?? [])
+  const open = chain.at(-1)
+  if (!open) return null
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {chain.map((node, i) => {
+        const isOpen = node === open
+        // Above the open folder, a level shows only to say which folder was taken.
+        if (!isOpen && !node.children.length) return null
+        const chips = node.children.length
+          ? [
+              { key: ALL_IN, label: `All ${node.name}`, count: node.total, folder: false, go: () => onOpen(node.path) },
+              ...node.children.map((child) => ({
+                key: child.path.toLowerCase(),
+                label: child.name,
+                count: child.total,
+                folder: true,
+                go: () => onOpen(child.path),
+              })),
+              ...(node.own > 0
+                ? [{ key: DIRECT, label: "Not in a subfolder", count: node.own, folder: false, go: () => onOpen(node.path, true) }]
+                : []),
+            ]
+          : []
+        const value = isOpen ? (direct ? DIRECT : ALL_IN) : chain[i + 1].path.toLowerCase()
+        return (
+          <div key={node.path} className="flex items-start gap-1.5" style={{ paddingLeft: node.depth * 14 }}>
+            <CornerDownRightIcon className="mt-2 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+              {chips.length > 0 && (
+                <ToggleGroup
+                  variant="outline"
+                  size="sm"
+                  spacing={1}
+                  value={[value]}
+                  onValueChange={(picked) => chips.find((c) => c.key === picked[0])?.go()}
+                  aria-label={`Folders in ${node.name}`}
+                  className="flex-wrap"
+                >
+                  {chips.map((chip) => (
+                    <ToggleGroupItem key={chip.key} value={chip.key} className="gap-1.5">
+                      {chip.folder && <FolderIcon />}
+                      {chip.label}
+                      <span className="text-xs text-muted-foreground tabular-nums">{formatNumber(chip.count)}</span>
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              )}
+              {isOpen &&
+                node.depth + 1 < MAX_DEPTH &&
+                (adding ? (
+                  <NewSubfolder
+                    parent={node.path}
+                    onDone={(made) => {
+                      setAdding(false)
+                      if (made) onOpen(made)
+                    }}
+                  />
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 border border-dashed text-muted-foreground"
+                    onClick={() => setAdding(true)}
+                  >
+                    <FolderPlusIcon />
+                    {chips.length ? "New folder" : `New folder inside ${node.name}`}
+                  </Button>
+                ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const ALL_IN = "all"
+const DIRECT = "direct"
+
+function NewSubfolder({ parent, onDone }: { parent: string; onDone: (path: string | null) => void }) {
   const [name, setName] = React.useState("")
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
         const clean = name.trim()
-        onDone(clean ? createCategory("saved", clean) : null)
+        onDone(clean ? createCategory("saved", childFolder(parent, clean)) : null)
       }}
-      className="px-0.5 py-0.5"
     >
       <Input
         autoFocus
@@ -346,9 +507,9 @@ function NewFolder({ onDone }: { onDone: (name: string | null) => void }) {
         onBlur={() => !name.trim() && onDone(null)}
         onKeyDown={(event) => event.key === "Escape" && onDone(null)}
         placeholder="Folder name"
-        aria-label="New folder name"
+        aria-label={`New folder inside ${folderName(parent)}`}
         maxLength={40}
-        className="h-8 bg-background"
+        className="h-7 w-44 bg-background text-sm"
       />
     </form>
   )
@@ -382,18 +543,25 @@ type Work = { fresh: SavedListing[]; again: GenerationSet[] }
 
 function FolderView({
   folder,
+  tree,
+  direct,
   items,
   sets,
   counts,
   expand,
+  onOpen,
 }: {
-  /** Null for every folder at once. */
+  /** A folder's path, or null for every folder at once. */
   folder: string | null
+  tree: FolderNode[]
+  /** Only what's in the folder itself, not in the folders inside it. */
+  direct: boolean
   items: SavedListing[]
   sets: GenerationSet[] | null
-  /** Listings per folder (lower-cased), for moving. */
+  /** Listings per folder itself (lower-cased path), for moving. */
   counts: ReadonlyMap<string, number>
   expand: React.ReactNode
+  onOpen: (folder: string | null, direct?: boolean) => void
 }) {
   const router = useRouter()
   const ids = React.useMemo(() => items.map((i) => i.listingId), [items])
@@ -425,18 +593,24 @@ function FolderView({
   )
 
   const byId = React.useMemo(() => new Map(items.map((i) => [i.listingId, i])), [items])
-  // All shows each folder under a small heading; a folder is one untitled group.
+  // All shows each folder under a small heading, and so does a folder with
+  // listings in the folders inside it; a folder holding them all itself is
+  // one untitled group.
   const groups = React.useMemo(() => {
-    if (folder) return [{ name: null as string | null, items }]
-    const byFolder = new Map<string, { name: string | null; items: SavedListing[] }>()
+    const byFolder = new Map<string, { path: string | null; items: SavedListing[] }>()
     for (const item of items) {
       const key = item.folder.toLowerCase()
-      const group = byFolder.get(key) ?? { name: item.folder, items: [] }
+      const group = byFolder.get(key) ?? { path: item.folder, items: [] }
       group.items.push(item)
       byFolder.set(key, group)
     }
-    return [...byFolder.values()]
+    const list = [...byFolder.values()]
+    if (folder && list.length === 1 && sameFolder(list[0].path!, folder)) return [{ path: null, items }]
+    return list
   }, [folder, items])
+  // A group's heading: the path below the open folder, or the folder itself.
+  const groupName = (path: string) =>
+    !folder ? describeFolder(path) : sameFolder(path, folder) ? `${folderName(folder)} itself` : describeFolder(path.slice(folder.length + 1))
   const pick = (ids: Iterable<number>) => [...ids].flatMap((id) => byId.get(id) ?? [])
 
   /**
@@ -490,7 +664,7 @@ function FolderView({
     try {
       // Saving again files them under the new folder (and date).
       await saveToFolder(listings, to)
-      toast.success(`Moved ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} to ${to}`, {
+      toast.success(`Moved ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} to ${describeFolder(to)}`, {
         action: { label: "Open", onClick: () => router.push(`/liked?folder=${encodeURIComponent(to)}`) },
       })
     } catch (error) {
@@ -502,7 +676,7 @@ function FolderView({
     selection.clear()
     try {
       await removeFromSaved(listings.map((l) => l.listingId))
-      toast(`Removed ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} from ${folder ?? "Saved"}`, {
+      toast(`Removed ${listings.length === 1 ? "1 listing" : `${listings.length} listings`} from ${folder ? folderName(folder) : "Saved"}`, {
         action: {
           label: "Undo",
           onClick: () => Map.groupBy(listings, (l) => l.folder).forEach((back, to) => saveToFolder(back, to)),
@@ -532,7 +706,7 @@ function FolderView({
     <>
       <PaneHeader
         icon={folder ? <FolderOpenIcon /> : <LayersIcon />}
-        title={folder ?? "All"}
+        title={folder ? <FolderTitle path={folder} onOpen={(path) => onOpen(path)} /> : "All"}
         count={items.length}
         before={expand}
       >
@@ -575,13 +749,14 @@ function FolderView({
       </PaneHeader>
 
       <div className="flex flex-col gap-3 px-4 lg:px-6">
+        {folder && <FolderChips tree={tree} path={folder} direct={direct} onOpen={onOpen} />}
         {items.length === 0 ? (
           <Empty className="min-h-[50svh] border border-dashed">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <FolderOpenIcon />
               </EmptyMedia>
-              <EmptyTitle>{folder ? `Nothing in ${folder} yet` : "Nothing saved yet"}</EmptyTitle>
+              <EmptyTitle>{folder ? `Nothing in ${folderName(folder)} yet` : "Nothing saved yet"}</EmptyTitle>
               <EmptyDescription>
                 In a shop&apos;s Listings, select posters and right-click to save them {folder ? "here" : "into a folder"}.
               </EmptyDescription>
@@ -602,17 +777,17 @@ function FolderView({
           >
             <ContextMenuTrigger onContextMenu={aimMenu} render={<div className="flex flex-col gap-8" />}>
               {groups.map((group) => (
-                <section key={group.name} aria-label={group.name ?? undefined} className="flex flex-col gap-3">
-                  {group.name !== null && (
+                <section key={group.path ?? ALL_KEY} aria-label={group.path ? groupName(group.path) : undefined} className="flex flex-col gap-3">
+                  {group.path !== null && (
                     <h3 className="sticky top-0 z-10 -mx-1 flex items-baseline gap-2 bg-background/85 px-1 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
                       <button
                         type="button"
-                        onClick={() => router.replace(`/liked?folder=${encodeURIComponent(group.name!)}`)}
-                        className="flex items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5"
-                        title={`Open ${group.name}`}
+                        onClick={() => onOpen(group.path!, !!folder && sameFolder(group.path!, folder))}
+                        className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5 [&_svg]:shrink-0"
+                        title={`Open ${describeFolder(group.path)}`}
                       >
                         <FolderIcon />
-                        {group.name}
+                        <span className="truncate">{groupName(group.path)}</span>
                       </button>
                       <span className="font-normal tabular-nums">{group.items.length}</span>
                     </h3>
@@ -627,6 +802,8 @@ function FolderView({
                           selected={selection.has(item.listingId)}
                           selecting={selection.count > 0}
                           onToggle={(range) => selection.toggle(item.listingId, { range })}
+                          // A picked tile carries the whole pick along.
+                          dragged={() => (selection.has(item.listingId) ? [...selection.selected] : [item.listingId])}
                         />
                       </li>
                     ))}
@@ -664,7 +841,13 @@ function FolderView({
                   Move to
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-64 p-0">
-                  <CategoryPicker of="saved" onPick={(to) => move(to, targeted)} counts={counts} current={folder ?? sharedFolder(targeted)} />
+                  <CategoryPicker
+                    of="saved"
+                    onPick={(to) => move(to, targeted)}
+                    counts={counts}
+                    current={sharedFolder(targeted)}
+                    parent={folder}
+                  />
                 </ContextMenuSubContent>
               </ContextMenuSub>
               {targeted.length === 1 && (
@@ -685,7 +868,7 @@ function FolderView({
         <GenerateDialog
           open={asking !== null}
           onOpenChange={(open) => !open && setAsking(null)}
-          title={`Generate posters · ${folder ?? "All folders"}`}
+          title={`Generate posters · ${folder ? describeFolder(folder) : "All folders"}`}
           description={
             asking &&
             [
@@ -705,7 +888,7 @@ function FolderView({
           onOpenChange={(open) => !open && setMocking(null)}
           listings={mockingListings}
           description={
-            mocking?.length === 1 ? mocking[0].title : `${mocking?.length ?? 0} listings · ${folder ?? "All folders"}`
+            mocking?.length === 1 ? mocking[0].title : `${mocking?.length ?? 0} listings · ${folder ? describeFolder(folder) : "All folders"}`
           }
           onDone={() => selection.clear()}
         />
@@ -745,7 +928,8 @@ function FolderView({
                 of="saved"
                 onPick={(to) => move(to, pick(selection.selected))}
                 counts={counts}
-                current={folder ?? sharedFolder(pick(selection.selected))}
+                current={sharedFolder(pick(selection.selected))}
+                parent={folder}
               />
             </DropdownMenuContent>
           </DropdownMenu>
@@ -825,6 +1009,7 @@ function SavedTile({
   selected,
   selecting,
   onToggle,
+  dragged,
 }: {
   item: SavedListing
   /** One per photo made into a mockup, newest first. */
@@ -833,6 +1018,8 @@ function SavedTile({
   selected: boolean
   selecting: boolean
   onToggle: (range: boolean) => void
+  /** The listings a drag of this tile carries onto a folder. */
+  dragged: () => number[]
 }) {
   const [loaded, setLoaded] = React.useState(false)
   // What's still going shows first, then what failed.
@@ -844,7 +1031,14 @@ function SavedTile({
       aria-pressed={selected}
       aria-label={item.title}
       onClick={(event) => onToggle(event.shiftKey)}
-      className="group/tile flex w-full flex-col gap-2 rounded-xl text-left outline-none select-none"
+      draggable
+      onDragStart={(event) => {
+        const ids = dragged()
+        event.dataTransfer.setData(LISTINGS_DRAG, JSON.stringify(ids))
+        event.dataTransfer.effectAllowed = "move"
+        if (ids.length > 1) setDragBadge(event, `${ids.length} listings`)
+      }}
+      className="group/tile flex w-full min-w-0 flex-col gap-2 rounded-xl text-left outline-none select-none"
     >
       <span
         className={cn(
@@ -875,15 +1069,27 @@ function SavedTile({
           </span>
         )}
       </span>
-      <span className="flex flex-col gap-0.5 px-0.5">
-        <span className="truncate text-sm font-medium">{item.title}</span>
-        <span className="flex items-baseline gap-2 text-xs text-muted-foreground tabular-nums">
+      {/* Held to the tile: a long title can never draw over the next one. */}
+      <span className="flex w-full min-w-0 flex-col gap-0.5 overflow-hidden px-0.5 [contain:paint]" title={item.title}>
+        <span className="block w-full truncate text-sm font-medium">{item.title}</span>
+        <span className="flex w-full min-w-0 items-baseline gap-2 text-xs text-muted-foreground tabular-nums">
           <span className="min-w-0 truncate">{item.shop ?? "Etsy"}</span>
           <span className="ml-auto shrink-0">{formatCurrency(item.priceCents, item.currency)}</span>
         </span>
       </span>
     </button>
   )
+}
+
+/** A small "3 listings" pill under the pointer while a pick is dragged, instead of one tile's picture. */
+function setDragBadge(event: React.DragEvent, text: string) {
+  const badge = document.createElement("div")
+  badge.textContent = text
+  badge.style.cssText =
+    "position:fixed;top:-100px;left:-100px;padding:4px 10px;border-radius:999px;font:500 12px system-ui,sans-serif;background:#ea580c;color:#fff;white-space:nowrap"
+  document.body.append(badge)
+  event.dataTransfer.setDragImage(badge, -8, -8)
+  requestAnimationFrame(() => badge.remove())
 }
 
 /** Where the listing's newest set of a kind stands. */
@@ -908,22 +1114,27 @@ function SetChip({ set, label }: { set: GenerationSet; label: string }) {
 const LIKED = "\0liked"
 const ALL_KEY = "\0all"
 
-/** The open folder, null for All, or `LIKED`. */
+/** The open folder's path, null for All, or `LIKED`; and whether only what's in it itself shows. */
 function useOpenFolder() {
   const searchParams = useSearchParams()
   const folder = searchParams.has("liked") ? LIKED : searchParams.get("folder")
-  const open = React.useCallback((next: string | null) => {
+  const direct = folder !== null && folder !== LIKED && searchParams.has("direct")
+  const open = React.useCallback((next: string | null, direct = false) => {
     const params = new URLSearchParams(window.location.search)
     params.delete("folder")
     params.delete("liked")
+    params.delete("direct")
     if (next === LIKED) params.set("liked", "")
-    else if (next !== null) params.set("folder", next)
+    else if (next !== null) {
+      params.set("folder", next)
+      if (direct) params.set("direct", "")
+    }
     // A listing open in Liked belongs to Liked.
     params.delete("listing")
     const query = params.toString()
     window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)
   }, [])
-  return [folder, open] as const
+  return [folder, direct, open] as const
 }
 
 const COLLAPSED_KEY = "etsy-research:folders-collapsed"

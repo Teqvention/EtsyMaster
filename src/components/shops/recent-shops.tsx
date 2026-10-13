@@ -9,7 +9,6 @@ import {
   ArrowUpIcon,
   ArrowUpNarrowWideIcon,
   CheckIcon,
-  CornerDownRightIcon,
   DownloadIcon,
   HeartIcon,
   ListChecksIcon,
@@ -18,22 +17,22 @@ import {
   SquareIcon,
   StarIcon,
   StoreIcon,
-  TagIcon,
   TagsIcon,
   XIcon,
 } from "lucide-react"
 
 import { SelectionBar } from "@/components/selection"
 import { GetAllListingsPopover } from "@/components/shops/get-all-listings"
-import { ShopTagIconButton, TagBadge, TagDialog } from "@/components/shops/shop-tags"
+import { ShopTagIconButton, TagDialog } from "@/components/shops/shop-tags"
+import { matchesTagView, TagFilterChips, type TagView } from "@/components/tags/tag-filter-chips"
+import { TagBadges } from "@/components/tags/tag-picker"
 import { ShopLikeButton } from "@/components/shops/shop-like"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hasAllListings, stopBatch, useBatch } from "@/hooks/use-shop-analysis"
-import { forgetShop, hasPrimaryTag, hasSecondaryTag, useShopTags, type ShopVisit } from "@/hooks/use-shop-history"
+import { forgetShop, tagsOf, type ShopVisit } from "@/hooks/use-shop-history"
 import { useAccounts } from "@/hooks/use-accounts"
 import { useSelection } from "@/hooks/use-selection"
 import { formatCompact, formatCompactCurrency, formatNumber, formatRate } from "@/lib/etsy/format"
@@ -44,7 +43,7 @@ import { cn } from "@/lib/utils"
 // analysis found, so the list doubles as a quick comparison. The column heads
 // (or the sort menu, where they're hidden) reorder it, and the bar above
 // narrows it by name, liked, country, analysis and sales. Shops can be liked
-// and tagged from their row (a primary tag, secondary tags under it): the
+// and tagged from their row (primary tags, secondary tags under each): the
 // chips filter by primary tag and then by secondary tag, and Select picks
 // shops to tag in one go. All but the search live in the URL
 // (`?tag=&sub=&liked&country=&status=&sales=&sort=`).
@@ -63,15 +62,21 @@ export function RecentShops({
 }) {
   const now = useNow()
   const [searchParams, setParams] = useParams()
-  const [search, setSearch] = React.useState("")
-  const filter = React.useMemo(() => tagFilter(searchParams.get("tag"), searchParams.get("sub")), [searchParams])
+  // The name search outlives a visit to a shop, as the filters in the address do.
+  const [search, setSearchState] = React.useState(() => lastSearch)
+  const setSearch = (next: string) => {
+    lastSearch = next
+    setSearchState(next)
+  }
+  const view = React.useMemo(() => tagView(searchParams.get("tag"), searchParams.get("sub")), [searchParams])
   const filters = React.useMemo(() => readFilters(searchParams), [searchParams])
   const sort = React.useMemo(() => parseSort(searchParams.get("sort")), [searchParams])
   const shown = React.useMemo(() => {
     const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    return sortVisits(visits.filter((v) => filter.matches(v) && matchesFilters(v, filters, words)), sort)
-  }, [visits, filter, filters, search, sort])
-  const filtering = filter.primary !== null || search.trim() !== "" || hasFilters(filters)
+    return sortVisits(visits.filter((v) => matchesTagView(tagsOf(v), view) && matchesFilters(v, filters, words)), sort)
+  }, [visits, view, filters, search, sort])
+  const items = React.useMemo(() => visits.map(tagsOf), [visits])
+  const filtering = view.primary !== null || search.trim() !== "" || hasFilters(filters)
 
   function clearFilters() {
     setSearch("")
@@ -156,11 +161,7 @@ export function RecentShops({
         onClear={filtering ? clearFilters : undefined}
       />
 
-      <TagFilter
-        visits={visits}
-        filter={filter}
-        onChange={(primary, secondary) => setParams({ tag: primary, sub: secondary })}
-      />
+      <TagFilterChips items={items} view={view} onChange={({ primary, secondary }) => setParams({ tag: primary, sub: secondary })} />
 
       {shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-3 py-8 text-center">
@@ -262,6 +263,30 @@ function GetAllListingsButton({ visits }: { visits: ShopVisit[] }) {
       </Button>
     </GetAllListingsPopover>
   )
+}
+
+/** The name typed into the list's search, kept while a shop is open. */
+let lastSearch = ""
+
+/**
+ * The list view an address's search params (`?tag=City&liked&sort=…`) stand
+ * for, in words, for the way back to it: "City › Cartoon", "Liked", "DE"…
+ */
+export function describeListView(search: string): string[] {
+  const params = new URLSearchParams(search)
+  const tag = params.get("tag")
+  const sub = params.get("sub")
+  const f = readFilters(params)
+  const sort = params.get("sort")
+  return [
+    tag === "" ? "Untagged" : tag && (sub === null ? tag : `${tag} › ${sub === "" ? "No secondary tag" : sub}`),
+    f.liked && "Liked",
+    f.country !== "all" && countryName(f.country),
+    f.status !== "all" && STATUSES[f.status].label,
+    f.sales > 0 && `${formatNumber(f.sales)}+ sales / mo`,
+    sort && `Sorted by ${SORT_BY[parseSort(sort).key].label.toLowerCase()}`,
+    lastSearch.trim() && `“${lastSearch.trim()}”`,
+  ].filter((part): part is string => !!part)
 }
 
 /** Search params kept in the address, so a reload or link lands on the same view. */
@@ -628,131 +653,11 @@ function FilterSelect({
 
 // --- Tag filter ---
 
-// Which shops are listed: all (no `?tag=`), one primary tag's (`?tag=City`),
-// within it one secondary tag's (`&sub=Cartoon`) or those with none under it
-// (`&sub=` left empty), or the shops without a tag (`?tag=` left empty).
-type Filter = {
-  key: string
-  primary: string | null
-  secondary: string | null
-  matches: (visit: ShopVisit) => boolean
-}
-
-const ALL = "all"
-const UNTAGGED = "untagged"
-
-function tagFilter(primary: string | null, secondary: string | null): Filter {
-  if (primary === null) return { key: ALL, primary: null, secondary: null, matches: () => true }
-  if (primary === "") return { key: UNTAGGED, primary: "", secondary: null, matches: (v) => !v.tag }
-  const key = `t:${primary.toLowerCase()}`
-  if (secondary === null) return { key, primary, secondary, matches: (v) => hasPrimaryTag(v, primary) }
-  return {
-    key,
-    primary,
-    secondary,
-    matches: (v) =>
-      hasPrimaryTag(v, primary) && (secondary === "" ? !v.tag!.secondary.length : hasSecondaryTag(v, secondary)),
-  }
-}
-
-type Chip = { key: string; label: string; count: number; value: string | null; icon?: boolean }
-
-function TagFilter({
-  visits,
-  filter,
-  onChange,
-}: {
-  visits: ShopVisit[]
-  filter: Filter
-  onChange: (primary: string | null, secondary: string | null) => void
-}) {
-  const tags = useShopTags()
-  const untagged = visits.filter((v) => !v.tag).length
-  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
-  // A tag nobody carries any more (or a stale link) still shows while picked.
-  const picked = filter.primary ? tags.find((t) => same(t.name, filter.primary!)) : undefined
-  const missing = !!filter.primary && !picked
-
-  if (tags.length === 0 && !missing) return null
-
-  const primaries: Chip[] = [
-    { key: ALL, label: "All", count: visits.length, value: null },
-    ...tags.map((t) => ({ key: `t:${t.name.toLowerCase()}`, label: t.name, count: t.count, value: t.name, icon: true })),
-    ...(missing ? [{ key: filter.key, label: filter.primary!, count: 0, value: filter.primary, icon: true }] : []),
-    ...(untagged > 0 ? [{ key: UNTAGGED, label: "Untagged", count: untagged, value: "" }] : []),
-  ]
-
-  // Within a primary tag: its secondary tags, and the shops with none of them.
-  const plain = picked ? visits.filter((v) => hasPrimaryTag(v, picked.name) && !v.tag!.secondary.length).length : 0
-  const subMissing =
-    !!filter.secondary && !!picked && !picked.secondary.some((s) => same(s.name, filter.secondary!))
-  const secondaries: Chip[] = picked
-    ? [
-        { key: "s:all", label: `All ${picked.name}`, count: picked.count, value: null },
-        ...picked.secondary.map((s) => ({ key: `s:${s.name.toLowerCase()}`, label: s.name, count: s.count, value: s.name })),
-        ...(subMissing ? [{ key: `s:${filter.secondary!.toLowerCase()}`, label: filter.secondary!, count: 0, value: filter.secondary }] : []),
-        ...(plain > 0 && picked.secondary.length > 0 ? [{ key: "s:none", label: "No secondary tag", count: plain, value: "" }] : []),
-      ]
-    : []
-  const secondaryKey =
-    filter.secondary === null ? "s:all" : filter.secondary === "" ? "s:none" : `s:${filter.secondary.toLowerCase()}`
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <ChipRow
-        chips={primaries}
-        value={filter.key}
-        label="Primary tag"
-        onPick={(chip) => onChange(chip.value, null)}
-      />
-      {secondaries.length > 1 && (
-        <div className="flex items-start gap-1.5 pl-1">
-          <CornerDownRightIcon className="mt-2 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <ChipRow
-            chips={secondaries}
-            value={secondaryKey}
-            label={`Secondary tag under ${picked!.name}`}
-            onPick={(chip) => onChange(filter.primary, chip.value)}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ChipRow({
-  chips,
-  value,
-  label,
-  onPick,
-}: {
-  chips: Chip[]
-  value: string
-  label: string
-  onPick: (chip: Chip) => void
-}) {
-  return (
-    <ToggleGroup
-      variant="outline"
-      size="sm"
-      spacing={1}
-      value={[value]}
-      onValueChange={(next) => {
-        const chip = chips.find((c) => c.key === next[0])
-        if (chip) onPick(chip)
-      }}
-      aria-label={label}
-      className="w-full flex-wrap"
-    >
-      {chips.map((chip) => (
-        <ToggleGroupItem key={chip.key} value={chip.key} className="gap-1.5">
-          {chip.icon && <TagIcon />}
-          {chip.label}
-          <span className="text-xs text-muted-foreground tabular-nums">{chip.count}</span>
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
-  )
+// Which shops are listed by tag lives in `?tag=` and `&sub=` (see `TagView`):
+// no `tag` for all, `tag` left empty for the untagged ones, `sub` left empty
+// for those with no secondary tag under it.
+function tagView(primary: string | null, secondary: string | null): TagView {
+  return { primary, secondary: primary ? secondary : null }
 }
 
 function ShopRow({
@@ -820,7 +725,7 @@ function ShopRow({
           <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-medium">{shop.name}</span>
-              {visit.tag && <TagBadge tag={visit.tag} />}
+              <TagBadges tags={tagsOf(visit)} />
             </span>
             <span className="flex items-center gap-2 text-muted-foreground">
               {shop.country && <span>{shop.country}</span>}

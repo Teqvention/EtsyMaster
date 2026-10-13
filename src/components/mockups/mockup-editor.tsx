@@ -16,6 +16,7 @@ import {
   MousePointer2Icon,
   Redo2Icon,
   SaveIcon,
+  ScanSearchIcon,
   Trash2Icon,
   Undo2Icon,
   VideoIcon,
@@ -80,7 +81,12 @@ import { clipFileName, encodeMotion, exportClip, PREVIEW } from "@/lib/mockups/v
 export function MockupEditor({ id }: { id: Promise<string> }) {
   const sceneId = React.use(id)
   const [scene, setScene] = React.useState<Scene | null>(null)
+  const [version, setVersion] = React.useState(0)
   const [error, setError] = React.useState<string | null>(null)
+  const replace = React.useCallback((next: Scene) => {
+    setScene(next)
+    setVersion((v) => v + 1)
+  }, [])
 
   React.useEffect(() => {
     let alive = true
@@ -109,10 +115,11 @@ export function MockupEditor({ id }: { id: Promise<string> }) {
       </div>
     )
   }
-  return <Editor key={scene.id} initial={scene} />
+  // Detecting again makes the scene anew on the server: the editor starts over on it.
+  return <Editor key={`${scene.id}:${version}`} initial={scene} onReplaced={replace} />
 }
 
-type Busy = "save" | "video" | "export" | "generate" | "brush" | null
+type Busy = "save" | "video" | "export" | "generate" | "brush" | "detect" | null
 type Mode = "layers" | "animate"
 
 const sheetKey = (p: PosterLayer) => JSON.stringify([p.quad, p.sheet?.flat])
@@ -120,7 +127,7 @@ const sheetKey = (p: PosterLayer) => JSON.stringify([p.quad, p.sheet?.flat])
 /** The whole room, still: what the viewfinder shows before any animation. */
 const IDLE: Motion = { duration: 1, shake: 0, keys: [] }
 
-function Editor({ initial }: { initial: Scene }) {
+function Editor({ initial, onReplaced }: { initial: Scene; onReplaced: (scene: Scene) => void }) {
   const router = useRouter()
   const history = useHistory(initial)
   const scene = history.value
@@ -706,6 +713,32 @@ function Editor({ initial }: { initial: Scene }) {
     }
   }
 
+  /**
+   * Every frame in the room found again, its posters made new with light and
+   * shine, and what stands in front of them cut out onto "In front of poster",
+   * as for a mockup made from a reference. Other layers stay.
+   */
+  async function detectAgain() {
+    if (busy) return
+    if (dirty && !confirm("Detect the frames again? Changes that aren't saved are lost.")) return
+    setBusy("detect")
+    try {
+      const response = await fetch(`/api/mockups/${scene.id}/locate`, { method: "POST" })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.error ?? response.statusText)
+      const next = result as Scene
+      const posters = next.layers.filter((l) => l.kind === "poster").length
+      const front = next.layers.some((l) => l.kind === "image" && l.role === "front")
+      toast.success(
+        `Found ${posters === 1 ? "1 frame" : `${posters} frames`}${front ? ", and what stands in front of them" : ""}`
+      )
+      onReplaced(next)
+    } catch (e) {
+      toast.error(`Couldn't detect the frames: ${(e as Error).message}`)
+      setBusy(null)
+    }
+  }
+
   async function deleteScene() {
     if (!confirm(`Delete “${scene.name}” and all its layer images?`)) return
     const response = await fetch(`/api/mockups/${scene.id}`, { method: "DELETE" })
@@ -871,6 +904,13 @@ function Editor({ initial }: { initial: Scene }) {
           </IconButton>
           <IconButton label="Fit to view (F)" onClick={() => setFit((f) => f + 1)}>
             <MaximizeIcon />
+          </IconButton>
+          <IconButton
+            label="Detect frames again"
+            onClick={detectAgain}
+            disabled={!!busy}
+          >
+            {busy === "detect" ? <LoaderCircleIcon className="animate-spin" /> : <ScanSearchIcon />}
           </IconButton>
           <IconButton label="Delete mockup" onClick={deleteScene}>
             <Trash2Icon />

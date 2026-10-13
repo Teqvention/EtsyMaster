@@ -39,6 +39,7 @@ import type { EtsyUsage } from "@/lib/etsy/usage"
 import { formatNumber } from "@/lib/etsy/format"
 import type { MockupChain } from "@/lib/mockups/chain-types"
 import type { UploadPlan } from "@/lib/pipeline/types"
+import { describeFolder } from "@/lib/saved/folders"
 import {
   alikePairs,
   allowedFor,
@@ -812,7 +813,7 @@ function GroupPick({
               {title}
             </span>
             <span className="truncate text-xs text-muted-foreground tabular-nums">
-              {on} of {keys.length} · {group.folder}
+              {on} of {keys.length} · {describeFolder(group.folder)}
             </span>
           </span>
           <ChevronDownIcon

@@ -4,6 +4,7 @@ import * as React from "react"
 import { CheckIcon, FolderIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { refreshCategories, useCategories } from "@/hooks/use-categories"
+import { describeFolder } from "@/lib/saved/folders"
 import { cn } from "@/lib/utils"
 
 // The Saved page's folders as big targets: one click files everything into
@@ -113,7 +114,7 @@ export function CategoryGrid({
               onHover={() => setHighlight(i)}
               onPick={() => pick(category.name)}
               icon={<FolderIcon />}
-              title={category.name}
+              title={describeFolder(category.name)}
               detail={here ? "Already here" : count ? `${count} stolen` : "Empty"}
               trailing={here && <CheckIcon className="size-4 text-brand" />}
             />

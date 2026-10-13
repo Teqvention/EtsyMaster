@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, FolderIcon, PlayIcon, VideoOffIcon } from "lucide-react"
+import { CheckIcon, PlayIcon, VideoOffIcon } from "lucide-react"
 
 import { SceneThumb } from "@/components/mockups/chain-viewer"
+import { ALL_TAGS, matchesTagView, TagFilterChips, type TagView } from "@/components/tags/tag-filter-chips"
 import { Button } from "@/components/ui/button"
 import {
   DialogContent,
@@ -12,15 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { MAX_CHAIN_PHOTOS, type ChainVideo, type MockupChain } from "@/lib/mockups/chain-types"
 import { fileUrl } from "@/lib/mockups/client"
 import type { SceneSummary } from "@/lib/mockups/types"
 import { cn } from "@/lib/utils"
 
-// Picking a chain's photos and its video from the mockups.
-
-const ALL = "all"
+// Picking a chain's photos and its video from the mockups, narrowed by their tags.
 
 /**
  * Click a mockup to add it at the end of the chain, click again to take it
@@ -36,15 +34,10 @@ export function ScenePicker({
   onDone: (scenes: string[]) => void
 }) {
   const [picked, setPicked] = React.useState(chain.scenes)
-  const [category, setCategory] = React.useState(ALL)
+  const [view, setView] = React.useState<TagView>(ALL_TAGS)
   const full = picked.length >= MAX_CHAIN_PHOTOS
-
-  const categories = React.useMemo(() => {
-    const names = new Map<string, string>()
-    for (const s of scenes) if (s.category) names.set(s.category.toLowerCase(), s.category)
-    return [...names.values()].sort((a, b) => a.localeCompare(b))
-  }, [scenes])
-  const shown = category === ALL ? scenes : scenes.filter((s) => s.category?.toLowerCase() === category)
+  const items = React.useMemo(() => scenes.map((s) => s.tags), [scenes])
+  const shown = scenes.filter((s) => matchesTagView(s.tags, view))
 
   function toggle(id: string) {
     setPicked((list) =>
@@ -61,25 +54,7 @@ export function ScenePicker({
         </DialogDescription>
       </DialogHeader>
 
-      {categories.length > 0 && (
-        <ToggleGroup
-          variant="outline"
-          size="sm"
-          spacing={1}
-          value={[category]}
-          onValueChange={(value) => value[0] && setCategory(value[0])}
-          aria-label="Category"
-          className="w-full flex-wrap"
-        >
-          <ToggleGroupItem value={ALL}>All</ToggleGroupItem>
-          {categories.map((name) => (
-            <ToggleGroupItem key={name} value={name.toLowerCase()} className="gap-1.5">
-              <FolderIcon />
-              {name}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      )}
+      <TagFilterChips items={items} view={view} onChange={setView} />
 
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 py-1">
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3">

@@ -28,6 +28,7 @@ import { createCityStyle } from "@/hooks/use-city-style"
 import { useSaved } from "@/hooks/use-saved"
 import { hasPrimaryTag, useShopHistory } from "@/hooks/use-shop-history"
 import { addSavedListings, createStyle } from "@/hooks/use-styles"
+import { describeFolder, folderName, isWithin } from "@/lib/saved/folders"
 import { MAX_IMAGES, type Style } from "@/lib/styles/types"
 import { cn } from "@/lib/utils"
 
@@ -129,7 +130,8 @@ function Form({
   const listings = React.useMemo(
     () =>
       (saved ?? []).filter(
-        (s) => current !== null && s.folder.toLowerCase() === current.toLowerCase() && s.image
+        // A folder's posters, and those of the folders inside it.
+        (s) => current !== null && isWithin(s.folder, current) && s.image
       ),
     [saved, current]
   )
@@ -155,7 +157,7 @@ function Form({
   )
   const fromCityShops = listings.filter((l) => l.shop && cityShops.has(l.shop.toLowerCase())).length
   const kind = fixedKind ?? chosenKind ?? (listings.length && fromCityShops * 2 >= listings.length ? "city" : "normal")
-  const styleName = name ?? current ?? ""
+  const styleName = name ?? (current ? folderName(current) : "")
   const ready = chosen.length > 0 && (target !== undefined || styleName.trim() !== "")
 
   async function submit(event: React.FormEvent) {
@@ -232,7 +234,7 @@ function Form({
                     setFolder(next)
                     setPicked(null)
                   }}
-                  items={folders.map((f) => ({ value: f.name, label: f.name }))}
+                  items={folders.map((f) => ({ value: f.name, label: describeFolder(f.name) }))}
                 >
                   <SelectTrigger className="w-full" aria-label="Folder">
                     <SelectValue />
@@ -241,7 +243,7 @@ function Form({
                     <SelectGroup>
                       {folders.map((f) => (
                         <SelectItem key={f.name} value={f.name}>
-                          <span className="truncate">{f.name}</span>
+                          <span className="truncate">{describeFolder(f.name)}</span>
                           <span className="ml-auto text-xs text-muted-foreground tabular-nums">{f.count}</span>
                         </SelectItem>
                       ))}
@@ -301,8 +303,8 @@ function Form({
             {folders.length === 0
               ? "Nothing saved yet. In a shop's Listings, select posters and right-click to save them."
               : listings.length > 0
-                ? `Every poster in ${current} is on the board already.`
-                : `Nothing in ${current} yet.`}
+                ? `Every poster in ${describeFolder(current ?? "")} is on the board already.`
+                : `Nothing in ${describeFolder(current ?? "")} yet.`}
           </p>
         ) : (
           <ImagePicker label="Posters" items={items} picked={selected} max={max} onChange={setPicked} />

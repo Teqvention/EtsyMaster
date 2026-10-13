@@ -1,4 +1,19 @@
 import type { ListingShop } from "@/lib/etsy/types"
+import {
+  countTags,
+  hasPrimary,
+  hasSecondary,
+  joinTags,
+  primarySpelling,
+  sameTag,
+  secondarySpelling,
+  tagName,
+  tagUnder,
+  withPrimary,
+  withSecondary,
+  type PrimaryTag,
+  type TagCount,
+} from "@/lib/tags"
 
 import type { ShopAnalysisSummary, ShopHistory, ShopTag, ShopVisit } from "./types"
 
@@ -14,8 +29,10 @@ export const MAX_SHOPS = 2000
 export type ShopOp =
   | { type: "visit"; shop: ListingShop; at: string }
   | { type: "analysis"; shop: ListingShop; analysis: ShopAnalysisSummary }
-  /** `primary` null takes the shops' tags off. */
+  /** `primary` null takes the shops' tags off; a name makes it their only primary tag (as before several were possible). */
   | { type: "tag"; shops: ListingShop[]; primary: string | null; at: string }
+  /** Puts a primary tag on the shops, next to the ones they carry, or takes it off with its secondary ones. */
+  | { type: "primary"; shops: ListingShop[]; primary: string; on: boolean; at: string }
   | { type: "secondary"; shops: ListingShop[]; primary: string; secondary: string; on: boolean; at: string }
   | { type: "like"; shop: ListingShop; liked: boolean; at: string }
   | { type: "forget"; shopId: number }
@@ -48,37 +65,34 @@ function applyOp(list: ShopHistory, op: ShopOp) {
       const name = op.primary === null ? null : tagName(op.primary)
       if (name === "") return
       // A tag in use already keeps the spelling it was first given.
-      const spelling = name && (shopTags(list).find((t) => sameTag(t.name, name))?.name ?? name)
+      const spelling = name && primarySpelling(shopTags(list), name)
       for (const shop of op.shops) {
-        const { tag, ...visit } = list[shop.id] ?? blank(shop, op.at)
-        list[shop.id] = spelling
-          ? {
-              ...visit,
-              // Moving to another primary tag leaves the secondary ones behind.
-              tag: { primary: spelling, secondary: tag && sameTag(tag.primary, spelling) ? tag.secondary : [] },
-              tagChangedAt: op.at,
-            }
-          : { ...visit, tagChangedAt: op.at }
+        const visit = list[shop.id] ?? blank(shop, op.at)
+        // Moving to another primary tag leaves the secondary ones behind.
+        const kept = spelling ? tagUnder(tagsOf(visit), spelling) : undefined
+        list[shop.id] = withTags(visit, spelling ? [{ primary: spelling, secondary: kept?.secondary ?? [] }] : [], op.at)
+      }
+      return
+    }
+    case "primary": {
+      const name = tagName(op.primary)
+      if (!name) return
+      const spelling = primarySpelling(shopTags(list), name)
+      for (const shop of op.shops) {
+        const visit = list[shop.id] ?? blank(shop, op.at)
+        list[shop.id] = withTags(visit, withPrimary(tagsOf(visit), spelling, op.on), op.at)
       }
       return
     }
     case "secondary": {
       const name = tagName(op.secondary)
       if (!name) return
-      const spelling =
-        shopTags(list)
-          .find((t) => sameTag(t.name, op.primary))
-          ?.secondary.find((s) => sameTag(s.name, name))?.name ?? name
+      const spelling = secondarySpelling(shopTags(list), op.primary, name)
       for (const shop of op.shops) {
         const visit = list[shop.id]
         // Only on shops filed under that primary tag.
-        if (!visit?.tag || !sameTag(visit.tag.primary, op.primary)) continue
-        const others = visit.tag.secondary.filter((s) => !sameTag(s, spelling))
-        list[shop.id] = {
-          ...visit,
-          tag: { ...visit.tag, secondary: op.on ? [...others, spelling] : others },
-          tagChangedAt: op.at,
-        }
+        if (!visit || !hasPrimary(tagsOf(visit), op.primary)) continue
+        list[shop.id] = withTags(visit, withSecondary(tagsOf(visit), op.primary, spelling, op.on), op.at)
       }
       return
     }
@@ -93,6 +107,17 @@ function applyOp(list: ShopHistory, op: ShopOp) {
       delete list[op.shopId]
       return
   }
+}
+
+/** Every tag the shop carries, its first primary tag first. */
+export const tagsOf = (visit: ShopVisit | undefined): ShopTag[] => (visit ? joinTags(visit.tag, visit.tags) : [])
+
+/** The visit carrying `tags` (none takes them off), changed `at`. */
+function withTags(visit: ShopVisit, tags: ShopTag[], at: string): ShopVisit {
+  const next: ShopVisit = { ...visit, tagChangedAt: at }
+  delete next.tag
+  delete next.tags
+  return tags.length ? { ...next, tag: tags[0], tags } : next
 }
 
 /** Oldest views fall off once the list is full, unless tagged or liked. */
@@ -154,12 +179,13 @@ function mergeVisit(a: ShopVisit, b: ShopVisit): ShopVisit {
     ...seen,
     analysis: analysed.analysis,
     tag: tagged.tag,
+    tags: tagged.tags,
     tagChangedAt: tagged.tagChangedAt,
     likedAt: liked.likedAt,
     likeChangedAt: liked.likeChangedAt,
   }
   // Unset ones stay out, as in a copy that never had them.
-  for (const key of ["tag", "tagChangedAt", "likedAt", "likeChangedAt"] as const) {
+  for (const key of ["tag", "tags", "tagChangedAt", "likedAt", "likeChangedAt"] as const) {
     if (merged[key] === undefined) delete merged[key]
   }
   return merged
@@ -167,42 +193,20 @@ function mergeVisit(a: ShopVisit, b: ShopVisit): ShopVisit {
 
 // --- Tags ---
 
-export type TagCount = { name: string; count: number }
-/** A primary tag in use, with its secondary tags. */
-export type PrimaryTag = TagCount & { secondary: TagCount[] }
-
-export const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
-
-/** What a typed tag is saved as: single spaces, at most 32 characters. */
-export const tagName = (name: string) => name.trim().replace(/\s+/g, " ").slice(0, 32)
+export { sameTag, tagName }
+export type { PrimaryTag, TagCount }
 
 /** Every primary tag in use, A–Z, with how many shops carry it and its secondary tags (A–Z, counted). */
 export function shopTags(history: ShopHistory): PrimaryTag[] {
-  const primaries = new Map<string, { name: string; count: number; secondary: Map<string, TagCount> }>()
-  for (const { tag } of Object.values(history)) {
-    if (!tag) continue
-    const key = tag.primary.toLowerCase()
-    const primary = primaries.get(key) ?? { name: tag.primary, count: 0, secondary: new Map() }
-    primary.count += 1
-    for (const name of tag.secondary) {
-      const held = primary.secondary.get(name.toLowerCase()) ?? { name, count: 0 }
-      primary.secondary.set(name.toLowerCase(), { ...held, count: held.count + 1 })
-    }
-    primaries.set(key, primary)
-  }
-  const byName = (a: TagCount, b: TagCount) => a.name.localeCompare(b.name)
-  return [...primaries.values()]
-    .map((p) => ({ name: p.name, count: p.count, secondary: [...p.secondary.values()].sort(byName) }))
-    .sort(byName)
+  return countTags(Object.values(history).map(tagsOf))
 }
 
-/** Whether the shop's primary tag is `primary`. */
-export const hasPrimaryTag = (visit: ShopVisit | undefined, primary: string) =>
-  !!visit?.tag && sameTag(visit.tag.primary, primary)
+/** Whether the shop carries the primary tag `primary`. */
+export const hasPrimaryTag = (visit: ShopVisit | undefined, primary: string) => hasPrimary(tagsOf(visit), primary)
 
-/** Whether the shop carries the secondary tag (under whichever primary tag it has). */
-export const hasSecondaryTag = (visit: ShopVisit | undefined, secondary: string) =>
-  visit?.tag?.secondary.some((s) => sameTag(s, secondary)) ?? false
+/** Whether the shop carries the secondary tag under `primary` (under any primary tag when that's left out). */
+export const hasSecondaryTag = (visit: ShopVisit | undefined, secondary: string, primary?: string) =>
+  hasSecondary(tagsOf(visit), secondary, primary)
 
 // --- Checking what the browser sends ---
 
@@ -220,6 +224,14 @@ export function isShopOp(value: unknown): value is ShopOp {
       return isShop(op.shop) && !!op.analysis && isTime(op.analysis.analysedAt)
     case "tag":
       return Array.isArray(op.shops) && op.shops.every(isShop) && (op.primary === null || typeof op.primary === "string") && isTime(op.at)
+    case "primary":
+      return (
+        Array.isArray(op.shops) &&
+        op.shops.every(isShop) &&
+        typeof op.primary === "string" &&
+        typeof op.on === "boolean" &&
+        isTime(op.at)
+      )
     case "secondary":
       return (
         Array.isArray(op.shops) &&

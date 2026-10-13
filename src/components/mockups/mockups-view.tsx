@@ -8,9 +8,9 @@ import {
   CheckIcon,
   ChevronDownIcon,
   FileArchiveIcon,
-  FolderIcon,
   FrameIcon,
   LayersIcon,
+  ListChecksIcon,
   ListOrderedIcon,
   ListPlusIcon,
   LoaderCircleIcon,
@@ -20,6 +20,8 @@ import {
   SparklesIcon,
   StarIcon,
   StoreIcon,
+  TagIcon,
+  TagsIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -30,6 +32,9 @@ import { useChains } from "@/components/mockups/chain-store"
 import { AddToChainItems, ChainsPanel } from "@/components/mockups/chains-panel"
 import { PosterPicker, usePoster } from "@/components/mockups/poster-picker"
 import { RegenerateMockupDialog, useRemaking } from "@/components/mockups/regenerate-dialog"
+import { SelectionBar, SelectMark } from "@/components/selection"
+import { describeTagView, matchesTagView, TagFilterChips, type TagView } from "@/components/tags/tag-filter-chips"
+import { TagBadges, TagPicker } from "@/components/tags/tag-picker"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -46,31 +51,69 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { refreshCategories, useCategories } from "@/hooks/use-categories"
 import { useGenerations } from "@/hooks/use-generations"
+import { useSelection } from "@/hooks/use-selection"
 import { download, fetchScene, fileUrl } from "@/lib/mockups/client"
 import { exportName, exportScene, renderThumb } from "@/lib/mockups/export"
 import type { SceneSummary } from "@/lib/mockups/types"
 import { clipFileName, exportClip } from "@/lib/mockups/video"
+import { applyTagChange, countTags, describeTags, sameTag, spellChange, type PrimaryTag, type Tag, type TagChange } from "@/lib/tags"
 
 export function MockupsView() {
   const router = useRouter()
   const poster = usePoster()
   const [scenes, setScenes] = React.useState<SceneSummary[] | null>(null)
-  const [filter, setFilter] = useCategoryFilter()
+  const [view, setView] = useTagView()
   const [shop, setShop] = useShopFilter()
   const [tab, setTab] = useTab()
   const chains = useChains()
-  // The categories count what's left of the shop picked.
+  // The tags count what's left of the shop picked.
   const fromShop = React.useMemo(
     () => scenes && (shop ? scenes.filter((s) => s.shop?.toLowerCase() === shop.toLowerCase()) : scenes),
     [scenes, shop]
   )
-  const visible = React.useMemo(() => fromShop && fromShop.filter((s) => filter.matches(s)), [fromShop, filter])
+  const visible = React.useMemo(() => fromShop && fromShop.filter((s) => matchesTagView(s.tags, view)), [fromShop, view])
+  const viewName = describeTagView(view)
+  const known = useKnownTags(scenes)
+  const [picking, setPicking] = React.useState(false)
+  const visibleIds = React.useMemo(() => (visible ?? []).map((s) => s.id), [visible])
+  const selection = useSelection(visibleIds)
+  const selecting = picking || selection.count > 0
+  const [tagging, setTagging] = React.useState<SceneSummary[] | null>(null)
+
+  function stopPicking() {
+    setPicking(false)
+    selection.clear()
+  }
+
+  // Shows at once, then the server's answer; a failure puts back what was.
+  async function changeTags(ids: string[], change: TagChange) {
+    const spelled = spellChange(change, known)
+    const before = scenes
+    const set = (tags: Tag[]) => ({ tags, category: tags[0]?.primary })
+    setScenes((all) => all?.map((s) => (ids.includes(s.id) ? { ...s, ...set(applyTagChange(s.tags, spelled)) } : s)) ?? null)
+    try {
+      const response = await fetch("/api/mockups/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, change: spelled }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error ?? response.statusText)
+      const now = new Map((result as { id: string; tags: Tag[] }[]).map((r) => [r.id, r.tags]))
+      setScenes((all) => all?.map((s) => (now.has(s.id) ? { ...s, ...set(now.get(s.id)!) } : s)) ?? null)
+      if (spelled.type === "primary" && spelled.on) refreshCategories("mockups")
+    } catch (error) {
+      setScenes(before)
+      toast.error(`Couldn't change the tags: ${(error as Error).message}`)
+    }
+  }
 
   async function remove(scene: SceneSummary) {
     setScenes((all) => all?.filter((s) => s.id !== scene.id) ?? null)
@@ -141,7 +184,7 @@ export function MockupsView() {
       const body = new FormData()
       body.set("name", name.trim() || file.name.replace(/\.[^.]+$/, ""))
       body.set("image", file)
-      if (filter.category) body.set("category", filter.category)
+      if (view.primary) body.set("category", view.primary)
       const url = kind === "room" ? "/api/mockups" : "/api/mockups/reference"
       const response = await fetch(url, { method: "POST", body })
       const result = await response.json()
@@ -175,7 +218,7 @@ export function MockupsView() {
       }
       const zip = zipSync(files, { level: 0 })
       const base = poster.test ? "mockups" : poster.name.replace(/\.[^.]+$/, "")
-      const suffix = filter.category ? ` – ${filter.category}` : ""
+      const suffix = viewName ? ` – ${viewName.replace(/ › /g, " - ")}` : ""
       download(new Blob([zip as Uint8Array<ArrayBuffer>], { type: "application/zip" }), `${base}${suffix}.zip`)
     } catch (e) {
       toast.error(`Export failed: ${(e as Error).message}`)
@@ -199,11 +242,39 @@ export function MockupsView() {
             <TabCount value={chains?.length} />
           </TabsTrigger>
         </TabsList>
+        {tab === MOCKUPS &&
+          (selecting ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={selection.count === visibleIds.length ? selection.clear : selection.selectAll}
+              >
+                {selection.count === visibleIds.length && visibleIds.length > 0 ? "Deselect all" : "Select all"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={stopPicking}>
+                <CheckIcon />
+                Done
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPicking(true)}
+              disabled={!visible?.length}
+              title="Pick mockups to tag them in one go"
+            >
+              <ListChecksIcon />
+              Select
+            </Button>
+          ))}
         <PosterPicker />
         {tab === MOCKUPS && (
           <Button size="sm" onClick={exportAll} disabled={!poster || !visible?.length || !!progress}>
             {progress ? <LoaderCircleIcon className="animate-spin" /> : <FileArchiveIcon />}
-            {progress ? `Rendering ${progress}` : filter.category ? `Export ${filter.category}` : "Export all"}
+            {progress ? `Rendering ${progress}` : viewName ? `Export ${viewName}` : "Export all"}
           </Button>
         )}
       </div>
@@ -215,14 +286,15 @@ export function MockupsView() {
       <TabsContent value={MOCKUPS} className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
           Rooms your poster is placed into. Exports are 2000 px on the short edge plus each listing
-          video, numbered in listing order. Right-click a mockup to put it in a chain.
+          video, numbered in listing order. Right-click a mockup to put it in a chain; tag it with
+          primary tags and secondary ones under each to sort them.
         </p>
 
         {scenes && (
           <div className="flex flex-wrap items-start gap-2">
             <ShopFilter scenes={scenes} shop={shop} onChange={setShop} />
             <div className="min-w-0 flex-1">
-              <CategoryFilter scenes={fromShop!} filter={filter} onChange={setFilter} />
+              <TagFilter scenes={fromShop!} view={view} onChange={setView} />
             </div>
           </div>
         )}
@@ -234,6 +306,12 @@ export function MockupsView() {
                 <MockupCard
                   key={scene.id}
                   scene={scene}
+                  known={known}
+                  selecting={selecting}
+                  selected={selection.has(scene.id)}
+                  onToggle={(range) => selection.toggle(scene.id, { range })}
+                  onTagChange={(change) => changeTags([scene.id], change)}
+                  onTagDialog={() => setTagging([scene])}
                   onShowChains={() => setTab(CHAINS)}
                   onShop={setShop}
                   onDelete={() => remove(scene)}
@@ -285,6 +363,29 @@ export function MockupsView() {
           </div>
         </div>
       </TabsContent>
+
+      <SelectionBar
+        count={selection.count}
+        total={visibleIds.length}
+        onSelectAll={selection.selectAll}
+        onClear={selection.clear}
+      >
+        <Button
+          size="sm"
+          className="active:scale-[0.97]"
+          onClick={() => setTagging((visible ?? []).filter((s) => selection.has(s.id)))}
+        >
+          <TagsIcon />
+          Tag…
+        </Button>
+      </SelectionBar>
+      <MockupTagDialog
+        scenes={tagging ? (scenes ?? []).filter((s) => tagging.some((t) => t.id === s.id)) : []}
+        known={known}
+        open={!!tagging?.length}
+        onOpenChange={(open) => !open && setTagging(null)}
+        onChange={(change) => tagging && changeTags(tagging.map((s) => s.id), change)}
+      />
     </Tabs>
   )
 }
@@ -313,101 +414,142 @@ function TabCount({ value }: { value: number | undefined }) {
   )
 }
 
-// --- Categories ---
+// --- Tags ---
 
-// Which mockups are shown: all (no `?category=`), one category, or the ones
-// in none (`?category=` left empty).
-type Filter = {
-  key: string
-  category: string | null
-  matches: (scene: SceneSummary) => boolean
-}
-
-const ALL = "all"
-const UNSORTED = "unsorted"
-
-function useCategoryFilter() {
+// Which mockups are shown by tag lives in `?tag=` and `&sub=` (see
+// `TagView`), as on the Shops page. Links from before tags say `?category=`.
+function useTagView() {
   const searchParams = useSearchParams()
-  const param = searchParams.get("category")
-  const filter = React.useMemo<Filter>(() => {
-    if (param === null) return { key: ALL, category: null, matches: () => true }
-    if (param === "") return { key: UNSORTED, category: null, matches: (s) => !s.category }
-    const needle = param.toLowerCase()
-    return {
-      key: `c:${needle}`,
-      category: param,
-      matches: (s) => s.category?.toLowerCase() === needle,
-    }
-  }, [param])
+  const primary = searchParams.has("tag") ? searchParams.get("tag") : searchParams.get("category")
+  const secondary = searchParams.get("sub")
+  const view = React.useMemo<TagView>(() => ({ primary, secondary: primary ? secondary : null }), [primary, secondary])
 
-  const setFilter = React.useCallback((category: string | null) => {
+  const setView = React.useCallback(({ primary, secondary }: TagView) => {
     const params = new URLSearchParams(window.location.search)
-    if (category === null) params.delete("category")
-    else params.set("category", category)
+    params.delete("category")
+    if (primary === null) params.delete("tag")
+    else params.set("tag", primary)
+    if (secondary === null) params.delete("sub")
+    else params.set("sub", secondary)
     const query = params.toString()
     window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname)
   }, [])
 
-  return [filter, setFilter] as const
+  return [view, setView] as const
 }
 
-function CategoryFilter({
-  scenes,
-  filter,
-  onChange,
-}: {
-  scenes: SceneSummary[]
-  filter: Filter
-  onChange: (category: string | null) => void
-}) {
-  const saved = useCategories("mockups")
+/** Every primary tag on the scenes, with the categories named but carried by none. */
+function useKnownTags(scenes: SceneSummary[] | null): PrimaryTag[] {
+  const named = useCategories("mockups")
   React.useEffect(() => {
     refreshCategories("mockups")
   }, [])
-
-  // Counted here rather than taken from the list, so they follow deletions.
-  const categories = React.useMemo(() => {
-    const counts = new Map<string, { name: string; count: number }>()
-    for (const { name } of saved) counts.set(name.toLowerCase(), { name, count: 0 })
-    for (const { category } of scenes) {
-      if (!category) continue
-      const key = category.toLowerCase()
-      const entry = counts.get(key) ?? { name: category, count: 0 }
-      counts.set(key, { ...entry, count: entry.count + 1 })
+  return React.useMemo(() => {
+    const tags = countTags((scenes ?? []).map((s) => s.tags))
+    for (const { name } of named) {
+      if (!tags.some((t) => sameTag(t.name, name))) tags.push({ name, count: 0, secondary: [] })
     }
-    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [saved, scenes])
-  const unsorted = scenes.filter((s) => !s.category).length
+    return tags.sort((a, b) => a.name.localeCompare(b.name))
+  }, [scenes, named])
+}
 
-  if (categories.length === 0) return null
+function TagFilter({
+  scenes,
+  view,
+  onChange,
+}: {
+  scenes: SceneSummary[]
+  view: TagView
+  onChange: (view: TagView) => void
+}) {
+  const named = useCategories("mockups")
+  // Counted here rather than taken from the list, so they follow deletions and the shop picked.
+  const items = React.useMemo(() => scenes.map((s) => s.tags), [scenes])
+  return <TagFilterChips items={items} view={view} onChange={onChange} empty={named.map((c) => c.name)} />
+}
 
-  const chips = [
-    { key: ALL, label: "All", count: scenes.length, value: null },
-    ...categories.map((c) => ({ key: `c:${c.name.toLowerCase()}`, label: c.name, count: c.count, value: c.name })),
-    ...(unsorted > 0 ? [{ key: UNSORTED, label: "Uncategorized", count: unsorted, value: "" }] : []),
-  ]
-
+/** Centred: tags for the mockups picked, or the one right-clicked. */
+function MockupTagDialog({
+  scenes,
+  known,
+  open,
+  onOpenChange,
+  onChange,
+}: {
+  scenes: SceneSummary[]
+  known: PrimaryTag[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onChange: (change: TagChange) => void
+}) {
   return (
-    <ToggleGroup
-      variant="outline"
-      size="sm"
-      spacing={1}
-      value={[filter.key]}
-      onValueChange={(value) => {
-        const chip = chips.find((c) => c.key === value[0])
-        if (chip) onChange(chip.value)
-      }}
-      aria-label="Category"
-      className="w-full flex-wrap"
-    >
-      {chips.map((chip) => (
-        <ToggleGroupItem key={chip.key} value={chip.key} className="gap-1.5">
-          {chip.key !== ALL && chip.key !== UNSORTED && <FolderIcon />}
-          {chip.label}
-          <span className="text-xs text-muted-foreground tabular-nums">{chip.count}</span>
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 p-0 sm:max-w-md" showCloseButton={false}>
+        <DialogHeader className="gap-3 p-4 pb-3">
+          <div className="flex items-center gap-3">
+            <span className="flex shrink-0 -space-x-2.5" aria-hidden>
+              {scenes.slice(0, 4).map((scene) => (
+                <span
+                  key={scene.id}
+                  className="relative grid size-9 place-items-center overflow-hidden rounded-lg border-2 border-background bg-muted"
+                >
+                  {scene.thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={fileUrl(scene.id, scene.thumb)} alt="" className="size-full object-cover" />
+                  ) : (
+                    <FrameIcon className="size-4 text-muted-foreground" />
+                  )}
+                </span>
+              ))}
+            </span>
+            <div className="min-w-0">
+              <DialogTitle>Tag {scenes.length === 1 ? scenes[0].name : `${scenes.length} mockups`}</DialogTitle>
+              <DialogDescription className="truncate text-xs">
+                {scenes.length === 1
+                  ? "Primary tags, then the secondary tags under each."
+                  : scenes
+                      .slice(0, 4)
+                      .map((s) => s.name)
+                      .join(", ") + (scenes.length > 4 ? ` and ${scenes.length - 4} more` : "")}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="border-t">
+          {/* Remounted per opening, so the search starts empty. */}
+          {open && <MockupTagPicker scenes={scenes} known={known} onChange={onChange} />}
+        </div>
+        <DialogFooter className="m-0 rounded-b-xl border-t bg-muted/40 p-3">
+          <Button size="sm" className="active:scale-[0.97]" onClick={() => onOpenChange(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MockupTagPicker({
+  scenes,
+  known,
+  onChange,
+  autoFocus,
+}: {
+  scenes: SceneSummary[]
+  known: PrimaryTag[]
+  onChange: (change: TagChange) => void
+  autoFocus?: boolean
+}) {
+  return (
+    <TagPicker
+      known={known}
+      items={scenes.map((s) => s.tags)}
+      noun="mockups"
+      autoFocus={autoFocus}
+      onPrimary={(primary, on) => onChange({ type: "primary", primary, on })}
+      onSecondary={(primary, secondary, on) => onChange({ type: "secondary", primary, secondary, on })}
+      onClear={() => onChange({ type: "clear" })}
+    />
   )
 }
 
@@ -505,12 +647,25 @@ function ShopFilter({
 // and delete it; its shop filters the grid to that shop.
 function MockupCard({
   scene,
+  known,
+  selecting,
+  selected,
+  onToggle,
+  onTagChange,
+  onTagDialog,
   onShowChains,
   onShop,
   onDelete,
   onRedrawn,
 }: {
   scene: SceneSummary
+  known: PrimaryTag[]
+  /** Clicks pick the card instead of opening the editor. */
+  selecting: boolean
+  selected: boolean
+  onToggle: (range: boolean) => void
+  onTagChange: (change: TagChange) => void
+  onTagDialog: () => void
   onShowChains: () => void
   onShop: (shop: string) => void
   onDelete: () => void
@@ -545,9 +700,19 @@ function MockupCard({
           href={`/mockups/${scene.id}`}
           onPointerEnter={enter}
           onPointerLeave={leave}
-          className="group block overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/30"
+          onClick={(event) => {
+            if (!selecting) return
+            event.preventDefault()
+            onToggle(event.shiftKey)
+          }}
+          aria-pressed={selecting ? selected : undefined}
+          className={cn(
+            "group block overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/30",
+            selected && "border-brand ring-1 ring-brand hover:border-brand"
+          )}
         >
           <div className="relative grid aspect-square place-items-center overflow-hidden bg-muted">
+            {selecting && <SelectMark selected={selected} selecting />}
             {scene.thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={fileUrl(scene.id, scene.thumb)} alt="" className="size-full object-cover" />
@@ -592,69 +757,104 @@ function MockupCard({
               </span>
             )}
           </div>
-          <div className="flex items-baseline gap-2 px-3 py-2">
-            <span className="text-xs text-muted-foreground tabular-nums">{String(scene.order).padStart(2, "0")}</span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">{scene.name}</span>
-            {inChains.length > 0 && (
-              <span
-                title={`In ${inChains.map((c) => `${c.name} (#${c.scenes.indexOf(scene.id) + 1})`).join(", ")}`}
-                className="flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums [&_svg]:size-3"
-              >
-                {inChains.some((c) => c.isDefault) ? <StarIcon className="fill-brand text-brand" /> : <ListOrderedIcon />}
-                {inChains.length}
+          <div className="flex flex-col gap-1 px-3 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{String(scene.order).padStart(2, "0")}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{scene.name}</span>
+              {inChains.length > 0 && (
+                <span
+                  title={`In ${inChains.map((c) => `${c.name} (#${c.scenes.indexOf(scene.id) + 1})`).join(", ")}`}
+                  className="flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums [&_svg]:size-3"
+                >
+                  {inChains.some((c) => c.isDefault) ? <StarIcon className="fill-brand text-brand" /> : <ListOrderedIcon />}
+                  {inChains.length}
+                </span>
+              )}
+            </div>
+            <div className="flex h-4 min-w-0 items-center gap-2">
+              {scene.tags.length > 0 ? (
+                <TagBadges tags={scene.tags} className="min-w-0 flex-1 overflow-hidden" />
+              ) : (
+                <span className="flex-1 text-[11px] text-muted-foreground/70">No tags</span>
+              )}
+              <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                {scene.width}×{scene.height}
               </span>
-            )}
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {scene.width}×{scene.height}
-            </span>
+            </div>
           </div>
         </Link>
-        {scene.shop && (
+        {scene.shop && !selecting && (
           // Outside the link: it filters the grid instead of opening the editor.
           <button
             type="button"
             onClick={() => onShop(scene.shop!)}
             title={`Only mockups stolen from ${scene.shop}`}
-            className="absolute bottom-[2.6rem] left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/55 py-0.5 pr-2 pl-1.5 text-[11px] font-medium text-white backdrop-blur-sm transition-colors outline-none hover:bg-black/75 focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3 [&_svg]:shrink-0"
+            className="absolute bottom-[3.6rem] left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/55 py-0.5 pr-2 pl-1.5 text-[11px] font-medium text-white backdrop-blur-sm transition-colors outline-none hover:bg-black/75 focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3 [&_svg]:shrink-0"
           >
             <StoreIcon />
             <span className="truncate">{scene.shop}</span>
           </button>
         )}
-        <Button
-          variant="secondary"
-          size="icon-sm"
-          aria-label={`Regenerate ${scene.name}`}
-          title="Regenerate: say what should be different"
-          disabled={remaking}
-          onClick={() => setRegenerating(true)}
-          className={cn(CORNER, "right-20")}
-        >
-          <RefreshCwIcon />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="secondary"
-                size="icon-sm"
-                aria-label={`Add ${scene.name} to a chain`}
-                title="Add to chain"
-                className={cn(CORNER, "right-11")}
-              />
-            }
-          >
-            <ListPlusIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <AddToChainItems scene={scene} onShowChains={onShowChains} />
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DeleteCorner name={scene.name} inChains={inChains.length} onDelete={onDelete} />
+        {!selecting && (
+          <>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="secondary"
+                    size="icon-sm"
+                    aria-label={scene.tags.length ? `Tags of ${scene.name}: ${describeTags(scene.tags)}` : `Tag ${scene.name}`}
+                    title="Tags"
+                    className={cn(CORNER, "right-29")}
+                  />
+                }
+              >
+                <TagIcon />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 gap-0 p-0">
+                <MockupTagPicker scenes={[scene]} known={known} onChange={onTagChange} />
+              </PopoverContent>
+            </Popover>
+            <Button
+              variant="secondary"
+              size="icon-sm"
+              aria-label={`Regenerate ${scene.name}`}
+              title="Regenerate: say what should be different"
+              disabled={remaking}
+              onClick={() => setRegenerating(true)}
+              className={cn(CORNER, "right-20")}
+            >
+              <RefreshCwIcon />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="secondary"
+                    size="icon-sm"
+                    aria-label={`Add ${scene.name} to a chain`}
+                    title="Add to chain"
+                    className={cn(CORNER, "right-11")}
+                  />
+                }
+              >
+                <ListPlusIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <AddToChainItems scene={scene} onShowChains={onShowChains} />
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DeleteCorner name={scene.name} inChains={inChains.length} onDelete={onDelete} />
+          </>
+        )}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">
         <AddToChainItems scene={scene} onShowChains={onShowChains} />
         <ContextMenuSeparator />
+        <ContextMenuItem onClick={onTagDialog}>
+          <TagIcon />
+          Tags…
+        </ContextMenuItem>
         <ContextMenuItem disabled={remaking} onClick={() => setRegenerating(true)}>
           <RefreshCwIcon />
           Regenerate…

@@ -1,79 +1,13 @@
 import type { Pixels } from "./sheet"
 import type { Point, Quad } from "./types"
 
-// Exact corners of a blank sheet from a rough box around it. Rays run from
-// the box's middle outward in every row and column until they hit the frame
-// (much darker than the paper); a straight line through each side's hits
-// gives the edge, and the edges' intersections the corners. Light stripes
-// and soft shadows on the paper don't stop a ray, a plant in front of the
-// frame only costs a few outliers. Light frames on a light wall give no
-// edge, so the box is kept as is.
-
-/** A pixel this much darker than the paper is frame. */
-const DARK = 0.45
-
-export function refineSheet(room: Pixels, box: Quad): Quad {
-  const { data, width: w, height: h } = room
-  const luma = (x: number, y: number) => {
-    const i = (y * w + x) * 4
-    return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-  }
-  const x0 = Math.min(box[0][0], box[3][0])
-  const x1 = Math.max(box[1][0], box[2][0])
-  const y0 = Math.min(box[0][1], box[1][1])
-  const y1 = Math.max(box[2][1], box[3][1])
-  const cx = Math.round((x0 + x1) / 2)
-  const cy = Math.round((y0 + y1) / 2)
-  const bw = x1 - x0
-  const bh = y1 - y0
-  if (cx < 0 || cy < 0 || cx >= w || cy >= h || bw < 8 || bh < 8) return box
-
-  // Paper brightness: median of the box's middle half.
-  const samples: number[] = []
-  for (let y = Math.round(y0 + bh / 4); y < y1 - bh / 4; y += 4)
-    for (let x = Math.round(x0 + bw / 4); x < x1 - bw / 4; x += 4) samples.push(luma(x, y))
-  samples.sort((a, b) => a - b)
-  const dark = samples[samples.length >> 1] * DARK
-
-  // First dark pixel from (x, y) stepping (dx, dy), at most `reach` px away.
-  const ray = (x: number, y: number, dx: number, dy: number, reach: number): number | null => {
-    for (let s = 0; s <= reach; s++) {
-      const px = x + dx * s
-      const py = y + dy * s
-      if (px < 0 || py < 0 || px >= w || py >= h) return null
-      if (luma(px, py) < dark) return s
-    }
-    return null
-  }
-
-  const left: Point[] = []
-  const right: Point[] = []
-  const top: Point[] = []
-  const bottom: Point[] = []
-  const rx = Math.round(bw * 0.7)
-  const ry = Math.round(bh * 0.7)
-  for (let y = Math.round(y0 + bh * 0.15); y < y1 - bh * 0.15; y += 2) {
-    const l = ray(cx, y, -1, 0, rx)
-    const r = ray(cx, y, 1, 0, rx)
-    if (l !== null) left.push([y, cx - l])
-    if (r !== null) right.push([y, cx + r + 1])
-  }
-  for (let x = Math.round(x0 + bw * 0.15); x < x1 - bw * 0.15; x += 2) {
-    const t = ray(x, cy, 0, -1, ry)
-    const b = ray(x, cy, 0, 1, ry)
-    if (t !== null) top.push([x, cy - t])
-    if (b !== null) bottom.push([x, cy + b + 1])
-  }
-
-  return corners(box, [left, right, top, bottom])
-}
-
 // Exact corners of a printed artwork from a rough box around it. A print has
 // edges of its own inside, so rays from the middle would stop on the design:
 // instead each row and column is searched in a narrow band around the box's
 // side for the strongest step in brightness (print to mat, frame or wall),
 // favouring steps near the box's line. Lines through those edge points give
-// the corners as for a sheet; no clear edge keeps the box.
+// the corners; no clear edge keeps the box. (Blank sheets are found in
+// detect.ts.)
 
 /** Half-width of the band searched around each side, as a share of the box. */
 const BAND = 0.06

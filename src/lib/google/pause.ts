@@ -6,32 +6,77 @@ import { readDoc, writeDoc } from "@/lib/db/documents"
 // the online lane, the outbox and the generation queue wait instead of failing;
 // switching it off sets them going again (see generation/run.ts).
 //
-// It also switches itself on when Google keeps turning us away for good
-// (see `deniedByGoogle`), saying why.
+// It also switches itself on when Google keeps turning us away (see
+// `deniedByGoogle`), saying why. A pause over requests Google turned down or
+// images its filters held back ends by itself after a while (`COOL_OFF`),
+// for a longer while each time; one more within `REMEMBER` and it stays
+// on until someone has looked. Being refused outright always waits for
+// someone: no wait mends a key, a permission or billing.
 
 export const PAUSE_KEY = "google/pause"
+
+type Kind = "denied" | "rejected" | "held back"
 
 export type GooglePause = {
   paused: boolean
   at: string | null
   /** Why it paused by itself; not set when paused by hand. */
   reason?: string
+  /** When a pause it took by itself ends by itself; not set when it waits for someone. */
+  until?: string
+  /** The pauses it took by itself lately, newest last (see `REMEMBER`). */
+  history?: { at: string; kind: Kind }[]
 }
 
 const OFF: GooglePause = { paused: false, at: null }
 
-export function googlePause() {
-  return readDoc<GooglePause>(PAUSE_KEY, OFF)
+/** How long a pause it takes by itself lasts, the first time and the next; after that it waits for someone. */
+const COOL_OFF: Record<Kind, number[]> = {
+  denied: [],
+  rejected: [15 * 60_000, 60 * 60_000],
+  "held back": [30 * 60_000, 2 * 60 * 60_000],
+}
+/** How long a pause it took by itself counts towards the next one lasting longer. */
+const REMEMBER = 6 * 60 * 60_000
+
+export async function googlePause() {
+  const pause = await readDoc<GooglePause>(PAUSE_KEY, OFF)
+  // Its time is up: on again, everywhere (every server watches the switch).
+  if (pause.paused && pause.until && Date.parse(pause.until) <= Date.now()) {
+    const value: GooglePause = { paused: false, at: new Date().toISOString(), history: pause.history }
+    await writeDoc(PAUSE_KEY, value)
+    console.log(`Google resumed by itself after its pause (${pause.reason ?? "?"})`)
+    return value
+  }
+  return pause
 }
 
 export async function googlePaused() {
   return (await googlePause()).paused
 }
 
+/** Switched by hand: a resume by hand forgets the pauses it took by itself, someone has looked. */
 export async function setGooglePaused(paused: boolean, reason?: string): Promise<GooglePause> {
   const value: GooglePause = { paused, at: new Date().toISOString(), ...(paused && reason && { reason }) }
   await writeDoc(PAUSE_KEY, value)
   return value
+}
+
+/** Paused by itself over `kind`: for a while, or until someone has looked when that's happened often lately. */
+async function pauseItself(kind: Kind, reason: string) {
+  const now = Date.now()
+  const before = await readDoc<GooglePause>(PAUSE_KEY, OFF)
+  const history = (before.history ?? []).filter((h) => now - Date.parse(h.at) < REMEMBER)
+  const wait = COOL_OFF[kind][history.filter((h) => h.kind === kind).length]
+  const value: GooglePause = {
+    paused: true,
+    at: new Date(now).toISOString(),
+    reason,
+    ...(wait && { until: new Date(now + wait).toISOString() }),
+    history: [...history, { at: new Date(now).toISOString(), kind }],
+  }
+  await writeDoc(PAUSE_KEY, value)
+  return wait
 }
 
 export class GooglePausedError extends Error {
@@ -40,9 +85,9 @@ export class GooglePausedError extends Error {
   }
 }
 
-// Everything is paused, on every server, until someone has looked and
-// switched it back on, when Google keeps telling us something sending more
-// can't fix. A single answer like that can be a fluke and pauses nothing.
+// Everything is paused, on every server, for a while or until someone has
+// looked (see `COOL_OFF`), when Google keeps telling us something sending
+// more can't fix. A single answer like that can be a fluke and pauses nothing.
 // Asked to keep going regardless, a project gets suspended: Google's own
 // systems flag accounts that go on sending what it refuses.
 
@@ -50,7 +95,7 @@ type Strikes = Record<string, number[]>
 const global = globalThis as typeof globalThis & { __googleStrikes?: Strikes }
 const strikes: Strikes = (global.__googleStrikes ??= {})
 
-async function strike(kind: string, limit: number, window: number, reason: string, count = 1) {
+async function strike(kind: Kind, limit: number, window: number, reason: string, count = 1) {
   const now = Date.now()
   const recent = (strikes[kind] ?? []).filter((at) => now - at < window)
   for (let i = 0; i < count; i++) recent.push(now)
@@ -59,8 +104,8 @@ async function strike(kind: string, limit: number, window: number, reason: strin
   strikes[kind] = []
   try {
     if (await googlePaused()) return
-    await setGooglePaused(true, reason.slice(0, 400))
-    console.error(`Google paused by itself: ${reason}`)
+    const wait = await pauseItself(kind, reason.slice(0, 400))
+    console.error(`Google paused by itself${wait ? ` for ${Math.round(wait / 60_000)} min` : " until someone has looked"}: ${reason}`)
   } catch (error) {
     console.error("Couldn't pause Google:", error)
   }

@@ -72,6 +72,7 @@ import {
   type Output,
   type OutputMode,
 } from "@/lib/generation/types"
+import { describeFolder } from "@/lib/saved/folders"
 import { cn } from "@/lib/utils"
 
 // One listing photo and everything drawn from it. The poster(s) on the
@@ -230,7 +231,7 @@ function Loaded({ set }: { set: GenerationSet }) {
           render={<Link href={`/generation?folder=${encodeURIComponent(set.folder)}`} />}
         >
           <ArrowLeftIcon />
-          {set.folder}
+          {describeFolder(set.folder)}
         </Button>
 
         <div className="flex flex-col gap-1">

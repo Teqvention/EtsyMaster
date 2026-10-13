@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: Context) {
     const blank = await readSceneFile(id, roomFile(scene))
     const photo = scene.source?.startsWith("https://") ? await fetchReference(scene.source).catch(() => null) : null
     const image = await paint(blankAgainPrompt(feedback, !!photo), photo ? [photo, blank] : [blank])
-    const next = await replaceBlank(id, image)
+    const next = await replaceBlank(id, image, photo)
     return { scene: { id: next.id, located: next.located } }
   })
 }

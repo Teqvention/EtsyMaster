@@ -4,6 +4,7 @@ import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import * as React from "react"
 import {
+  ArrowLeftIcon,
   ChartColumnIcon,
   ExternalLinkIcon,
   LayoutGridIcon,
@@ -18,7 +19,7 @@ import { SplitView } from "@/components/listings/split-view"
 import { gallerySort, ListingGallery, type GallerySort } from "@/components/shops/listing-gallery"
 import { ImportShops } from "@/components/shops/import-shops"
 import { LibraryButton } from "@/components/shops/library-button"
-import { RecentShops } from "@/components/shops/recent-shops"
+import { describeListView, RecentShops } from "@/components/shops/recent-shops"
 import { ScopePanel } from "@/components/shops/scope-panel"
 import { ShopInsightsView } from "@/components/shops/shop-insights"
 import { ShopTagButton } from "@/components/shops/shop-tags"
@@ -62,7 +63,8 @@ import type { Listing, ListingShop } from "@/lib/etsy/types"
 // what sells. The shop lives in the URL (`?shop=`), so an analysis can be
 // linked to and reloaded. A shop analysed before opens with what was found
 // then (kept on the server); updating it, or fetching more, is up to you. A
-// run keeps going in the background when you leave the page.
+// run keeps going in the background when you leave the page. An open shop
+// leads back (top left) to the list as it was left, filters and all.
 
 export function ShopAnalysisView({ currency }: { currency: string }) {
   const searchParams = useSearchParams()
@@ -71,6 +73,8 @@ export function ShopAnalysisView({ currency }: { currency: string }) {
   const shop = lookup.shop
 
   function open(next: string) {
+    // Leaving the list: its filters are what the way back returns to.
+    if (!query) rememberListView(window.location.search)
     const params = new URLSearchParams()
     if (next) params.set("shop", next)
     const search = params.toString()
@@ -79,7 +83,7 @@ export function ShopAnalysisView({ currency }: { currency: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <ShopSearch key={query} query={query} onSubmit={open} />
+      <ShopSearch key={query} query={query} onSubmit={open} back={query ? <BackToList /> : null} />
 
       {!query ? (
         <div className="px-4 lg:px-6">
@@ -317,7 +321,15 @@ function useShopLookup(query: string) {
   return { shop: cached ?? current?.shop ?? null, error: cached ? null : (current?.error ?? null) }
 }
 
-function ShopSearch({ query, onSubmit }: { query: string; onSubmit: (query: string) => void }) {
+function ShopSearch({
+  query,
+  onSubmit,
+  back,
+}: {
+  query: string
+  onSubmit: (query: string) => void
+  back?: React.ReactNode
+}) {
   const [draft, setDraft] = React.useState(query)
   return (
     <form
@@ -328,6 +340,7 @@ function ShopSearch({ query, onSubmit }: { query: string; onSubmit: (query: stri
       }}
       className="flex items-center gap-2 px-4 lg:px-6"
     >
+      {back}
       <div className="relative max-w-xl min-w-0 flex-1">
         <StoreIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -349,6 +362,70 @@ function ShopSearch({ query, onSubmit }: { query: string; onSubmit: (query: stri
 }
 
 const subscribeNever = () => () => {}
+
+// --- Back to the list ---
+
+// The list's search params when a shop was last opened from it, on this
+// device: the way back lands on the same tags, filters and sort.
+const LIST_VIEW_KEY = "etsy-research:shops-list-view"
+
+function rememberListView(search: string) {
+  try {
+    localStorage.setItem(LIST_VIEW_KEY, search)
+  } catch {
+    // Private window or blocked storage: the way back shows the whole list.
+  }
+}
+
+function rememberedListView() {
+  try {
+    return localStorage.getItem(LIST_VIEW_KEY) ?? ""
+  } catch {
+    return ""
+  }
+}
+
+type NavigationEntries = { entries(): { url: string | null }[]; currentEntry: { index: number } | null }
+
+/**
+ * Top left on an open shop: back to the shop list as it was left. When the
+ * list is the page just before, this is the browser's own Back (so Forward
+ * leads to the shop again and the scroll position comes back); otherwise the
+ * list opens anew with the remembered filters.
+ */
+function BackToList() {
+  const view = React.useSyncExternalStore(subscribeNever, rememberedListView, () => "")
+  const parts = describeListView(view)
+
+  function back() {
+    const list = `${window.location.pathname}${view}`
+    const navigation = (window as Window & { navigation?: NavigationEntries }).navigation
+    const at = navigation?.currentEntry?.index ?? -1
+    const previous = at > 0 ? navigation?.entries()[at - 1]?.url : null
+    const before = previous ? new URL(previous) : null
+    if (before && before.pathname === window.location.pathname && before.search === view) {
+      window.history.back()
+      return
+    }
+    window.history.pushState(null, "", list)
+    window.scrollTo({ top: 0 })
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={back}
+      title={parts.length ? `Back to the shop list: ${parts.join(" · ")}` : "Back to the shop list"}
+      className="-ml-2 max-w-72 min-w-0 shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
+    >
+      <ArrowLeftIcon />
+      <span className="text-foreground">Shops</span>
+      {parts.length > 0 && <span className="min-w-0 truncate text-xs">{parts.join(" · ")}</span>}
+    </Button>
+  )
+}
 
 // Shops opened before, or, the first time round, the shops behind saved
 // listings as first picks.

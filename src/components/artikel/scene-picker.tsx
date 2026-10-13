@@ -7,6 +7,7 @@ import { CheckIcon, ImageIcon } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { fileUrl } from "@/lib/mockups/client"
 import type { SceneSummary } from "@/lib/mockups/types"
+import { describeTags } from "@/lib/tags"
 import { cn } from "@/lib/utils"
 
 // The mockup scenes to show a poster in instead, as a grid of thumbnails.
@@ -57,7 +58,7 @@ export function ScenePicker({ value, onChange }: { value: string | null; onChang
             role="radio"
             aria-checked={picked}
             onClick={() => onChange(scene.id)}
-            title={scene.category ? `${scene.name} · ${scene.category}` : scene.name}
+            title={scene.tags.length ? `${scene.name} · ${describeTags(scene.tags)}` : scene.name}
             className={cn(
               "group/scene flex min-w-0 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97] transition-transform duration-150 ease-out"
             )}

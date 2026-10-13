@@ -10,6 +10,7 @@ import {
   hasSecondaryTag,
   shopTags,
   tagName,
+  tagsOf,
   type ShopOp,
 } from "@/lib/shops/history-ops"
 import type { ShopAnalysisSummary, ShopHistory as History, ShopVisit } from "@/lib/shops/types"
@@ -17,11 +18,11 @@ import { createSyncedStore } from "@/lib/synced-store"
 
 export type { PrimaryTag, TagCount } from "@/lib/shops/history-ops"
 export type { ShopAnalysisSummary, ShopTag, ShopVisit } from "@/lib/shops/types"
-export { hasPrimaryTag, hasSecondaryTag, shopTags, tagName }
+export { hasPrimaryTag, hasSecondaryTag, shopTags, tagName, tagsOf }
 
 // Shops looked up on the Shops page. Each entry holds the shop as last seen,
-// a summary of its last analysis, the tags it's filed under (a primary one
-// and secondary ones beneath it) and whether it's liked, so the list renders
+// a summary of its last analysis, the tags it's filed under (primary ones,
+// each with secondary ones beneath it) and whether it's liked, so the list renders
 // without API calls and reopening a shop can pick up the scope it was
 // analysed with. The database holds it; every change goes there as a step
 // (see `history-ops.ts` and `synced-store.ts`). The list an older version
@@ -67,14 +68,19 @@ export function useShopTags() {
   return React.useMemo(() => shopTags(history), [history])
 }
 
+/** Takes every tag off the shops. */
+export function clearShopTags(shops: ListingShop[]) {
+  change({ type: "tag", shops, primary: null, at: now() })
+}
+
 /**
- * Files the shops under the primary tag, or (null) takes their tags off. A
- * shop moving to another primary tag leaves its secondary ones behind; a tag
- * in use already keeps the spelling it was first given.
+ * Puts the primary tag on the shops, next to the ones they carry, or takes
+ * it off with its secondary ones. A tag in use already keeps the spelling it
+ * was first given.
  */
-export function setPrimaryTag(shops: ListingShop[], primary: string | null) {
-  if (primary !== null && !tagName(primary)) return
-  change({ type: "tag", shops, primary, at: now() })
+export function setPrimaryTag(shops: ListingShop[], primary: string, on: boolean) {
+  if (!tagName(primary)) return
+  change({ type: "primary", shops, primary, on, at: now() })
 }
 
 /** Puts the secondary tag on the shops filed under `primary`, or takes it off them. */

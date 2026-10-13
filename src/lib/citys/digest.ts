@@ -3,7 +3,8 @@ import { ready, sql } from "@/lib/db/sql"
 import { calibrateShop } from "@/lib/etsy/calibrate"
 import type { CountSnapshot, Listing, ListingShop, ShopReview } from "@/lib/etsy/types"
 import { getShopHistory } from "@/lib/shops/history-store"
-import { sameTag } from "@/lib/shops/history-ops"
+import { tagsOf } from "@/lib/shops/history-ops"
+import { tagUnder } from "@/lib/tags"
 
 import { shortPhoto } from "./photos"
 import type { DigestListing, ShopDigest } from "./types"
@@ -23,12 +24,14 @@ type Stored = ShopDigest & { version: number }
 
 export type CityShop = { shop: ListingShop; secondary: string[] }
 
-/** The shops under `primary` (default "citys") on the Shops page, with their secondary tags. */
+/** The shops carrying the primary tag `primary` (default "citys") on the Shops page, with their secondary tags under it. */
 export async function taggedShops(primary = "citys"): Promise<CityShop[]> {
   const history = await getShopHistory()
   return Object.values(history)
-    .filter((v) => v.tag && sameTag(v.tag.primary, primary))
-    .map((v) => ({ shop: v.shop, secondary: v.tag!.secondary }))
+    .flatMap((v) => {
+      const tag = tagUnder(tagsOf(v), primary)
+      return tag ? [{ shop: v.shop, secondary: tag.secondary }] : []
+    })
     .sort((a, b) => a.shop.name.localeCompare(b.shop.name))
 }
 

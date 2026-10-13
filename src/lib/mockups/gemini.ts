@@ -380,20 +380,6 @@ export async function askJson<T>(
   }
 }
 
-/**
- * Bounding box of every blank sheet as a quad (TL, TR, BR, BL) in pixels of
- * `image`, in reading order. Gemini is trained on `box_2d` — corner points
- * asked for directly come back far less accurate.
- */
-export async function guessSheets(image: Buffer): Promise<Quad[]> {
-  const quads = await detectBoxes(
-    image,
-    "Detect every blank white paper sheet inside a picture frame (the paper only, inside the frame moulding and mat) — there may be one or several frames."
-  )
-  if (!quads.length) throw new Error("Couldn't find a sheet")
-  return readingOrder(quads)
-}
-
 /** Bounding box of every framed print in a finished mockup, largest first; none for a flat design. */
 export async function guessArtwork(image: Buffer): Promise<Quad[]> {
   const quads = await detectBoxes(
@@ -424,6 +410,50 @@ async function detectBoxes(image: Buffer, prompt: string): Promise<Quad[]> {
       const [x0, x1] = [(xmin / 1000) * width!, (xmax / 1000) * width!]
       const [y0, y1] = [(ymin / 1000) * height!, (ymax / 1000) * height!]
       return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Quad
+    })
+}
+
+/** A sheet's box, or something in front of one, as Gemini saw it in a blank mockup. */
+export type Seen = { label: string; quad: Quad }
+
+/**
+ * Every blank sheet in a mockup and everything standing in front of one
+ * (a hand, books, a lamp, another frame), boxes in pixels of `image`, in one
+ * look: the sheets as wholes, hidden parts included, so their corners can be
+ * found where the edges are hidden too.
+ */
+export async function guessScene(image: Buffer): Promise<{ sheets: Quad[]; front: Seen[] }> {
+  const seen = await detectLabelled(
+    image,
+    `This photo shows a room with one or more picture frames (or unframed prints) whose artwork has been replaced by blank white paper. Find:
+1. Every blank paper sheet: the paper only, inside the frame moulding and any mat. Include sheets that are partly hidden by objects or by other frames, cut off at the image edge, tilted, leaning, or held in someone's hands. Box the whole sheet, its hidden parts included. Label each one "sheet".
+2. Every object that stands in front of a sheet and hides part of its paper: a hand or fingers, a book, a lamp, a vase, a plant or its leaves, a chair, a pillow, a bottle, another frame in front of it, and so on. Label each with what it is. Leave out shadows, reflections and light on the paper, and objects that only touch the frame from behind.`
+  )
+  const sheets = seen.filter((s) => /^sheets?$/i.test(s.label.trim())).map((s) => s.quad)
+  if (!sheets.length) throw new Error("Couldn't find a sheet")
+  return { sheets: readingOrder(sheets), front: seen.filter((s) => !/^sheets?$/i.test(s.label.trim())) }
+}
+
+async function detectLabelled(image: Buffer, prompt: string): Promise<Seen[]> {
+  const { width, height } = await sharp(image).metadata()
+  const parts = await generate(
+    VISION_MODEL,
+    [
+      await inline(image),
+      {
+        text: `${prompt}\nOutput a JSON list where each entry has the 2D bounding box in "box_2d" as [ymin, xmin, ymax, xmax] normalized to 0-1000, and "label".`,
+      },
+    ],
+    { responseMimeType: "application/json", temperature: 0 }
+  )
+  const json = JSON.parse(parts.find((p) => p.text)?.text ?? "[]")
+  return (Array.isArray(json) ? json : [])
+    .filter((s) => Array.isArray(s?.box_2d) && s.box_2d.length === 4 && s.box_2d.every(Number.isFinite))
+    .map((s) => {
+      const [ymin, xmin, ymax, xmax] = s.box_2d as number[]
+      const [x0, x1] = [(xmin / 1000) * width!, (xmax / 1000) * width!]
+      const [y0, y1] = [(ymin / 1000) * height!, (ymax / 1000) * height!]
+      return { label: String(s.label ?? ""), quad: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Quad }
     })
 }
 

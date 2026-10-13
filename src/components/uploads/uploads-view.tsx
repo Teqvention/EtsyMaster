@@ -37,6 +37,7 @@ import { uploadAccounts, useAccounts, type AccountsState } from "@/hooks/use-acc
 import { retryItems, usePipeline } from "@/hooks/use-pipeline"
 import { createDrafts, isWriting, refreshUploads, rewriteDraft, useUploads } from "@/hooks/use-uploads"
 import { formatNumber } from "@/lib/etsy/format"
+import { describeFolder } from "@/lib/saved/folders"
 import {
   canRetry,
   canUpload,
@@ -581,7 +582,7 @@ function WaitingStrip({ posters }: { posters: WaitingPoster[] }) {
               <img src={p.poster} alt="" loading="lazy" draggable={false} className="size-full object-cover" />
             </TooltipTrigger>
             <TooltipContent className="max-w-64">
-              <span className="font-medium">{p.designTitle ?? p.folder}</span>
+              <span className="font-medium">{p.designTitle ?? describeFolder(p.folder)}</span>
               <span className="block opacity-70">From: {p.sourceTitle}</span>
               <span className="block opacity-70">Click to write just this one</span>
             </TooltipContent>

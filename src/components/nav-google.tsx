@@ -136,8 +136,13 @@ export function NavGoogle(props: React.ComponentPropsWithoutRef<typeof SidebarGr
             </div>
             {paused && (
               <p className="text-[11px] text-muted-foreground">
-                {state.reason ? "Paused by itself: Google keeps refusing us" : "Nothing goes to Google; generation waits"}
+                {state.reason
+                  ? state.until
+                    ? "Paused by itself for a while"
+                    : "Paused by itself: needs a look before resuming"
+                  : "Nothing goes to Google; generation waits"}
                 {at && <> · since {new Date(at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</>}
+                {state.until && <> · resumes by itself at {new Date(state.until).toLocaleTimeString([], { timeStyle: "short" })}</>}
               </p>
             )}
             {paused && state.reason && (

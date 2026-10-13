@@ -33,6 +33,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { deleteDraft, isWriting, patchDraft, restorePosters, rewriteDraft } from "@/hooks/use-uploads"
 import type { MockupChain } from "@/lib/mockups/chain-types"
+import { describeFolder } from "@/lib/saved/folders"
 import { posterKey, type PosterStatus, type PosterUpload } from "@/lib/uploads/groups"
 import { TITLE_MAX, type DraftStatus, type DraftView } from "@/lib/uploads/types"
 import { cn } from "@/lib/utils"
@@ -163,7 +164,7 @@ function Meta({
           <ExternalLinkIcon />
         </a>
         <span aria-hidden>·</span>
-        <span>{draft.folder}</span>
+        <span>{describeFolder(draft.folder)}</span>
         <span aria-hidden>·</span>
         <span>{draft.design.mode === "idea" ? "New idea" : "Variant"}</span>
       </div>
