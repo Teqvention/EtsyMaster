@@ -51,7 +51,8 @@ zuerst.
 3. **Planer** (`planAuto`): je 8 Poster pro Gemini-Antwort; jedes Paket geht sofort zum Malen, während das nächste
    geplant wird. Pro Poster: Stufe, Anker, Refs, Titel, Brief (Motiv und was es tut, Ausdruck und Körpersprache,
    Ort und Requisiten, Komposition, Schrift oder „no lettering“).
-4. **Maler** (`autoPrompt`): Anker zuerst, dann die Refs. „Paint it exactly like image 1 — look at it, don't
+4. **Maler** (`autoPrompt`): Anker zuerst, dann die Refs (bei Minimal und Subtle nur der Anker: eine Familie kann
+   mehr als eine Hand enthalten, und ein Ref zog ein dunkles Geschwister-Bild ins Knallbunte). „Paint it exactly like image 1 — look at it, don't
    interpret it“, dann die Regeln gegen das Verfeinern (keine feineren Linien, kein zusätzliches Detail in Fell,
    Gesichtern, Mustern, Hintergründen, keine glattere Übergänge, kein knackigeres Impasto, keine grelleren oder
    dumpferen Farben), das Gefühl der Serie, Keep/Avoid aus der Studie. Format wie der Anker.

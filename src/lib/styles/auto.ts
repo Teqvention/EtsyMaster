@@ -427,7 +427,10 @@ export async function autoRequest(set: GenerationSet, output: Output) {
     const prompt = repaintPrompt({ refs: ref ? 1 : 0, notes: output.feedback, study: style?.study })
     return { prompt, images, aspect: draft.width && draft.height ? draft.width / draft.height : undefined }
   }
-  const refs = (output.refs ?? [])
+  // A sibling (minimal, subtle) takes its anchor's hand alone: a family can hold more than one
+  // hand, and a ref pulled the dark anchor of a subtle poster towards a bright one (13 Oct).
+  const sibling = output.creativity === "minimal" || output.creativity === "subtle"
+  const refs = (sibling ? [] : (output.refs ?? []))
     .map((i) => set.posters.find((p) => p.index === i && p.file && p.index !== anchor.index))
     .filter((p): p is ExtractedPoster => !!p)
     .slice(0, 2)
