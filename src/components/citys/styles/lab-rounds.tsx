@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { Round } from "@/hooks/use-city-style"
-import { LAB_BLOCKS, LAB_CITIES, type LabBlock, type LabImage, type StyleCandidate } from "@/lib/citys/studio-types"
+import { LAB_BLOCKS, LAB_CITIES, TEST_SIZES, type LabBlock, type LabImage, type StyleCandidate, type TestSize } from "@/lib/citys/studio-types"
 import { cn } from "@/lib/utils"
 
 // The lab's test rounds. A round paints the style in three blocks: cities
@@ -26,37 +26,68 @@ export const BLOCK_LABEL: Record<LabBlock, { label: string; hint: string; count:
 
 const fileUrl = (set: string, file: string, width?: number) => `/api/generations/${set}/files/${file}${width ? `?w=${width}` : ""}`
 
-export function RoundRunner({ onRun, disabled, running }: { onRun: (blocks: LabBlock[], delivery: "now" | "batch") => Promise<void>; disabled?: boolean; running?: boolean }) {
+export function RoundRunner({
+  onRun,
+  disabled,
+  running,
+}: {
+  onRun: (blocks: LabBlock[], delivery: "now" | "batch", size?: TestSize) => Promise<void>
+  disabled?: boolean
+  running?: boolean
+}) {
+  const [size, setSize] = React.useState<TestSize | "full">("middle")
   const [blocks, setBlocks] = React.useState<LabBlock[]>([...LAB_BLOCKS])
-  // Batch by default: online while Vertex has room, the rest in a batch job, so nothing fails on a busy quota.
-  const [delivery, setDelivery] = React.useState<"now" | "batch">("batch")
+  // Sync by default for the quick sizes: back in a few minutes.
+  const [delivery, setDelivery] = React.useState<"now" | "batch">("now")
   const [busy, setBusy] = React.useState(false)
-  const count = blocks.reduce((n, b) => n + BLOCK_LABEL[b].count, 0)
+  const count = size === "full" ? blocks.reduce((n, b) => n + BLOCK_LABEL[b].count, 0) : TEST_SIZES[size]
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
       <FlaskConicalIcon className="ml-1 size-4 text-muted-foreground" />
       <span className="text-sm font-medium">Test round</span>
-      <div className="flex flex-wrap gap-1">
-        {LAB_BLOCKS.map((b) => {
-          const on = blocks.includes(b)
-          return (
-            <button
-              key={b}
-              type="button"
-              aria-pressed={on}
-              title={BLOCK_LABEL[b].hint}
-              onClick={() => setBlocks((list) => (on ? list.filter((x) => x !== b) : [...list, b]))}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs outline-none transition-[border-color,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.97]",
-                on ? "border-brand/60 bg-brand/10" : "border-border bg-background text-muted-foreground"
-              )}
-            >
-              {BLOCK_LABEL[b].label}
-              <span className="text-muted-foreground tabular-nums">{BLOCK_LABEL[b].count}</span>
-            </button>
-          )
-        })}
+      <div className="flex rounded-md border bg-background p-0.5" role="group" aria-label="Size">
+        {(
+          [
+            ["small", "Small · 2", "Two places from words"],
+            ["middle", "Middle · 3", "Three places from words"],
+            ["full", "Full", "From words, from photos and after the board"],
+          ] as const
+        ).map(([value, label, hint]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={size === value}
+            title={hint}
+            onClick={() => setSize(value)}
+            className={cn("inline-flex h-6 items-center rounded px-2 text-xs outline-none", size === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+      {size === "full" && (
+        <div className="flex flex-wrap gap-1">
+          {LAB_BLOCKS.map((b) => {
+            const on = blocks.includes(b)
+            return (
+              <button
+                key={b}
+                type="button"
+                aria-pressed={on}
+                title={BLOCK_LABEL[b].hint}
+                onClick={() => setBlocks((list) => (on ? list.filter((x) => x !== b) : [...list, b]))}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs outline-none transition-[border-color,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.97]",
+                  on ? "border-brand/60 bg-brand/10" : "border-border bg-background text-muted-foreground"
+                )}
+              >
+                {BLOCK_LABEL[b].label}
+                <span className="text-muted-foreground tabular-nums">{BLOCK_LABEL[b].count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="flex rounded-md border bg-background p-0.5">
         {(["now", "batch"] as const).map((d) => (
           <button
@@ -75,11 +106,11 @@ export function RoundRunner({ onRun, disabled, running }: { onRun: (blocks: LabB
       <Button
         size="sm"
         className="ml-auto active:scale-[0.97]"
-        disabled={disabled || busy || !blocks.length}
+        disabled={disabled || busy || (size === "full" && !blocks.length)}
         onClick={async () => {
           setBusy(true)
           try {
-            await onRun(blocks, delivery)
+            await onRun(blocks, delivery, size === "full" ? undefined : size)
           } finally {
             setBusy(false)
           }
@@ -144,7 +175,7 @@ export function RoundView({
   )
 }
 
-function LabTile({ set, image, onRate, onOpen }: { set: string; image: LabImage; onRate: (rating: "up" | "down" | null) => void; onOpen: () => void }) {
+export function LabTile({ set, image, onRate, onOpen }: { set: string; image: LabImage; onRate: (rating: "up" | "down" | null) => void; onOpen: () => void }) {
   const painting = image.status === "pending" || image.status === "running"
   return (
     <div className="group/tile flex min-w-0 flex-col gap-1">

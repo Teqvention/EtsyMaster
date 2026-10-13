@@ -8,6 +8,7 @@ import { isCitySet } from "./generate"
 import { listInspirations } from "./inspirations"
 import { ranking } from "./ranking"
 import { listProductions } from "./produce"
+import { listCustomSkies } from "./sky-store"
 import { LOOK_SKY, skyById, type SkyId } from "./skies"
 import { EMPTY_REQUEST, LEVEL_LABEL, type CityOutputInfo, type CityRequest, type Level } from "./studio-types"
 import type { Tier } from "./types"
@@ -63,6 +64,8 @@ export async function cityOutputs(): Promise<CityOutput[]> {
     listProductions().catch(() => []),
   ])
   const productionName = new Map(productions.map((p) => [p.id, p.name]))
+  // The shop's own skies, so their names show.
+  await listCustomSkies().catch(() => [])
   const styleName = new Map(styles.map((s) => [s.id, s.name]))
   const lookName = new Map(looks.map((l) => [l.id, l.name]))
   const tierOf = new Map((ranked?.places ?? []).map((p) => [p.id, p.tier]))

@@ -65,7 +65,13 @@ export function useCityStyle(id: string) {
 
   const busy =
     !!data &&
-    (data.style.guideStatus === "running" || !!data.style.incoming || data.rounds.some((r) => r.status !== "done") || expecting)
+    (data.style.guideStatus === "running" ||
+      !!data.style.incoming ||
+      data.rounds.some((r) => r.status !== "done") ||
+      data.style.city?.autotest?.status === "running" ||
+      data.style.city?.interviewing?.status === "testing" ||
+      data.style.city?.interviewing?.status === "asking" ||
+      expecting)
   React.useEffect(() => {
     if (!busy) return
     const timer = setTimeout(load, POLL)

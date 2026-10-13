@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { useCustomSkies } from "@/hooks/use-custom-skies"
 import { saveTemplates, useCityShared } from "@/hooks/use-stealer"
 import { useStyles } from "@/hooks/use-styles"
 import { SKIES, skyById, type SkyId } from "@/lib/citys/skies"
@@ -270,7 +271,8 @@ function SwitchCard({
 }
 
 export function SkySwatch({ sky, className }: { sky: SkyId; className?: string }) {
-  const found = skyById(sky)
+  const own = useCustomSkies()
+  const found = skyById(sky, own ?? [])
   return (
     <span
       aria-hidden
@@ -282,7 +284,8 @@ export function SkySwatch({ sky, className }: { sky: SkyId; className?: string }
 
 export function SkyPicker({ value, onChange }: { value: SkyId; onChange: (sky: SkyId) => void }) {
   const [open, setOpen] = React.useState(false)
-  const current = skyById(value)
+  const own = useCustomSkies()
+  const current = skyById(value, own ?? [])
   const pick = (sky: SkyId) => {
     onChange(sky)
     setOpen(false)
@@ -302,6 +305,16 @@ export function SkyPicker({ value, onChange }: { value: SkyId; onChange: (sky: S
             <SkyOption key={s.id} sky={s.id} name={s.name} hint={s.hint} on={value === s.id} onPick={pick} />
           ))}
         </div>
+        {own && own.length > 0 && (
+          <>
+            <div className="mt-1 px-2 pt-1.5 pb-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Your skies</div>
+            <div className="grid grid-cols-2 gap-0.5">
+              {own.map((s) => (
+                <SkyOption key={s.id} sky={s.id} name={s.name} hint={s.hint} on={value === s.id} onPick={pick} />
+              ))}
+            </div>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )

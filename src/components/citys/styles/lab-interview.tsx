@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, LightbulbIcon, LoaderCircleIcon, MessageCircleQuestionIcon, SparklesIcon, WandSparklesIcon } from "lucide-react"
+import { CheckIcon, LightbulbIcon, LoaderCircleIcon, MessageCircleQuestionIcon, PlusIcon, SparklesIcon, WandSparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -13,21 +13,25 @@ import { cn } from "@/lib/utils"
 // What to change about a style, two ways. The interview asks a handful of
 // questions about the latest round, five answers each from one end to the
 // other, 3 keeping it as it is, the lab's pick marked; the answers make
-// the guide's next version. The suggestions are five one-liners, any of
-// which can be tried as a variant of its own (they come back as 1–5 at the
-// top), alone or several at once, with an idea of one's own besides.
+// the guide's next version. The suggestions are five one-liners (three
+// fixes, two ideas), picked into versions: all picks of a version make one
+// variant with those changes together, "+" opens the next version.
 
 export function InterviewPanel({
   interview,
+  interviewing,
   canAsk,
   onAsk,
   onApply,
 }: {
   interview: Interview | undefined
+  /** An interview on its way: the fresh round it paints first, then the questions. */
+  interviewing?: { status: "testing" | "asking" | "error"; error?: string }
   canAsk: boolean
   onAsk: () => Promise<void>
   onApply: (answers: Record<string, number>, notes: string) => Promise<void>
 }) {
+  const waiting = interviewing?.status === "testing" || interviewing?.status === "asking"
   const [answers, setAnswers] = React.useState<Record<string, number>>({})
   const [notes, setNotes] = React.useState("")
   const [busy, setBusy] = React.useState<"ask" | "apply" | null>(null)
@@ -55,11 +59,21 @@ export function InterviewPanel({
       <header className="flex items-center gap-2">
         <MessageCircleQuestionIcon className="size-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold">Interview</h3>
-        <Button variant="outline" size="xs" className="ml-auto" disabled={!canAsk || busy !== null} onClick={() => run("ask", onAsk)}>
-          {busy === "ask" ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+        <Button variant="outline" size="xs" className="ml-auto" disabled={!canAsk || busy !== null || waiting} onClick={() => run("ask", onAsk)}>
+          {busy === "ask" || waiting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
           {interview ? "Ask again" : "Ask me"}
         </Button>
       </header>
+      {interviewing && (
+        <p className={cn("flex items-center gap-2 text-xs", interviewing.status === "error" ? "text-destructive" : "text-muted-foreground")}>
+          {waiting && <LoaderCircleIcon className="size-3.5 animate-spin" />}
+          {interviewing.status === "testing"
+            ? "Painting a fresh test round of the style as it is first, then the questions come."
+            : interviewing.status === "asking"
+              ? "Comparing the round with the board…"
+              : `The interview stopped: ${interviewing.error}`}
+        </p>
+      )}
       {!interview ? (
         <p className="text-xs text-pretty text-muted-foreground">
           After a round, the lab looks at the test posters next to the board and asks what to change: composition, colour, material, lines, people, sky, landmarks.
@@ -129,42 +143,90 @@ export function SuggestionsPanel({
   suggestions: Suggestion[] | undefined
   /** How many more variants fit next to those being tried. */
   room: number
-  onTry: (ids: string[], free: string) => Promise<void>
+  onTry: (groups: { suggestions: string[]; free: string }[]) => Promise<void>
 }) {
-  const [picked, setPicked] = React.useState<string[]>([])
-  const [free, setFree] = React.useState("")
+  // Versions: each one variant with all its picked changes at once; "+" opens the next.
+  const [versions, setVersions] = React.useState<string[][]>([[]])
+  const [active, setActive] = React.useState(0)
+  const [free, setFree] = React.useState<string[]>([""])
   const [busy, setBusy] = React.useState(false)
-  // New suggestions: none picked.
+  // New suggestions: nothing picked.
   const [pickedFor, setPickedFor] = React.useState(suggestions)
   if (pickedFor !== suggestions) {
     setPickedFor(suggestions)
-    setPicked([])
+    setVersions([[]])
+    setFree([""])
+    setActive(0)
   }
-  const count = picked.length + (free.trim() ? 1 : 0)
+  const groups = versions.map((ids, i) => ({ suggestions: ids, free: free[i] ?? "" })).filter((g) => g.suggestions.length || g.free.trim())
+  const versionOf = (id: string) => versions.findIndex((v) => v.includes(id))
+
+  function toggle(id: string) {
+    setVersions((list) => {
+      const holder = list.findIndex((v) => v.includes(id))
+      const next = list.map((v) => v.filter((x) => x !== id))
+      // A click on one in the active version takes it out; anywhere else moves it in.
+      if (holder !== active) next[active] = [...next[active], id]
+      return next
+    })
+  }
 
   return (
     <section className="flex flex-col gap-2.5" aria-label="Suggestions">
       <header className="flex items-center gap-2">
         <LightbulbIcon className="size-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold">Try a variant</h3>
-        <span className="ml-auto text-[11px] text-muted-foreground">{room} of 5 free</span>
+        <h3 className="text-sm font-semibold">Try a version</h3>
+        <span className="ml-auto text-[11px] text-muted-foreground">{room} free</span>
       </header>
+      <div className="flex flex-wrap items-center gap-1">
+        {versions.map((v, i) => (
+          <button
+            key={i}
+            type="button"
+            aria-pressed={active === i}
+            onClick={() => setActive(i)}
+            className={cn(
+              "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+              active === i ? "border-brand bg-brand text-white" : "border-border text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Version {i + 1}
+            <span className="tabular-nums opacity-80">{v.length + (free[i]?.trim() ? 1 : 0)}</span>
+          </button>
+        ))}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Another version"
+          title="Another version: picks from here on make a second variant"
+          onClick={() => {
+            setVersions((list) => [...list, []])
+            setFree((list) => [...list, ""])
+            setActive(versions.length)
+          }}
+        >
+          <PlusIcon />
+        </Button>
+      </div>
       {suggestions?.length ? (
         <ul className="flex flex-col gap-1">
           {suggestions.map((s) => {
-            const on = picked.includes(s.id)
+            const holder = versionOf(s.id)
+            const on = holder === active
             return (
               <li key={s.id}>
                 <button
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setPicked((list) => (on ? list.filter((x) => x !== s.id) : [...list, s.id]))}
+                  onClick={() => toggle(s.id)}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left text-xs outline-none transition-[border-color,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
-                    on ? "border-brand/60 bg-brand/10" : "border-border hover:border-foreground/25"
+                    on ? "border-brand/60 bg-brand/10" : holder >= 0 ? "border-dashed border-foreground/25" : "border-border hover:border-foreground/25"
                   )}
                 >
-                  <span className={cn("mt-px grid size-3.5 shrink-0 place-items-center rounded-[4px] border", on ? "border-brand bg-brand text-white" : "border-input")}>{on && <CheckIcon className="size-2.5" />}</span>
+                  <span className={cn("mt-px grid size-3.5 shrink-0 place-items-center rounded-[4px] border text-[9px] font-semibold", on ? "border-brand bg-brand text-white" : holder >= 0 ? "border-foreground/40 text-muted-foreground" : "border-input")}>
+                    {on ? <CheckIcon className="size-2.5" /> : holder >= 0 ? holder + 1 : null}
+                  </span>
                   <span className="text-pretty">{s.text}</span>
                 </button>
               </li>
@@ -172,18 +234,25 @@ export function SuggestionsPanel({
           })}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">The interview brings five suggestions along.</p>
+        <p className="text-xs text-muted-foreground">The interview brings five suggestions along: three fixes and two ideas.</p>
       )}
-      <Input value={free} onChange={(e) => setFree(e.target.value)} placeholder="Or an idea of your own" className="h-8 text-xs" />
+      <Input
+        value={free[active] ?? ""}
+        onChange={(e) => setFree((list) => list.map((f, i) => (i === active ? e.target.value : f)))}
+        placeholder={`An idea of your own for version ${active + 1}`}
+        className="h-8 text-xs"
+      />
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !count || count > room}
+        disabled={busy || !groups.length || groups.length > room}
         onClick={async () => {
           setBusy(true)
           try {
-            await onTry(picked, free)
-            setFree("")
+            await onTry(groups)
+            setVersions([[]])
+            setFree([""])
+            setActive(0)
           } catch (error) {
             toast.error((error as Error).message)
           } finally {
@@ -193,9 +262,9 @@ export function SuggestionsPanel({
         className="self-start active:scale-[0.97]"
       >
         {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-        {count > 1 ? `Try ${count} variants` : "Try it"}
+        {groups.length > 1 ? `Try ${groups.length} versions` : "Try it"}
       </Button>
-      {count > room && <p className="text-[11px] text-amber-700 dark:text-amber-400">Only {room} more fit: adopt or drop a variant first.</p>}
+      {groups.length > room && <p className="text-[11px] text-amber-700 dark:text-amber-400">Only {room} more fit: adopt or drop a variant first.</p>}
     </section>
   )
 }

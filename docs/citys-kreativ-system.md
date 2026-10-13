@@ -56,7 +56,90 @@ Set (3–9) und/oder Einzelposter. Kompositionen: **100 % Freiheit** oder **nach
 wir den meistverkauften Postern des Ortes folgen; die Bestseller-Bilder sieht nur der Art Director). Alles landet in
 Outputs unter dem Stil, jede Produktion als eigene Gruppe (`/citys/outputs?group=production:<id>`).
 
-## 6 · Tests vom 12.10. (alle „Now“, Nano Banana 2.1)
+## 6 · Kompositionen wie ein Profi-Fotograf (13.10.)
+
+Studiert an den Bestsellern von Traposto, Postour und Advntre (`PHOTO_COMPOSITION` in `prompts.ts`):
+- **Ein klares Motiv**, auf einen Blick erkennbar, vom **klassischen Postkarten-Standpunkt**: über das Wasser oder von
+  der Brücke, vom Hügel, von der Terrasse oder dem Dach, die Allee hinunter zum Wahrzeichen; eine Küste von den Klippen
+  oder der Straße darüber.
+- **Rahmender Vordergrund** an den Rändern (Zitronenzweig, Bougainvillea, Pinie, Zypresse, Balustrade, Fahrrad an der
+  Gracht), **führende Linie** (Straße, Fluss, Küste, Steg, Allee), **Tiefe in Ebenen**, **viel Himmel**.
+- **Echte Farben** des Ortes, kräftig aber natürlich.
+- **Nie Massentourismus:** keine Menschenmassen, keine Schirm- oder Liegenreihen, keine vollen Strände, kein Stau.
+  Menschen nur winzig und wenige. Der Ort soll aussehen wie ein Traumziel.
+- Für Kunst die Kurzfassung (`ART_COMPOSITION`).
+
+**Ortswissen aus den Bestsellern:** Das Orts-Briefing (Version 2) wird aus den Bildern der meistverkauften Poster des
+Ortes geschrieben, mit den Kompositionen, die sich dort verkaufen (z. B. „Bondis Bogen vom Klippenweg im Süden, das
+Icebergs-Becken im Vordergrund“). **Geografie-Fotos:** Für New ideas, Sets, Produktionen und Lab-Städte sieht der
+Art Director bis zu 5 echte Fotos des Ortes und wählt pro Bild das, welches das Motiv zeigt; der Maler bekommt es nur
+für die echte Geografie (nicht Licht, nicht Rahmen, nicht Stil).
+
+## 7 · Stil-Treue mit „Manner“
+
+Beim Einlesen schreibt Gemini zusätzlich einen kurzen **Manner**-Absatz (40–80 Wörter, wie man einem begabten
+Illustrator den Stil in einem Atemzug beschreibt: Gefühl, Medium, Strich, Farben, wie viel Papier frei bleibt). Jedes
+Kunst-Bild beginnt damit, danach die Szene als kurze, konkrete Beschreibung, dann nur vier Zeilen Stil-Notizen statt
+der langen Regel-Liste. **Schilder und kleine Objekte sind optional** — der Stil lebt in Linie, Farbe, Papier und wie
+Gebäude, Bäume und Menschen gezeichnet sind.
+
+## 8 · New ideas für Stile
+
+Auf der Stil-Seite: **New ideas** → Anzahl Richtungen (1–6), Städte (bis 6, je „1 poster“ oder „Set of 3“), optional
+der Stil selbst zum Vergleich. Gemini schlägt **nahe Geschwister** des Stils vor (gleiche Material-Familie, immer hell,
+nie dunkel/monochrom/Neon, je ein bis zwei Aspekte verändert: Palette, Wash, Strich, Papier, Himmel, Figuren,
+Detail), schreibt für jede den Guide um und malt sie auf die Städte. Jede Richtung zeigt **„Holds together by“** — was
+die Serie zusammenhält. Pro Richtung: **Make main** (wird der Stil), **Own style** (eigener neuer Stil), **Drop**.
+
+## 9 · Neuer Stil aus Outputs
+
+In Outputs: **Select for a style** → Poster anklicken → **New style from N** → Name. Die Bilder werden das Board des
+neuen Stils (bis 20), er wird eingelesen und öffnet im Lab.
+
+## 10 · Stil-Treue: Umzeichnen statt neu malen (13.10.)
+
+**Befund:** Bei Kunst-Stilen malte Nano Banana den Stil „aufgeräumt“: feinere Linien, mehr Architektur-Detail,
+blassere Farben als das Board. Ein kürzerer Prompt (1.349 statt 5.127 Zeichen) änderte daran fast nichts. Ein echtes
+Geografie-Foto und die lange Wahrzeichen-Liste zogen Kunst zusätzlich in Richtung Detail und sind für Kunst entfernt.
+**Durchbruch im direkten Vergleich:** Nano Banana ist ein Bearbeitungs-Modell. Wenn es ein **Board-Poster als neuen
+Ort umzeichnet**, bleiben Strich, Farbe und naive Figuren deutlich näher am Original.
+
+- **Malstrategie pro Stil** („How it's painted“ im Lab): **Redraw a board poster** (Standard) — der Art Director wählt
+  für jedes Motiv das Board-Poster mit der passendsten Komposition, das umgezeichnet wird; **Next in the series** — das
+  nächste Poster der Serie aus ein paar Board-Postern (freiere Komposition).
+- **Kunst-Prompts sind kurz** („lean“): Serie, Szene, Manner, ein Satz zur Treue, Format. Fotos behalten die
+  vollständigen Regeln.
+
+## 11 · Testen und Verbessern im Lab
+
+- **Testgrößen:** Small · 2 und Middle · 3 Orte aus Worten (Rom, Amalfiküste, Amsterdam, …), Full wie bisher.
+- **Autonomous testing:** malt den Stil, ein strenger Kritiker vergleicht mit dem Board (Stil zählt doppelt,
+  Komposition, Ort, je 0–10, mit „Still misses“), schreibt den Guide um bzw. probiert die andere Malstrategie, malt und
+  bewertet erneut, behält das Beste (1–4 Durchgänge). Schlägt eine Version den Start um ≥ 0,3, wird sie neue Version
+  samt Malstrategie (die alte bleibt in der History). Läuft im Sync.
+- **Interview:** malt vorher einen frischen Testlauf (Middle) der aktuellen Version, falls es keinen gibt, und fragt
+  dann. Die fünf Vorschläge sind drei gezielte Fixes und zwei interessante Änderungen.
+- **Try a version:** Vorschläge in Versionen sammeln — alle Häkchen einer Version ergeben **eine** Variante mit diesen
+  Änderungen zusammen; **„+“** öffnet Version 2 usw. Jede Version wird als Middle-Runde gemalt.
+
+## 12 · Eigene Skies
+
+Unter Citys → Styles → Skies: **New sky from photos** (1–5 Fotos, optional ein Name). Gemini liest nur Himmel und Licht
+(nie den Ort) und schreibt ihn wie die eingebauten Skies, in der hellen Hausregel (dunkle Fotos werden als hellste
+Version beschrieben). Eigene Skies erscheinen im Sky-Picker unter „Your skies“; beim Malen bekommt Nano Banana das Foto
+als Himmels-Vorlage mit.
+
+## 13 · Was sich verkauft (Top 100 aller erfassten Shops, 13.10.)
+
+- **Ein Drittel der Top 100** sind Detaillerias Aquarell-Stadtposter, viele als **Set of 3** (Boston-Set 19,8/Monat,
+  NYC-Sets 11,3 und 8,3). Platz 1 (34,5/Monat): PrintsHeavenlyCos rosa NYC-Sketch.
+- **Die Bildformel der Zeichnungen:** Straße oder Promenade zum Wahrzeichen am Fluchtpunkt, Bäume und Laternen rahmen,
+  Blumentöpfe oder Bank in den unteren Ecken, ein paar Spaziergänger, Radler, Oldtimer, viel heller Himmel.
+  Sets: drei verschiedene Szenen derselben Stadt in derselben Formel.
+- **Echte Fotos:** klassischer Standpunkt, ein klares Motiv, rahmender Vordergrund, führende Linie, viel Himmel, ruhig
+  und ohne Massentourismus (Traposto, Postour, Advntre).
+
+## 14 · Tests (alle „Now“, Nano Banana 2.1)
 
 **Welle 1 (19 Bilder, 0 Fehler):** NYC-Straße (Foto) Level 1–3 + Level 4 Blush, Honolulu autonom ×2 + Level 5
 Golden hour, Riviera (Aquarell-Referenz) Level 1/3 + 2 New ideas, NYC-Sketch Level 1–3 + 2 New ideas + Set of 3.
@@ -100,3 +183,31 @@ Original, warmes Licht) und Level 2 · Blush; Level 4 von einer Terrasse mit Bou
 `src/lib/mockups/gemini.ts`, wie in `google-bilder-batch-sync-wissen.md`). Noch offen: Die Kunst-Treue bei sehr
 lockeren Stilen (der Pink-Sketch hat dickere, wackeligere Linien als unsere Bilder) und die Marken-Regel
 (nach Times Square eingeführt) sind noch nicht in einer weiteren Welle geprüft.
+
+**Welle 5–7 (13.10.):**
+- **Pink-Sketch-Test des Nutzers (16 Bilder):** Stil verfehlt — zu sauber, zu detailreich, blasser; der Block „From
+  photos“ malte dichte Stadtpanoramen. Ursache gefunden (langer Prompt, Geografie-Foto, Wahrzeichen-Liste, und vor
+  allem: Nano Banana „räumt auf“). Lösung: Umzeichnen-Strategie (s. 10), kurze Kunst-Prompts, kein Foto für Kunst.
+- **Direkter Vergleich (Rom, Pink sketch):** alter langer Prompt ≈ Lean ≈ Serie mit 2 Bildern; **Umzeichnen nach dem
+  passenden Board-Poster** klar am nächsten (dunklerer, wackeliger Strich, fette Schilder, naivere Figuren).
+- **Aquarell-Stil „Watercolor city sketch“ (Detailleria-Board), 5 unbekannte Städte × Set of 3:** Stil sehr gut
+  getroffen; Schwächen in der Set-Planung (dreimal Eiffelturm, dreimal Gracht, Opernhaus fehlte, voller Bondi-Strand)
+  → Set-Regeln (Ikone immer dabei, ein Wahrzeichen führt nur ein Bild, drei Szenenarten), „schon gemacht“ nur noch im
+  selben Stil, fast leere Strände.
+- **Retest mit Umzeichnen, 4 Städte × 3 (London, Rom, Barcelona, Amsterdam):** alle 12 sehr nah an Detailleria und
+  abwechslungsreich (Sagrada-Allee, Park-Güell-Bank, Promenade; Magere Brug, Grachtenbrücke, Rijksmuseum mit Tulpen).
+- **Umzeichnen bei sehr kleinem Board (4 Bilder):** kopiert das Board-Poster zu wörtlich (Rom mit „SENS UNIQUE“)
+  → Prompt verlangt jetzt neue Schilder in der Landessprache und ersetzt jedes Gebäude; Autonomous testing wählt pro
+  Stil zwischen „redraw“ und „series“.
+- **Eigener Sky „Hawaii blush“** aus einem Honolulu-Foto, auf die NYC-Straße angewandt: genau dieses Blush, echt.
+- **Foto-Sets Amalfi:** zwei von drei Bildern zeigten wieder Atrani aus der Referenz → bei New ideas und Sets kommt
+  jetzt zuerst das Foto des Motivs, die Referenz danach nur für den Look.
+- **Autonomous testing, Pink sketch (Small, 2 Durchgänge, 10 Bilder):** Start mit redraw 6,5 (Stil 6, Komposition 7,
+  Ort 7); „series“ 6,8 (Stil 5, Ort 9); **redraw + Fixes des Kritikers 7,8 (Stil 7, Komposition 8, Ort 9) → als Version
+  3 übernommen.** Weitere Umschreibungen 7,3. Der Kritiker nennt bei gemischten Boards widersprüchliche Sättigungs-Hinweise
+  (das Board selbst ist teils blass, teils kräftig) — die Gesamtnote trennt trotzdem sauber.
+- **Foto-Sets nach der Korrektur (Amalfi, Honolulu, je 3):** kein Bild kopiert mehr die Referenz (Positano vom Strand,
+  Amalfi mit Holzboot, Atrani durch den Viadukt-Bogen; Waikiki mit Diamond Head, Royal Hawaiian, Palmen über türkisem
+  Wasser), alle echt, ohne Massen, mit dem Look der Referenz.
+
+**Gesamt seit 12.10.: über 150 Sync-Bilder, 0 Malfehler.**

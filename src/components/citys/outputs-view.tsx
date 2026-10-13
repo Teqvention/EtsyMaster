@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import * as React from "react"
 import {
   ArrowLeftIcon,
@@ -10,6 +10,7 @@ import {
   ExternalLinkIcon,
   ImagesIcon,
   LoaderCircleIcon,
+  PaletteIcon,
   RotateCcwIcon,
   ScanSearchIcon,
   SearchIcon,
@@ -20,10 +21,12 @@ import {
 import { toast } from "sonner"
 
 import { TierBadge } from "@/components/citys/tier"
+import { SelectionBar } from "@/components/selection"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
@@ -55,6 +58,17 @@ export function OutputsView() {
   const [only, setOnly] = React.useState<string | null>(asked)
   // ?style=<id> (from a style's page): everything in that style, its productions included.
   const [styleOnly, setStyleOnly] = React.useState<string | null>(params.get("style"))
+  // Select mode: posters picked to start a style of their own from.
+  const [selecting, setSelecting] = React.useState(false)
+  const [chosen, setChosen] = React.useState<Set<string>>(new Set())
+  const [naming, setNaming] = React.useState(false)
+  const toggleChosen = (o: CityOutput) =>
+    setChosen((set) => {
+      const next = new Set(set)
+      if (next.has(key(o))) next.delete(key(o))
+      else next.add(key(o))
+      return next
+    })
   const [open, setOpen] = React.useState<string | null>(null)
 
   const counts = React.useMemo(() => {
@@ -189,6 +203,19 @@ export function OutputsView() {
             </InputGroupAddon>
           )}
         </InputGroup>
+        <Button
+          variant={selecting ? "default" : "outline"}
+          size="sm"
+          aria-pressed={selecting}
+          onClick={() => {
+            setSelecting((on) => !on)
+            setChosen(new Set())
+          }}
+          title="Pick posters to start a style of your own from"
+        >
+          <PaletteIcon />
+          {selecting ? "Done selecting" : "Select for a style"}
+        </Button>
         {counts.painting > 0 && (
           <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
             <LoaderCircleIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
@@ -239,7 +266,14 @@ export function OutputsView() {
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-4">
                 {g.items.map((o) => (
                   <li key={key(o)}>
-                    <OutputTile item={o} showPlace={group === "style"} onOpen={() => setOpen(key(o))} onReview={(v) => review([o], v)} />
+                    <OutputTile
+                      item={o}
+                      showPlace={group === "style"}
+                      selecting={selecting}
+                      selected={chosen.has(key(o))}
+                      onOpen={() => (selecting ? toggleChosen(o) : setOpen(key(o)))}
+                      onReview={(v) => review([o], v)}
+                    />
                   </li>
                 ))}
               </ul>
@@ -247,6 +281,22 @@ export function OutputsView() {
           )
         })
       )}
+
+      <SelectionBar count={chosen.size} total={order.filter((o) => o.file).length} onSelectAll={() => setChosen(new Set(order.filter((o) => o.file).map(key)))} onClear={() => setChosen(new Set())}>
+        <Button size="sm" onClick={() => setNaming(true)} className="active:scale-[0.97]">
+          <PaletteIcon />
+          New style from {chosen.size}
+        </Button>
+      </SelectionBar>
+      <NewStyleDialog
+        open={naming}
+        onOpenChange={setNaming}
+        items={(outputs ?? []).filter((o) => chosen.has(key(o)) && o.file)}
+        onDone={() => {
+          setSelecting(false)
+          setChosen(new Set())
+        }}
+      />
 
       <Viewer
         item={opened}
@@ -300,7 +350,22 @@ function GroupChip({ on, onClick, children }: { on: boolean; onClick: () => void
   )
 }
 
-function OutputTile({ item, showPlace, onOpen, onReview }: { item: CityOutput; showPlace: boolean; onOpen: () => void; onReview: (review: CityOutput["review"]) => void }) {
+function OutputTile({
+  item,
+  showPlace,
+  selecting,
+  selected,
+  onOpen,
+  onReview,
+}: {
+  item: CityOutput
+  showPlace: boolean
+  /** Select mode: a click picks the poster instead of opening it. */
+  selecting?: boolean
+  selected?: boolean
+  onOpen: () => void
+  onReview: (review: CityOutput["review"]) => void
+}) {
   const painting = item.status === "pending" || item.status === "running"
   return (
     <div className="group/tile flex min-w-0 flex-col gap-1.5">
@@ -308,11 +373,13 @@ function OutputTile({ item, showPlace, onOpen, onReview }: { item: CityOutput; s
         <button
           type="button"
           onClick={onOpen}
-          disabled={painting}
+          disabled={painting || (selecting && !item.file)}
+          aria-pressed={selecting ? !!selected : undefined}
           className={cn(
             "relative block aspect-[3/4] w-full overflow-hidden rounded-lg bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
             item.review === "approved" && "ring-2 ring-emerald-500/70",
-            item.review === "rejected" && "opacity-50"
+            item.review === "rejected" && "opacity-50",
+            selected && "ring-3 ring-brand"
           )}
           aria-label={`${item.place} · ${item.groupLabel} · ${item.detail}`}
         >
@@ -333,7 +400,18 @@ function OutputTile({ item, showPlace, onOpen, onReview }: { item: CityOutput; s
             </span>
           )}
         </button>
-        {item.status === "done" && (
+        {selecting && item.file && (
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute top-2 left-2 grid size-5 place-items-center rounded-md border-2 transition-colors duration-150",
+              selected ? "border-brand bg-brand text-white" : "border-white/80 bg-black/20"
+            )}
+          >
+            {selected && <CheckIcon className="size-3.5" />}
+          </span>
+        )}
+        {item.status === "done" && !selecting && (
           <div className="absolute right-2 bottom-2 flex gap-1 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
             <ReviewButton label="Reject" on={item.review === "rejected"} onClick={() => onReview(item.review === "rejected" ? null : "rejected")} tone="reject" />
             <ReviewButton label="Approve" on={item.review === "approved"} onClick={() => onReview(item.review === "approved" ? null : "approved")} tone="approve" />
@@ -506,6 +584,64 @@ function Viewer({
             </div>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Starts a city style of its own from picked posters: they become its board, read a moment later. */
+function NewStyleDialog({ open, onOpenChange, items, onDone }: { open: boolean; onOpenChange: (open: boolean) => void; items: CityOutput[]; onDone: () => void }) {
+  const router = useRouter()
+  const [name, setName] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+
+  async function create() {
+    if (!name.trim() || !items.length) return
+    setBusy(true)
+    try {
+      const made = await fetch("/api/citys/styles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) })
+      const style = await made.json()
+      if (!made.ok) throw new Error(style.error ?? made.statusText)
+      const added = await fetch(`/api/styles/${style.id}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: items.slice(0, 20).map((o) => ({ generation: o.setId, file: o.file })) }),
+      })
+      if (!added.ok) throw new Error((await added.json().catch(() => ({}))).error ?? added.statusText)
+      toast.success(`“${name.trim()}” is a new style`, { description: "Its board is read a moment later; then the lab can paint." })
+      onOpenChange(false)
+      onDone()
+      router.push(`/citys/styles/${style.id}`)
+    } catch (error) {
+      toast.error(`Couldn't make the style: ${(error as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogTitle>New style from {items.length} {items.length === 1 ? "poster" : "posters"}</DialogTitle>
+        <DialogDescription>They become the style&apos;s board{items.length > 20 ? " (the first 20)" : ""}; it&apos;s read a moment later and opens in the lab.</DialogDescription>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void create()
+          }}
+        >
+          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Style name, e.g. Pastel sketch" />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? <LoaderCircleIcon className="animate-spin" /> : <PaletteIcon />}
+              Make the style
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

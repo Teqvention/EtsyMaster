@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { BadgeCheckIcon, ChevronRightIcon, FolderOpenIcon, LoaderCircleIcon, PaletteIcon, PlusIcon, SunIcon } from "lucide-react"
+import { BadgeCheckIcon, ChevronRightIcon, FolderOpenIcon, ImagePlusIcon, LoaderCircleIcon, PaletteIcon, PlusIcon, SparklesIcon, SunIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { StyleCover, Swatches } from "@/components/styles/style-cover"
@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { createCityStyle } from "@/hooks/use-city-style"
+import { createCustomSky, deleteCustomSky, skyFileUrl, useCustomSkies } from "@/hooks/use-custom-skies"
 import { POLL, refreshStyles, useStyles } from "@/hooks/use-styles"
 import { SKIES } from "@/lib/citys/skies"
 import type { StyleSummary } from "@/lib/styles/types"
@@ -265,14 +266,45 @@ function NewCityStyle({ open, onOpenChange }: { open: boolean; onOpenChange: (op
 
 // --- Skies ---
 
-/** The skies a city poster can be asked for: the shop's taste, the same list as in the settings. */
+/** The skies a city poster can be asked for: the built-in ones, and the shop's own made from photos. */
 function Skies() {
+  const own = useCustomSkies()
   return (
     <>
       <p className="max-w-2xl text-sm text-pretty text-muted-foreground">
         The skies real photos (and drawn ones) can be asked for, one per row of the creativity settings. Left open, we pick what makes each picture most beautiful, often the reference&apos;s own sky made prettier. Never dark or dramatic: no night, storms, heavy clouds or fiery sunsets.
       </p>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4">
+        <li>
+          <NewSky />
+        </li>
+        {(own ?? []).map((sky) => (
+          <li key={sky.id} className="group/sky relative overflow-hidden rounded-lg border">
+            <div aria-hidden className="relative h-28" style={{ background: `linear-gradient(to top, ${sky.swatch.join(", ")})` }}>
+              {sky.images[0] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={skyFileUrl(sky, sky.images[0])} alt="" className="absolute right-2 bottom-2 size-14 rounded-md object-cover shadow-sm ring-2 ring-white/70" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1 p-3">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                {sky.name}
+                <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-normal text-muted-foreground">yours</span>
+              </h3>
+              <p className="text-xs text-pretty text-muted-foreground">{sky.prompt.charAt(0).toUpperCase() + sky.prompt.slice(1)}.</p>
+              {sky.dark && <p className="text-[11px] text-amber-700 dark:text-amber-400">The photos were darker than the shop&apos;s taste: written as their brightest version.</p>}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Delete ${sky.name}`}
+              className="absolute top-2 right-2 bg-background/70 opacity-0 backdrop-blur-sm group-hover/sky:opacity-100 focus-visible:opacity-100"
+              onClick={() => deleteCustomSky(sky.key).catch((e: Error) => toast.error(e.message))}
+            >
+              <Trash2Icon />
+            </Button>
+          </li>
+        ))}
         {SKIES.map((sky) => (
           <li key={sky.id} className="overflow-hidden rounded-lg border">
             <div aria-hidden className="h-28" style={{ background: `linear-gradient(to top, ${sky.swatch.join(", ")})` }} />
@@ -284,5 +316,57 @@ function Skies() {
         ))}
       </ul>
     </>
+  )
+}
+
+/** A new sky from one or more photos: picked, named (optional), read by Gemini. */
+function NewSky() {
+  const input = React.useRef<HTMLInputElement>(null)
+  const [files, setFiles] = React.useState<File[]>([])
+  const [name, setName] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+
+  async function create() {
+    setBusy(true)
+    try {
+      const sky = await createCustomSky(files, name)
+      toast.success(`“${sky.name}” is one of your skies`, { description: "Pick it in the creativity settings, row by row." })
+      setFiles([])
+      setName("")
+    } catch (error) {
+      toast.error(`Couldn't make the sky: ${(error as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-2 rounded-lg border border-dashed p-3">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        <ImagePlusIcon className="size-4 text-muted-foreground" />
+        New sky from photos
+      </h3>
+      <p className="text-xs text-pretty text-muted-foreground">One to five photos with a sky you love; only the sky and its light are read, never the place.</p>
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        hidden
+        onChange={(e) => {
+          setFiles(Array.from(e.target.files ?? []).slice(0, 5))
+          e.target.value = ""
+        }}
+      />
+      <Button variant="outline" size="sm" onClick={() => input.current?.click()} className="justify-start">
+        <ImagePlusIcon />
+        {files.length ? `${files.length} ${files.length === 1 ? "photo" : "photos"} picked` : "Pick photos"}
+      </Button>
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className="h-8" />
+      <Button size="sm" disabled={busy || !files.length} onClick={create} className="mt-auto active:scale-[0.97]">
+        {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+        Make the sky
+      </Button>
+    </div>
   )
 }

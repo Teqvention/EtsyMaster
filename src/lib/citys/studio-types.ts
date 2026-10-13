@@ -36,6 +36,13 @@ export type CityGuide = {
   /** Where it sits between a beautiful poster and an exact record of the city. */
   balance: string
   avoid: string[]
+  /**
+   * The style's manner in a few plain, evocative sentences, as one would
+   * brief a gifted illustrator: its feel, medium, line, colour and paper
+   * ("playful, light and joyful; soft pinks and mints, wet paint, a quick
+   * clumsy black brush line, plenty of bare paper"). Leads every painting.
+   */
+  manner?: string
 }
 
 export type StyleStatus = "draft" | "confirmed"
@@ -54,17 +61,28 @@ export type StyleVersion = {
   at: string
 }
 
-/** A variant of the guide being tried next to the main one (1–5 at the top of the lab). */
+/** A variant of the guide being tried next to the main one (at the top of the lab). */
 export type StyleCandidate = {
   id: string
+  /** A direction's short name ("Wet pink washes"). */
+  name?: string
   /** The suggestion or answers it was made from, in a sentence. */
   label: string
+  /** A direction: what holds every poster of it together (line, palette, paper, how buildings and people are drawn). */
+  consistency?: string
+  /** The "new ideas" run it came from, with the other directions of that run. */
+  batch?: string
+  /** How this variant is painted, when it differs from the style's. */
+  paint?: PaintStrategy
   guide: StyleGuide
   city: CityGuide
   /** Its test round. */
   round?: string
   at: string
 }
+
+export const PAINT_STRATEGIES = ["redraw", "series"] as const
+export type PaintStrategy = (typeof PAINT_STRATEGIES)[number]
 
 /** How a style is asked to use the reference photo when posters are scaled. */
 export type RefMode = "photo" | "city" | "composition"
@@ -83,6 +101,15 @@ export type CityStyleData = {
    * photos whatever the reference is; an art style makes its art.
    */
   medium?: "photo" | "art"
+  /**
+   * How an art style is painted: "redraw" (the default) has the art director
+   * pick the board poster whose composition fits each new one, and Nano
+   * Banana redraws that poster as the new place, which keeps the hand far
+   * closer than painting from scratch (13 Oct); "series" paints the next
+   * poster of the series from a few board posters. Autonomous testing
+   * compares them and keeps the better.
+   */
+  paint?: PaintStrategy
   /** Groups the style is filed under ("cartoon", "funky", "drawn"). */
   tags: string[]
   guide: CityGuide | null
@@ -94,6 +121,10 @@ export type CityStyleData = {
   /** The latest interview and suggestions the lab made. */
   interview?: Interview
   suggestions?: Suggestion[]
+  /** An interview on its way: a fresh test round painted first, then the questions. */
+  interviewing?: { status: "testing" | "asking" | "error"; round?: string; error?: string; at: string }
+  /** The latest autonomous test. */
+  autotest?: AutoTest
   /** Lab rounds, newest first (citys/lab/<round>). */
   rounds: string[]
 }
@@ -137,6 +168,8 @@ export type LabImage = {
   error?: string
   /** Moodboard images it was shown (block references), or the city photo's listing (block photo). */
   refs?: string[]
+  /** One of a set of the city: its place in it. */
+  set?: { index: number; size: number }
   rating?: "up" | "down"
 }
 
@@ -149,6 +182,8 @@ export type LabRound = {
   /** The generation set painting it. */
   set: string
   images: LabImage[]
+  /** The "new ideas" run it belongs to (the main style's round of that run, or a direction's). */
+  batch?: string
   at: string
 }
 
@@ -158,6 +193,63 @@ export const LAB_CITIES = {
   photo: ["Paris", "Amalfi Coast", "Chicago", "Tokyo", "Santorini"],
   references: ["Rome", "Barcelona", "San Francisco", "Kyoto", "Cape Town"],
 } as const
+
+/**
+ * Quick tests: a few places from words, two (small) or three (middle) per
+ * variant, a city, a coast and a canal town the boards rarely show, so a
+ * style is judged on places it has to compose itself.
+ */
+export const TEST_SIZES = { small: 2, middle: 3 } as const
+export type TestSize = keyof typeof TEST_SIZES
+export const TEST_CITIES = ["Rome", "Amalfi Coast", "Amsterdam", "Sydney", "Kyoto"] as const
+
+/** What the lab's judge says about one round against the board. */
+export type RoundVerdict = {
+  /** 0–10: how exactly the posters hit the board's style (10: nobody could tell which is new). */
+  style: number
+  /** 0–10: how good the compositions are as posters. */
+  composition: number
+  /** 0–10: how recognisable the places are. */
+  place: number
+  /** Style counts double. */
+  overall: number
+  /** Where the posters miss the board, most important first. */
+  misses: string[]
+  /** What to change in the guide to close the gap. */
+  fixes: string[]
+}
+
+/** One step of an autonomous test: the guide it tried, its round and the judge's verdict. */
+export type AutoRun = {
+  id: string
+  /** "Main", "Pass 1 · A"… */
+  label: string
+  pass: number
+  candidate?: string
+  paint?: PaintStrategy
+  round?: string
+  verdict?: RoundVerdict
+}
+
+/** The lab painting, judging and rewriting the guide by itself until the posters hit the board. */
+export type AutoTest = {
+  id: string
+  status: "running" | "done" | "error" | "stopped"
+  size: TestSize
+  passes: number
+  /** What it's doing, in words. */
+  step: string
+  runs: AutoRun[]
+  /** The run with the best verdict so far. */
+  best?: string
+  /** The server running it, so a stopped server reads as stopped. */
+  runner?: string
+  /** What came of it, in words ("Style 5.8 → 8.1, adopted as version 4"). */
+  outcome?: string
+  error?: string
+  at: string
+  finishedAt?: string
+}
 
 // --- Inspirations ---
 
@@ -333,7 +425,11 @@ export type PlaceBrief = {
   geography: string
   /** Real viewpoints photographers shoot it from. */
   viewpoints: string[]
+  /** The compositions its best-selling posters use: subject, vantage point, framing, foreground, light. */
+  compositions?: string[]
   avoid: string[]
+  /** 2: written from its best sellers' pictures as well. */
+  version?: number
 }
 
 /** What a city output is, kept on it (generation Output.city). */
@@ -351,6 +447,10 @@ export type CityOutputInfo = {
   realPhoto?: boolean
   /** One of a set: its place in the set and its motif once planned. */
   set?: { index: number; size: number; motif?: string }
+  /** A real photo of the place showing its motif, given to the painter for the true geography only. */
+  geo?: { listingId: number; file: string }
+  /** Art styles painted by redrawing: the board poster (style file) the art director picked to redraw. */
+  board?: string
   /** Old outputs: the inspirations it took on. */
   look?: string[]
   styleId?: string

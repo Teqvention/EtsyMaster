@@ -5,11 +5,12 @@ import type { Batch, Creativity, ExtractedPoster, GenerateOptions, GenerationSet
 import { extractPosters } from "@/lib/generation/poster"
 import { fetchReference } from "@/lib/mockups/reference"
 import { NotFoundError } from "@/lib/mockups/storage"
-import { fileKey as styleFileKey, getStyle, styleImages } from "@/lib/styles/storage"
+import { fileKey as styleFileKey, getStyle, pick } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 import { getFile } from "@/lib/storage/files"
 
-import { placeBrief, placeLine } from "./briefs"
+import { placeBrief, placeByName, placeLine, placePictures } from "./briefs"
+import { listCustomSkies, skyPhoto } from "./sky-store"
 import { photoUrl } from "./photos"
 import { paintCityPrompt, planCityBriefs, readReference, type BriefGroup } from "./prompts"
 import { ranking } from "./ranking"
@@ -23,6 +24,7 @@ import {
   type CityRequest,
   type CitySetInfo,
   type Level,
+  type PaintStrategy,
   type ReferenceRead,
   type RefMode,
 } from "./studio-types"
@@ -278,23 +280,35 @@ function expand(set: GenerationSet, batch: Batch, read: ReferenceRead | null): O
 
 // --- Briefs ---
 
-type StyleRef = { name: string; medium: "photo" | "art"; guide: StyleGuide | null; city: CityGuide | null; images: Buffer[] }
+type StyleRef = {
+  name: string
+  medium: "photo" | "art"
+  paint: PaintStrategy
+  guide: StyleGuide | null
+  city: CityGuide | null
+  images: Buffer[]
+  /** Up to eight board posters by file name: what a redraw picks from. */
+  board: { file: string; image: Buffer }[]
+}
 
 const styleCache = new Map<string, { at: number; ref: Promise<StyleRef | null> }>()
 
-/** A style's guide and six of its images, held a minute so a batch reads them once. */
+/** A style's guide and up to eight of its images, held a minute so a batch reads them once. */
 export function loadCityStyle(styleId: string): Promise<StyleRef | null> {
   const held = styleCache.get(styleId)
   if (held && Date.now() - held.at < 60_000) return held.ref
   const ref = (async () => {
     try {
       const style = await getStyle(styleId)
+      const board = await Promise.all(pick(style.images, 8).map(async (i) => ({ file: i.file, image: await getFile(styleFileKey(styleId, i.file)).then(small) })))
       return {
         name: style.name,
         medium: style.city?.medium ?? "art",
+        paint: style.city?.paint ?? "redraw",
         guide: style.guide,
         city: style.city?.guide ?? null,
-        images: await styleImages(styleId, 6),
+        images: pick(board, 6).map((b) => b.image),
+        board,
       }
     } catch (error) {
       console.error(`City style ${styleId}:`, error)
@@ -334,13 +348,17 @@ async function plan(id: string) {
   for (const o of todo) {
     const c = o.city!
     // A lab photo is planned on its own photo; the rest by what they share.
-    const key = [briefKind(c), c.medium ?? "", c.block ?? "", c.block === "photo" ? o.poster : "", c.candidate ?? "", c.styleId ?? "", c.refMode ?? "", c.set ? "set" : "", c.follow ?? "", c.production ?? "", o.feedback ?? ""].join("|")
+    // Lab cities from words are planned one city at a time, each with its own place knowledge.
+    const city = c.kind === "lab" && c.block === "prompt" ? (c.target ?? "") : ""
+    const key = [briefKind(c), c.medium ?? "", c.block ?? "", c.block === "photo" ? o.poster : "", city, c.candidate ?? "", c.styleId ?? "", c.refMode ?? "", c.set ? "set" : "", c.follow ?? "", c.production ?? "", o.feedback ?? ""].join("|")
     groups.set(key, [...(groups.get(key) ?? []), o])
   }
   if (!groups.size) return
+  // The shop's own skies, so the briefs know them by name.
+  await listCustomSkies().catch(() => [])
   const place = set.city?.place ?? set.source.title
   const read = set.city?.read ?? null
-  const brief = set.city ? await placeBrief(set.city.placeId, set.city.place, set.city.country) : null
+  const brief = set.city && !set.city.lab ? await placeBrief(set.city.placeId, set.city.place, set.city.country) : null
 
   // New ideas, sets and styled posters are planned one group after another, each told what the
   // others chose, so no motif comes twice; variants (one per reference view) all at once.
@@ -355,11 +373,21 @@ async function plan(id: string) {
     const styleId = c.styleId ?? set.city?.lab?.styleId
     const style = styleId ? await loadCityStyle(styleId) : null
     const candidate = lab && c.candidate && styleId ? await candidateGuide(styleId, c.candidate) : null
-    const moodboard = style?.images.slice(0, 3) ?? []
+    // A redrawn art style shows the planner its board, numbered, to pick the poster each new one is redrawn from.
+    const redraws = !!style && style.medium === "art" && (candidate?.paint ?? style.paint) === "redraw" && !reference
+    const moodboard = redraws ? style.board.slice(0, 6).map((b) => b.image) : (style?.images.slice(0, 3) ?? [])
     const sellers = c.follow && c.follow !== "free" && set.city ? await bestSellers(set.city.placeId, 3) : []
+    // A lab city from words is a place of the ranking too: its brief and photos come with it.
+    const target = lab && c.block === "prompt" && c.target ? await placeByName(c.target).catch(() => null) : null
+    const placeOf = lab ? target : set.city ? { id: set.city.placeId, name: set.city.place, country: set.city.country, kind: "" } : null
+    const known = lab ? (target ? await placeBrief(target.id, target.name, target.country, target.kind) : null) : brief
+    // New compositions see real photos of the place, to pick the one showing each motif for the painter.
+    const fresh = newComposition(kind) && (!lab || c.block === "prompt") && !(c.kind === "style" && c.refMode === "photo")
+    // Never the reference itself: its view is made already, a set or new idea shows something else.
+    const geo = fresh && placeOf ? (await placePictures(placeOf.id, { count: 6, photosOnly: true }).catch(() => [])).filter((g) => g.listingId !== set.source.listingId).slice(0, 5) : []
     const group: BriefGroup = {
       kind,
-      place: lab ? (outputs.length > 1 ? "each place named below" : (c.target ?? place)) : place,
+      place: lab ? (new Set(outputs.map((o) => o.city?.target)).size > 1 ? "each place named below" : (c.target ?? place)) : place,
       medium: style ? style.medium : (c.medium ?? "photo"),
       fromArt: c.realPhoto && read?.medium === "art",
       items: outputs.map((o) => ({
@@ -373,15 +401,25 @@ async function plan(id: string) {
       hasReference: !!reference,
       ...(read && reference && !lab && { read }),
       // The place's landmarks are for new compositions; a variant stays on what the reference shows.
-      ...(brief && !lab && newComposition(kind) && { brief }),
+      ...(known && newComposition(kind) && { brief: known }),
       style: style ? { name: style.name, medium: style.medium, guide: candidate?.guide ?? style.guide, city: candidate?.city ?? style.city } : undefined,
       moodboard: moodboard.length,
+      ...(redraws && { boards: moodboard.length }),
       sellers: sellers.length,
+      geo: geo.length,
       ...(c.follow && { follow: c.follow }),
       notes: outputs[0].feedback,
-      avoid: lab ? [] : [...set.outputs.filter((o) => o.brief && !todo.includes(o) && o.city && sameFamily(briefKind(o.city), kind)).map((o) => `${o.title ?? ""}: ${o.brief}`), ...(newComposition(kind) ? planned : [])],
+      // Only what was made before in the same look: another style's posters of the place must not keep this one from its icon.
+      avoid: lab
+        ? []
+        : [
+            ...set.outputs
+              .filter((o) => o.brief && !todo.includes(o) && o.city && sameFamily(briefKind(o.city), kind) && o.city.styleId === c.styleId && (o.city.medium ?? "") === (c.medium ?? ""))
+              .map((o) => `${o.title ?? ""}: ${o.brief}`),
+            ...(newComposition(kind) ? planned : []),
+          ],
     }
-    const images = [...(reference ? [reference] : []), ...moodboard, ...sellers]
+    const images = [...(reference ? [reference] : []), ...moodboard, ...sellers, ...geo.map((g) => g.image)]
     try {
       const briefs = await planCityBriefs(group, images)
       if (newComposition(kind)) planned.push(...briefs.map((b) => `${b.title}: ${b.brief}`))
@@ -391,11 +429,14 @@ async function plan(id: string) {
           const i = outputs.findIndex((q) => q.id === o.id)
           if (i < 0 || !o.city) return o
           const b = briefs[i]
+          const shows = b.photo ? geo[b.photo - 1] : undefined
           const city: CityOutputInfo = {
             ...o.city,
             ...(b.level && { level: b.level }),
             ...(b.sky && { sky: b.sky }),
             ...(o.city.set && b.motif && { set: { ...o.city.set, motif: b.motif } }),
+            ...(shows && { geo: { listingId: shows.listingId, file: shows.file } }),
+            ...(redraws && style && { board: style.board[(b.board ?? (i % Math.min(style.board.length, 6)) + 1) - 1]?.file }),
           }
           return { ...o, title: b.title, brief: b.brief, city, ...(b.level && { creativity: LEVEL_CREATIVITY[b.level] }) }
         }),
@@ -421,8 +462,8 @@ const sameFamily = (a: BriefGroup["kind"], b: BriefGroup["kind"]) => a === b || 
 
 // --- What Nano Banana is told (from run.ts's request) ---
 
-/** The prompt, images and shape for one city output. */
-export async function cityRequest(set: GenerationSet, output: Output) {
+/** The prompt, images and shape for one city output; `mode` and `geo` override how an art style is asked (for tests). */
+export async function cityRequest(set: GenerationSet, output: Output, test: { mode?: "lean" | "full"; geo?: boolean } = {}) {
   const c = output.city ?? { kind: "real" as const }
   const { ratio } = await citySettings()
   const place = c.target ?? set.city?.place ?? set.source.title
@@ -435,18 +476,38 @@ export async function cityRequest(set: GenerationSet, output: Output) {
   const styleId = c.styleId ?? set.city?.lab?.styleId
   const style = styleId ? await loadCityStyle(styleId) : null
   const candidate = c.candidate && styleId ? await candidateGuide(styleId, c.candidate) : null
+  // Redrawing: the board poster the art director picked first, two more of the series after it.
+  const redraw = !!style && style.medium === "art" && (candidate?.paint ?? style.paint) === "redraw" && !!c.board && !reference
+  const picked = redraw ? style.board.find((b) => b.file === c.board) : undefined
   // Lab block "references": the moodboard images it was given; else the board's own.
-  const moodboard =
-    c.kind === "lab" && c.block === "references" && styleId && c.refs?.length
+  const moodboard = picked
+    ? [picked.image, ...style!.board.filter((b) => b.file !== c.board).slice(0, 2).map((b) => b.image)]
+    : c.kind === "lab" && c.block === "references" && styleId && c.refs?.length
       ? await Promise.all(c.refs.map((file) => getFile(styleFileKey(styleId, file)).then(small)))
       : c.kind === "style" || c.kind === "lab"
         ? (style?.images ?? [])
         : []
   const read = set.city?.read
   // The place's landmarks keep new compositions true; variants have the reference for that.
-  const newView = c.kind === "idea" || c.kind === "set" || (c.kind === "style" && c.refMode !== "photo")
-  const brief = newView && set.city ? await placeBrief(set.city.placeId, set.city.place, set.city.country) : null
+  const newView = c.kind === "idea" || c.kind === "set" || (c.kind === "style" && c.refMode !== "photo") || (c.kind === "lab" && c.block === "prompt")
+  const target = c.kind === "lab" && c.target ? await placeByName(c.target).catch(() => null) : null
+  const brief = !newView
+    ? null
+    : target
+      ? await placeBrief(target.id, target.name, target.country, target.kind)
+      : set.city && !set.city.lab
+        ? await placeBrief(set.city.placeId, set.city.place, set.city.country)
+        : null
+  // The real photo the art director picked for this motif, for its geography only: real photos
+  // only, a drawing takes detail from a photo (13 Oct), unless a test asks for it.
+  const artStyle = !!style && style.medium === "art"
+  const wantsGeo = test.geo ?? !artStyle
+  const geo = c.geo && wantsGeo ? await readRefFile(c.geo.listingId, c.geo.file).then(small).catch(() => null) : null
+  // A sky of the shop's own comes with its photo to look at.
+  await listCustomSkies().catch(() => [])
+  const skyImage = await skyPhoto(c.sky)
 
+  const lookOnly = (c.kind === "idea" || c.kind === "set") && (c.medium ?? "photo") === "photo" && !style
   const prompt = paintCityPrompt({
     kind: c.kind,
     place,
@@ -460,11 +521,21 @@ export async function cityRequest(set: GenerationSet, output: Output) {
     moodboard: moodboard.length,
     style: style ? { guide: candidate?.guide ?? style.guide, city: candidate?.city ?? style.city, medium: style.medium } : undefined,
     ...(read && ownLook && { read }),
-    placeLine: placeLine(brief),
+    // The place's landmarks spelled out pull a drawing toward detail: only for photos and the full prompt.
+    placeLine: artStyle && (test.mode ?? "lean") === "lean" ? undefined : placeLine(brief),
+    geo: !!geo,
+    mode: test.mode,
+    redraw: !!picked,
+    lookOnly,
+    skyImage: !!skyImage,
     notes: output.feedback,
     series: c.kind === "lab" && c.block === "references",
   })
-  return { prompt, images: [...(reference ? [reference] : []), ...moodboard], aspect: ratio }
+  // A new real photo puts the motif's photo first and the reference after it, for its look only.
+  const images = lookOnly
+    ? [...(geo ? [geo] : []), ...(reference ? [reference] : []), ...(skyImage ? [skyImage] : [])]
+    : [...(reference ? [reference] : []), ...moodboard, ...(geo ? [geo] : []), ...(skyImage ? [skyImage] : [])]
+  return { prompt, images, aspect: ratio }
 }
 
 function fallback(c: CityOutputInfo, place: string) {
@@ -477,7 +548,7 @@ function fallback(c: CityOutputInfo, place: string) {
 async function candidateGuide(styleId: string, candidateId: string) {
   const style = await getStyle(styleId).catch(() => null)
   const found = style?.city?.candidates.find((k) => k.id === candidateId)
-  return found ? { guide: found.guide, city: found.city } : null
+  return found ? { guide: found.guide, city: found.city, paint: found.paint } : null
 }
 
 const small = (data: Buffer) => sharp(data).resize(1280, 1280, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer()

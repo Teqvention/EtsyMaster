@@ -12,6 +12,7 @@ import {
   HistoryIcon,
   ImagePlusIcon,
   ImagesIcon,
+  LightbulbIcon,
   LoaderCircleIcon,
   MoreHorizontalIcon,
   PlusIcon,
@@ -26,6 +27,8 @@ import { toast } from "sonner"
 
 import { Chip } from "@/components/citys/request-editor"
 import { CityGuideView } from "@/components/citys/styles/city-guide"
+import { AutoTestPanel } from "@/components/citys/styles/autotest"
+import { DirectionsDialog, DirectionsView } from "@/components/citys/styles/directions"
 import { ProduceSheet } from "@/components/citys/styles/produce-sheet"
 import { InterviewPanel, SuggestionsPanel } from "@/components/citys/styles/lab-interview"
 import { CompareView, LabImageDialog, OlderRounds, rateError, RoundRunner, RoundView } from "@/components/citys/styles/lab-rounds"
@@ -66,6 +69,7 @@ export function StyleLab({ id }: { id: Promise<string> }) {
   const [confirmDelete, setConfirmDelete] = React.useState(false)
   const [owning, setOwning] = React.useState<string | null>(null)
   const [producing, setProducing] = React.useState(false)
+  const [directing, setDirecting] = React.useState(false)
   const fileInput = React.useRef<HTMLInputElement>(null)
 
   if (!data) {
@@ -87,7 +91,8 @@ export function StyleLab({ id }: { id: Promise<string> }) {
 
   const { style, rounds } = data
   const city = style.city
-  const candidates = city?.candidates ?? []
+  // An autonomous test's own variants stay inside its panel.
+  const candidates = (city?.candidates ?? []).filter((c) => !c.batch?.startsWith("auto-"))
   const candidate = candidates.find((c) => c.id === selected) ?? null
   const mainRounds = rounds.filter((r) => !r.candidate)
   const shownRound = candidate ? rounds.find((r) => r.id === candidate.round) : mainRounds[0]
@@ -151,6 +156,10 @@ export function StyleLab({ id }: { id: Promise<string> }) {
           <Button size="sm" variant="ghost" nativeButton={false} render={<Link href={`/citys/outputs?style=${style.id}`} />} title="Every poster made in this style, its productions included">
             <ImagesIcon />
             Outputs
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setDirecting(true)} disabled={!style.guide} className="active:scale-[0.97]" title="Nearby but different styles, painted on the same cities">
+            <LightbulbIcon />
+            New ideas
           </Button>
           <Button size="sm" variant="outline" onClick={() => setProducing(true)} disabled={!style.guide} className="active:scale-[0.97]" title="Paint this style over a list of places: sets and single posters">
             <FactoryIcon />
@@ -267,6 +276,20 @@ export function StyleLab({ id }: { id: Promise<string> }) {
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{candidate ? `Variant ${candidates.indexOf(candidate) + 1}` : `Version ${city?.version ?? 0}`}</h3>
             <CityGuideView guide={candidate?.guide ?? style.guide} city={candidate?.city ?? city?.guide ?? null} />
           </section>
+          {city?.medium !== "photo" && (
+            <section className="flex flex-col gap-1.5 rounded-lg border p-3" aria-label="Painting">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">How it&apos;s painted</h3>
+              <div className="flex flex-wrap gap-1">
+                <Chip on={(city?.paint ?? "redraw") === "redraw"} title="Each new poster redraws the board poster whose composition fits it: the hand stays closest" onClick={() => void run(() => patch({ paint: "redraw" }))}>
+                  Redraw a board poster
+                </Chip>
+                <Chip on={city?.paint === "series"} title="Paints the next poster of the series from a few board posters: freer compositions" onClick={() => void run(() => patch({ paint: "series" }))}>
+                  Next in the series
+                </Chip>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Autonomous testing compares both and keeps the better.</p>
+            </section>
+          )}
           <section className="flex flex-col gap-1.5 rounded-lg border p-3" aria-label="Scaling">
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">When scaling</h3>
             <p className="text-[11px] text-muted-foreground">How it uses a reference photo by default.</p>
@@ -296,15 +319,42 @@ export function StyleLab({ id }: { id: Promise<string> }) {
           <RoundRunner
             disabled={!style.guide || !style.images.length}
             running={anyPainting}
-            onRun={(blocks, delivery) => run(() => act({ action: "round", blocks, delivery, ...(candidate && { candidate: candidate.id }) }), "Round started")}
+            onRun={(blocks, delivery, size) => run(() => act({ action: "round", blocks, delivery, ...(size && { size }), ...(candidate && { candidate: candidate.id }) }), "Round started")}
           />
-          {candidates.length > 0 && !candidate && (
+          {!candidate && (
+            <AutoTestPanel
+              test={city?.autotest}
+              rounds={rounds}
+              disabled={!style.guide || !style.images.length}
+              onStart={(size, passes) => run(() => act({ action: "autotest", size, passes, delivery: "now" }), "Autonomous testing started")}
+              onStop={() => run(() => act({ action: "autotest-stop" }), "Stops after what's being painted")}
+              onOpen={(set, image) => setViewing({ set, image })}
+            />
+          )}
+          {candidates.some((c) => c.batch && !c.batch.startsWith("auto-")) && !candidate && (
+            <section className="flex flex-col gap-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                <LightbulbIcon className="size-4 text-muted-foreground" />
+                New ideas
+              </h3>
+              <DirectionsView
+                candidates={candidates}
+                rounds={rounds}
+                onOpen={(set, image) => setViewing({ set, image })}
+                onRate={(round, image, rating) => act({ action: "rate", round: round.id, image: image.id, rating }).catch(rateError)}
+                onAdopt={(id) => run(() => act({ action: "adopt", candidate: id }), "Direction adopted as the main guide")}
+                onOwn={(id) => setOwning(id)}
+                onDrop={(id) => run(() => act({ action: "drop", candidate: id }))}
+              />
+            </section>
+          )}
+          {candidates.some((c) => !c.batch) && !candidate && (
             <section className="flex flex-col gap-2">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold">
                 <SplitIcon className="size-4 text-muted-foreground" />
                 Main against the variants
               </h3>
-              <CompareView main={mainRounds[0]} candidates={candidates} rounds={rounds} onOpen={(set, image) => setViewing({ set, image })} />
+              <CompareView main={mainRounds[0]} candidates={candidates.filter((c) => !c.batch)} rounds={rounds} onOpen={(set, image) => setViewing({ set, image })} />
             </section>
           )}
           {shownRound ? (
@@ -337,6 +387,7 @@ export function StyleLab({ id }: { id: Promise<string> }) {
         <aside className="flex min-w-0 flex-col gap-5 rounded-lg border p-3 xl:sticky xl:top-0 xl:max-h-[calc(100svh-var(--header-height)-3rem)] xl:overflow-y-auto">
           <InterviewPanel
             interview={city?.interview}
+            interviewing={city?.interviewing}
             canAsk={!!style.guide}
             onAsk={() => act({ action: "interview" }).then(() => {})}
             onApply={(answers, notes) => act({ action: "answers", answers, notes }).then(() => void toast.success("New version: paint a round to see it"))}
@@ -344,8 +395,8 @@ export function StyleLab({ id }: { id: Promise<string> }) {
           <div className="h-px bg-border" />
           <SuggestionsPanel
             suggestions={city?.suggestions}
-            room={5 - candidates.length}
-            onTry={(ids, free) => act({ action: "candidates", suggestions: ids, free }).then(() => void toast.success("Variants on their way: they show as 1–5 at the top"))}
+            room={8 - candidates.length}
+            onTry={(groups) => act({ action: "candidates", groups, size: "middle" }).then(() => void toast.success("Versions on their way: they show as numbers at the top"))}
           />
         </aside>
       </div>
@@ -353,6 +404,11 @@ export function StyleLab({ id }: { id: Promise<string> }) {
       <SourcePicker open={picking} onOpenChange={setPicking} style={style} onAdded={(next) => apply(next, { expectRead: true })} />
       <StyleFromSavedDialog open={fromSaved} onOpenChange={setFromSaved} style={style} onDone={(next) => apply(next)} />
       <ProduceSheet open={producing} onOpenChange={setProducing} styleId={style.id} styleName={style.name} medium={city?.medium ?? "art"} />
+      <DirectionsDialog
+        open={directing}
+        onOpenChange={setDirecting}
+        onStart={(ask) => run(() => act({ action: "directions", ...ask }), "Finding new directions: they appear here as they're painted")}
+      />
       <LabImageDialog image={viewing?.image ?? null} set={viewing?.set ?? null} onClose={() => setViewing(null)} />
       <OwnStyleDialog
         open={!!owning}

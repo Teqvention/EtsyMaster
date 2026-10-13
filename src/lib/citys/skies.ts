@@ -6,10 +6,11 @@
 
 export const SKY_IDS = ["blush", "golden", "turquoise", "sunshine", "peach", "cotton", "lilac", "morning"] as const
 export type SkyName = (typeof SKY_IDS)[number]
-export type SkyId = "auto" | SkyName
+/** A built-in sky, a custom one made from photos ("c-…", sky-store.ts), or "auto". */
+export type SkyId = "auto" | SkyName | `c-${string}`
 
 export type Sky = {
-  id: SkyName
+  id: SkyName | `c-${string}`
   name: string
   /** A few words for the picker. */
   hint: string
@@ -86,9 +87,16 @@ export const SKIES: Sky[] = [
   },
 ]
 
-export const skyById = (id: string | undefined) => SKIES.find((s) => s.id === id)
+// The custom skies the server knows (sky-store.ts keeps this current), so prompts can name them.
+const custom: { list: Sky[] } = ((globalThis as typeof globalThis & { __customSkies?: { list: Sky[] } }).__customSkies ??= { list: [] })
 
-export const isSkyId = (v: unknown): v is SkyId => v === "auto" || SKY_IDS.includes(v as SkyName)
+export function setCustomSkies(list: Sky[]) {
+  custom.list = list
+}
+
+export const skyById = (id: string | undefined, extra: Sky[] = []): Sky | undefined => SKIES.find((s) => s.id === id) ?? [...extra, ...custom.list].find((s) => s.id === id)
+
+export const isSkyId = (v: unknown): v is SkyId => v === "auto" || SKY_IDS.includes(v as SkyName) || (typeof v === "string" && /^c-[a-z0-9]{4,40}$/.test(v))
 
 /** Old looks (inspirations) a request may still name, as the sky nearest them. */
 export const LOOK_SKY: Record<string, SkyId> = {

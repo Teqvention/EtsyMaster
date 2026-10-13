@@ -4,6 +4,7 @@ import { readDoc, readDocs, writeDoc } from "@/lib/db/documents"
 import { enqueue, retry } from "@/lib/generation/run"
 import { createSet, getSet, newId, saveFile, updateSet } from "@/lib/generation/storage"
 import type { Creativity, ExtractedPoster, Output } from "@/lib/generation/types"
+import { instanceId, isLive } from "@/lib/db/workers"
 import { askJson } from "@/lib/mockups/gemini"
 import { NotFoundError } from "@/lib/mockups/storage"
 import { addImages, createStyle, fileKey, getStyle, pick, toGuide, updateStyle } from "@/lib/styles/storage"
@@ -17,6 +18,13 @@ import { cropRefs, refCrop, readRefFile } from "./refs"
 import {
   EMPTY_REQUEST,
   LAB_CITIES,
+  TEST_CITIES,
+  TEST_SIZES,
+  type AutoRun,
+  type AutoTest,
+  type PaintStrategy,
+  type RoundVerdict,
+  type TestSize,
   type CityGuide,
   type CityStyleData,
   type Interview,
@@ -59,11 +67,12 @@ export async function setStyleKind(id: string, kind: "city" | "normal") {
 
 const cleanTags = (tags: string[]) => [...new Set(tags.map((t) => t.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 24)).filter(Boolean))].slice(0, 8)
 
-export async function patchCityStyle(id: string, change: { tags?: string[]; modes?: RefMode[]; status?: CityStyleData["status"] }) {
+export async function patchCityStyle(id: string, change: { tags?: string[]; modes?: RefMode[]; status?: CityStyleData["status"]; paint?: PaintStrategy }) {
   return updateStyle(id, (s) => ({
     ...s,
     city: {
       ...cityData(s),
+      ...(change.paint && { paint: change.paint }),
       ...(change.tags && { tags: cleanTags(change.tags) }),
       ...(change.modes && { modes: change.modes.filter((m) => m === "photo" || m === "city" || m === "composition") }),
       ...(change.status && { status: change.status }),
@@ -75,7 +84,7 @@ export async function patchCityStyle(id: string, change: { tags?: string[]; mode
 
 const STRING = { type: "STRING" }
 const STRINGS = { type: "ARRAY", items: STRING }
-const CITY_FIELDS = ["depiction", "landmarks", "cityComposition", "architecture", "sky", "surroundings", "people", "lettering", "balance", "avoid"] as const
+const CITY_FIELDS = ["depiction", "landmarks", "cityComposition", "architecture", "sky", "surroundings", "people", "lettering", "balance", "avoid", "manner"] as const
 const ART_FIELDS = ["medium", "technique", "palette", "lighting", "composition", "detail", "typography", "mood", "motifs", "do", "dont", "summary", "prompt"] as const
 
 const GUIDE_SCHEMA = {
@@ -106,6 +115,7 @@ const GUIDE_SCHEMA = {
     lettering: STRING,
     balance: STRING,
     avoid: STRINGS,
+    manner: STRING,
     summary: STRING,
     prompt: STRING,
   },
@@ -133,7 +143,9 @@ Part B, how this style shows a place (1–3 concrete sentences each):
 - people: whether there are people, cars or boats, how many, how big, how drawn.
 - lettering: whether the place's name is on the poster, in what lettering and where; or that there is none.
 - balance: where it sits between a beautiful decorative poster and an exact record of the place.
-- avoid: 3–6 things that would make a city poster in this style fail (generic skylines, wrong landmarks, photo realism, clutter…).`
+- avoid: 3–6 things that would make a city poster in this style fail (generic skylines, wrong landmarks, photo realism, clutter…).
+Part C, the manner:
+- manner: 40–80 words in plain, evocative language, the way you would brief a gifted illustrator or photographer in one breath: the feel (e.g. playful, girlish, light, warm, joyful), the medium and how wet or dry it is, the line (e.g. "a quick clumsy black brush line"), the colours in words, how much paper or sky is left bare. No hex codes, no lists, no subjects. Describe this style in its own words; for a pink watercolour sketch style it might read: "A playful, girlish, hand-painted poster: light, warm and joyful. Soft pinks and mints, wet paint bleeding past a quick, clumsy black brush line, and plenty of bare cream paper."`
 
 function readPrompt(name: string, count: number) {
   return `You are the art director of an Etsy shop selling city and travel posters. ${count === 1 ? "This image is" : `These ${count} images are`} the moodboard of a style called "${name}": posters whose look we want for a whole collection of places, from New York to a small town, a beach or a national park. Study ${count === 1 ? "it" : "them together"} and write the guide our illustrators and an image model follow so every new poster hangs seamlessly next to these.
@@ -162,6 +174,7 @@ function toCity(a: Answer): CityGuide {
     lettering: text(a.lettering),
     balance: text(a.balance),
     avoid: list(a.avoid, 8),
+    ...(text(a.manner) && { manner: text(a.manner, 700) }),
   }
 }
 
@@ -182,7 +195,16 @@ export function withVersion(style: Style, guide: StyleGuide, city: CityGuide, no
 
 // --- Lab rounds ---
 
-export type RoundRequest = { blocks: LabBlock[]; candidate?: string; delivery: "now" | "batch"; cities?: Partial<Record<LabBlock, string[]>> }
+export type RoundRequest = {
+  blocks: LabBlock[]
+  candidate?: string
+  delivery: "now" | "batch"
+  cities?: Partial<Record<LabBlock, string[]>>
+  /** Cities from words that get a set (city → how many pictures, 3 or more) instead of one poster. */
+  sets?: Record<string, number>
+  /** The "new ideas" run the round belongs to. */
+  batch?: string
+}
 
 /** The real photos the photo block repaints: the best photo reference of each of its cities, taken out of its poster. */
 async function labPhotos(cities: readonly string[]) {
@@ -219,6 +241,8 @@ export async function labRounds(styleId: string): Promise<(LabRound & { status: 
       .map(async (round) => {
         if (!round.set) return { ...round, status: "preparing" as const }
         const set = await getSet(round.set).catch(() => null)
+        // Its set was deleted (stopped by hand, or every image of it reset): nothing left to show.
+        if (!set) return null
         const images = round.images.flatMap((img) => {
           const o = set?.outputs.find((x) => x.id === img.output)
           // Its output is gone (Reset fails cleared it): so is the image.
@@ -247,6 +271,7 @@ export async function startRound(styleId: string, request: RoundRequest): Promis
     ...(candidate && { candidate: candidate.id }),
     set: "",
     images: [],
+    ...(request.batch && { batch: request.batch }),
     at: new Date().toISOString(),
   }
   await writeDoc(ROUND(round.id), round)
@@ -285,7 +310,7 @@ async function prepare(style: Style, round: LabRound, request: RoundRequest) {
   const now = new Date().toISOString()
   const outputs: Output[] = []
   const images: LabRound["images"] = []
-  const add = (block: LabBlock, city: string, poster: number, refs?: string[]) => {
+  const add = (block: LabBlock, city: string, poster: number, refs?: string[], inSet?: { index: number; size: number }) => {
     const id = newId()
     const creativity: Creativity = block === "photo" ? "low" : "medium"
     outputs.push({
@@ -299,11 +324,17 @@ async function prepare(style: Style, round: LabRound, request: RoundRequest) {
       styleId: style.id,
       review: null,
       createdAt: now,
-      city: { kind: "lab", block, target: city, styleId: style.id, ...(refs && { refs }), ...(round.candidate && { candidate: round.candidate }) },
+      city: { kind: "lab", block, target: city, styleId: style.id, ...(refs && { refs }), ...(round.candidate && { candidate: round.candidate }), ...(inSet && { set: inSet }) },
     })
-    images.push({ id: newId(), block, city, output: id, status: "pending", ...(refs && { refs }) })
+    images.push({ id: newId(), block, city, output: id, status: "pending", ...(refs && { refs }), ...(inSet && { set: inSet }) })
   }
-  if (blocks.has("prompt")) for (const city of cities.prompt ?? []) add("prompt", city, -1)
+  if (blocks.has("prompt")) {
+    for (const city of cities.prompt ?? []) {
+      const size = request.sets?.[city] ?? 0
+      if (size >= 3) for (let index = 0; index < size; index++) add("prompt", city, -1, undefined, { index, size })
+      else add("prompt", city, -1)
+    }
+  }
   if (blocks.has("photo")) photos.forEach((p, i) => add("photo", p.city, i))
   if (blocks.has("references")) {
     // Three after one board image, two after two, each a new city.
@@ -410,7 +441,7 @@ Compare the test posters with the moodboard as a demanding art director would: w
 
 Return:
 - questions: 6 to 8, each about one aspect (composition, colour, material, lines, detail, sky, people, lettering, landmarks, mood…). "question" asks what the shop owner wants, in one short sentence. "options" are exactly 5 answers going from one end to the other (e.g. "Much calmer, fewer elements" … "Much busier, more elements"), option 3 is always "Keep as it is". "recommended" is the option you would pick (1–5; it may well be 3) and "why" says in one sentence what you saw.
-- suggestions: exactly 5 improvements, each one sentence of at most 14 words, concrete and different from each other, each with its aspect.`,
+- suggestions: exactly 5, each one sentence of at most 14 words, concrete and different from each other, each with its aspect. The first three are targeted fixes where the test posters miss the board (bringing them closer to it: line, detail, colour, figures, composition). The last two are interesting changes that would make the style even more beautiful or sellable without losing what it is.`,
     [...board, ...images],
     { schema: INTERVIEW_SCHEMA, temperature: 0.6 }
   )
@@ -484,31 +515,386 @@ export async function applyAnswers(styleId: string, answers: Record<string, numb
   })
 }
 
-const MAX_CANDIDATES = 5
+const MAX_CANDIDATES = 8
 
-/** Turns suggestions (ids) or a free text into variants of the guide, each tried in a quick round of its own. */
-export async function tryCandidates(styleId: string, suggestionIds: string[], free?: string, delivery: "now" | "batch" = "now") {
+export type CandidateGroup = { suggestions: string[]; free?: string }
+
+/**
+ * Turns groups of suggestions into variants of the guide: one variant per
+ * group with all of its changes at once (pick three suggestions, get one
+ * version with those three), each tried in a quick round of its own.
+ */
+export async function tryCandidates(styleId: string, groups: CandidateGroup[], delivery: "now" | "batch" = "now", size: TestSize = "middle") {
   const style = await getStyle(styleId)
   const data = cityData(style)
-  const asks = [
-    ...(data.suggestions ?? []).filter((s) => suggestionIds.includes(s.id)).map((s) => s.text),
-    ...(free?.trim() ? [free.trim()] : []),
-  ]
+  const asks = groups
+    .map((g) => [...(data.suggestions ?? []).filter((s) => g.suggestions.includes(s.id)).map((s) => s.text), ...(g.free?.trim() ? [g.free.trim()] : [])])
+    .filter((list) => list.length)
   if (!asks.length) throw new Error("Pick a suggestion")
   if (data.candidates.length + asks.length > MAX_CANDIDATES) throw new Error(`At most ${MAX_CANDIDATES} variants at once: adopt or drop some first`)
   const made: StyleCandidate[] = []
-  for (const ask of asks) {
-    const revised = await revise(style, ask)
-    made.push({ id: newId(), label: ask, guide: revised.guide, city: revised.city, at: new Date().toISOString() })
+  for (const list of asks) {
+    const revised = await revise(style, list.map((a) => `- ${a}`).join("\n"))
+    made.push({ id: newId(), label: list.join(" · "), guide: revised.guide, city: revised.city, at: new Date().toISOString() })
   }
+  const used = groups.flatMap((g) => g.suggestions)
   await updateStyle(styleId, (s) => {
     const d = cityData(s)
-    return { ...s, city: { ...d, candidates: [...d.candidates, ...made], suggestions: (d.suggestions ?? []).filter((x) => !suggestionIds.includes(x.id)) } }
+    return { ...s, city: { ...d, candidates: [...d.candidates, ...made], suggestions: (d.suggestions ?? []).filter((x) => !used.includes(x.id)) } }
   })
-  // A quick round each: the cities from words, enough to see the change.
-  for (const candidate of made) {
-    await startRound(styleId, { blocks: ["prompt"], candidate: candidate.id, delivery, cities: { prompt: LAB_CITIES.prompt.slice(0, 4) } })
+  for (const candidate of made) await startRound(styleId, { ...sizedRound(size), candidate: candidate.id, delivery })
+  return getStyle(styleId)
+}
+
+/** A quick round: a few places from words, two or three. */
+export const sizedRound = (size: TestSize) => ({ blocks: ["prompt"] as LabBlock[], cities: { prompt: TEST_CITIES.slice(0, TEST_SIZES[size]) } })
+
+/** Waits for a round to be painted (or for `timeout`); answers it as it then stands. */
+async function waitForRound(styleId: string, roundId: string, timeout = 30 * 60_000) {
+  for (const until = Date.now() + timeout; ; ) {
+    const round = (await labRounds(styleId).catch(() => [])).find((r) => r.id === roundId)
+    if (!round || round.status === "done" || Date.now() > until) return round ?? null
+    await new Promise((r) => setTimeout(r, 8000))
   }
+}
+
+// --- The judge ---
+
+const VERDICT_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    style: { type: "NUMBER" },
+    composition: { type: "NUMBER" },
+    place: { type: "NUMBER" },
+    misses: STRINGS,
+    fixes: STRINGS,
+  },
+  required: ["style", "composition", "place", "misses", "fixes"],
+  propertyOrdering: ["misses", "style", "composition", "place", "fixes"],
+}
+
+/** The lab's judge: the round's posters next to the board, scored, with what misses and how to fix it in the guide. */
+export async function judgeRound(style: Style, round: LabRound): Promise<RoundVerdict | null> {
+  const done = round.images.filter((i) => i.status === "done" && i.file).slice(0, 8)
+  if (!done.length) return null
+  const board = await Promise.all(pick(style.images, 4).map((i) => getFile(fileKey(style.id, i.file)).then(small)))
+  const tests = await Promise.all(done.map((i) => getFile(`generations/${round.set}/${i.file}`).then(small)))
+  const a = await askJson<{ style?: number; composition?: number; place?: number; misses?: string[]; fixes?: string[] }>(
+    `You are the most demanding art director of a city poster shop. The first ${board.length} images are the moodboard of the style "${style.name}": the look to hit exactly. The next ${tests.length} are new test posters painted in it: ${done.map((t, i) => `${board.length + i + 1}: ${t.city}`).join("; ")}.
+
+Compare them with the board as if they had to hang in the same collection, so close that nobody could tell which posters are new. Look at: line weight, wobble and darkness; how much detail and how many elements; how colour is laid in (washes, crayon, flat) and how saturated; the palette; the paper and how much of it is bare; how people, cars, trees and buildings are drawn; skies; lettering and signs; and whether each poster is a beautiful, well-composed poster of a recognisable place.
+
+Return:
+- misses: up to 6 concrete differences from the board, most important first (e.g. "lines are thin and even; the board's are thick, wobbly black marker").
+- style: 0–10, how exactly they hit the board's style (10: indistinguishable).
+- composition: 0–10, how good the compositions are as posters.
+- place: 0–10, how recognisable and true the places are.
+- fixes: 3–6 precise instructions for rewriting the style guide so the next posters close these gaps (what to say about line, detail, colouring, palette, paper, figures, composition). Concrete and checkable.
+Be honest and strict: most first tries score 4–7.`,
+    [...board, ...tests],
+    { schema: VERDICT_SCHEMA, temperature: 0.2 }
+  )
+  const score = (v: unknown) => Math.max(0, Math.min(10, Math.round((Number(v) || 0) * 10) / 10))
+  const verdict = { style: score(a.style), composition: score(a.composition), place: score(a.place) }
+  return {
+    ...verdict,
+    overall: Math.round(((verdict.style * 2 + verdict.composition + verdict.place) / 4) * 10) / 10,
+    misses: list(a.misses, 6),
+    fixes: list(a.fixes, 6),
+  }
+}
+
+// --- Autonomous testing ---
+
+const running = new Set<string>()
+
+/** The style's autonomous test as it stands; one left running by a server that has stopped reads as stopped. */
+export async function autoTestOf(style: Style): Promise<AutoTest | undefined> {
+  const test = cityData(style).autotest
+  if (test?.status === "running" && test.runner !== instanceId && !(await isLive(test.runner))) return { ...test, status: "stopped", step: "Stopped with the server that ran it" }
+  return test
+}
+
+function patchAutoTest(styleId: string, change: (test: AutoTest) => AutoTest) {
+  return updateStyle(styleId, (s) => {
+    const d = cityData(s)
+    return d.autotest ? { ...s, city: { ...d, autotest: change(d.autotest) } } : s
+  })
+}
+
+/**
+ * Lets the lab hit the style by itself: it paints the main guide on a few
+ * places, judges the posters against the board, rewrites the guide two ways
+ * from the judge's fixes, paints and judges those, keeps the best and goes
+ * on, `passes` times. The best guide becomes the main one when it beats the
+ * start (the old one stays in the history). Sync, `size` posters a guide.
+ */
+export async function startAutoTest(styleId: string, { size = "small", passes = 3, delivery = "now" }: { size?: TestSize; passes?: number; delivery?: "now" | "batch" } = {}) {
+  const style = await getStyle(styleId)
+  const data = cityData(style)
+  if (!style.guide || !data.guide) throw new Error("Read the board first")
+  const current = await autoTestOf(style)
+  if (current?.status === "running" || running.has(styleId)) throw new Error("An autonomous test is running already")
+  const test: AutoTest = {
+    // "auto-": its variants and rounds are told apart from new ideas by it.
+    id: `auto-${newId()}`,
+    status: "running",
+    size,
+    passes: Math.max(1, Math.min(4, Math.round(passes))),
+    step: "Painting the style as it is",
+    runs: [],
+    runner: instanceId,
+    at: new Date().toISOString(),
+  }
+  // Variants an earlier test left behind (stopped, or its server gone) make room.
+  await updateStyle(styleId, (s) => {
+    const d = cityData(s)
+    return { ...s, city: { ...d, autotest: test, candidates: d.candidates.filter((c) => !c.batch?.startsWith("auto-")) } }
+  })
+  running.add(styleId)
+  void runAutoTest(styleId, test, delivery)
+    .catch(async (error) => {
+      console.error(`Autonomous test ${styleId}:`, error)
+      await updateStyle(styleId, (s) => {
+        const d = cityData(s)
+        return d.autotest
+          ? { ...s, city: { ...d, candidates: d.candidates.filter((c) => c.batch !== test.id), autotest: { ...d.autotest, status: "error", error: (error as Error).message, step: "Stopped by an error", finishedAt: new Date().toISOString() } } }
+          : s
+      }).catch(() => {})
+    })
+    .finally(() => running.delete(styleId))
+  return getStyle(styleId)
+}
+
+export async function stopAutoTest(styleId: string) {
+  return updateStyle(styleId, (s) => {
+    const d = cityData(s)
+    const t = d.autotest
+    if (!t || t.status !== "running") return s
+    // Its variants go with it; what it painted stays in the rounds.
+    return { ...s, city: { ...d, candidates: d.candidates.filter((c) => c.batch !== t.id), autotest: { ...t, status: "stopped", step: "Stopped", finishedAt: new Date().toISOString() } } }
+  })
+}
+
+async function runAutoTest(styleId: string, test: AutoTest, delivery: "now" | "batch") {
+  const stopped = async () => (await getStyle(styleId).then((s) => cityData(s).autotest?.status !== "running").catch(() => true))
+  const round = { ...sizedRound(test.size), delivery, batch: test.id }
+  type Tried = AutoRun & { guide: StyleGuide; city: CityGuide; paint: PaintStrategy }
+
+  // The style as it is.
+  const style0 = await getStyle(styleId)
+  const strategy0: PaintStrategy = cityData(style0).paint ?? "redraw"
+  const first = await startRound(styleId, round)
+  const main: Tried = { id: newId(), label: `The style as it is (${strategy0})`, pass: 0, round: first.id, paint: strategy0, guide: style0.guide!, city: cityData(style0).guide! }
+  await patchAutoTest(styleId, (t) => ({ ...t, runs: [strip(main)] }))
+  const painted = await waitForRound(styleId, first.id)
+  if (await stopped()) return
+  main.verdict = (painted && (await judgeRound(await getStyle(styleId), painted))) ?? undefined
+  if (!main.verdict) throw new Error("The first round couldn't be painted")
+  let best: Tried = main
+  await patchAutoTest(styleId, (t) => ({ ...t, runs: [strip(main)], best: main.id }))
+
+  for (let pass = 1; pass <= test.passes; pass++) {
+    if (await stopped()) return
+    await patchAutoTest(styleId, (t) => ({ ...t, step: `Pass ${pass} of ${t.passes}: writing new versions from the judge's notes` }))
+    const style = await getStyle(styleId)
+    const v = best.verdict!
+    // Pass 1 tries the other way of painting with the same guide; every pass rewrites the guide from the notes.
+    const plans: { label: string; paint: PaintStrategy; ask?: string }[] = [
+      ...(pass === 1 ? [{ label: `Painted the other way (${best.paint === "redraw" ? "series" : "redraw"})`, paint: (best.paint === "redraw" ? "series" : "redraw") as PaintStrategy }] : []),
+      { label: "The judge's fixes", paint: best.paint, ask: `Close these gaps to the moodboard, exactly:\n${v.fixes.map((f) => `- ${f}`).join("\n")}` },
+      ...(pass > 1
+        ? [
+            {
+              label: "Closer to the board, described literally",
+              paint: best.paint,
+              ask: `The test posters still miss the moodboard here:\n${v.misses.map((m) => `- ${m}`).join("\n")}\nRewrite the guide so the posters become indistinguishable from the board: describe the board's line, amount of detail, colouring, palette, paper and figures even more precisely and literally (also in "manner"), and keep the compositions simple, clear and beautiful.`,
+            },
+          ]
+        : []),
+    ]
+    const variants: Tried[] = []
+    for (const [i, plan] of plans.entries()) {
+      const revised = plan.ask ? await revise(style, plan.ask, { guide: best.guide, city: best.city }).catch(() => null) : { guide: best.guide, city: best.city }
+      if (!revised) continue
+      const letter = "ABC"[i]
+      const candidate: StyleCandidate = { id: newId(), name: `Auto ${pass}${letter}`, label: plan.label, batch: test.id, paint: plan.paint, guide: revised.guide, city: revised.city, at: new Date().toISOString() }
+      await updateStyle(styleId, (s) => {
+        const d = cityData(s)
+        return { ...s, city: { ...d, candidates: [...d.candidates, candidate] } }
+      })
+      const r = await startRound(styleId, { ...round, candidate: candidate.id })
+      variants.push({ id: newId(), label: `Pass ${pass} · ${letter}: ${plan.label}`, pass, candidate: candidate.id, round: r.id, paint: plan.paint, guide: revised.guide, city: revised.city })
+    }
+    await patchAutoTest(styleId, (t) => ({ ...t, step: `Pass ${pass} of ${t.passes}: painting ${variants.length} versions`, runs: [...t.runs, ...variants.map(strip)] }))
+    for (const variant of variants) {
+      const r = await waitForRound(styleId, variant.round!)
+      if (await stopped()) return
+      variant.verdict = (r && (await judgeRound(await getStyle(styleId), r))) ?? undefined
+      if (variant.verdict && variant.verdict.overall > best.verdict!.overall) best = variant
+    }
+    await patchAutoTest(styleId, (t) => ({
+      ...t,
+      runs: t.runs.map((run) => {
+        const judged = variants.find((x) => x.id === run.id)
+        return judged ? strip(judged) : run
+      }),
+      best: best.id,
+    }))
+  }
+
+  // The best guide and way of painting become the style's when they beat the start; the test's variants go.
+  const start = main.verdict.overall
+  const won = best.id !== main.id && best.verdict!.overall >= start + 0.3
+  await updateStyle(styleId, (s) => {
+    const base = won ? withVersion(s, best.guide, best.city, `Autonomous testing: ${start} → ${best.verdict!.overall} (${best.paint})`, best.round) : s
+    const d = cityData(base)
+    return {
+      ...base,
+      city: {
+        ...d,
+        ...(won && { paint: best.paint }),
+        candidates: d.candidates.filter((c) => c.batch !== test.id),
+        autotest: d.autotest && {
+          ...d.autotest,
+          status: "done",
+          step: "Done",
+          finishedAt: new Date().toISOString(),
+          outcome: won
+            ? `Style ${main.verdict!.style} → ${best.verdict!.style}, overall ${start} → ${best.verdict!.overall}, painted by ${best.paint}: adopted as version ${d.version}`
+            : `No version beat the style as it is (overall ${start}): it stays as it was`,
+        },
+      },
+    }
+  })
+}
+
+const strip = ({ id, label, pass, candidate, round, verdict, paint }: AutoRun): AutoRun => ({ id, label, pass, ...(candidate && { candidate }), ...(round && { round }), ...(verdict && { verdict }), ...(paint && { paint }) })
+
+// --- An interview after a fresh round ---
+
+/**
+ * Asks the interview on a round of the guide as it is now: when the main
+ * guide has no finished round of its own yet, a quick one is painted first
+ * (sync), then the lab looks at it next to the board and asks.
+ */
+export async function startInterview(styleId: string, size: TestSize = "middle") {
+  const style = await getStyle(styleId)
+  const data = cityData(style)
+  if (!style.guide) throw new Error("Read the board first")
+  const rounds = await labRounds(styleId)
+  const fresh = rounds.find((r) => !r.candidate && r.version === data.version && r.status === "done" && r.images.some((i) => i.status === "done"))
+  if (fresh) return interview(styleId, fresh.id)
+  const round = await startRound(styleId, { ...sizedRound(size), delivery: "now" })
+  await updateStyle(styleId, (s) => ({ ...s, city: { ...cityData(s), interviewing: { status: "testing", round: round.id, at: new Date().toISOString() } } }))
+  void (async () => {
+    const painted = await waitForRound(styleId, round.id)
+    await updateStyle(styleId, (s) => ({ ...s, city: { ...cityData(s), interviewing: { status: "asking", round: round.id, at: new Date().toISOString() } } }))
+    await interview(styleId, painted?.id)
+    await updateStyle(styleId, (s) => ({ ...s, city: { ...cityData(s), interviewing: undefined } }))
+  })().catch(async (error) => {
+    console.error(`Interview ${styleId}:`, error)
+    await updateStyle(styleId, (s) => ({ ...s, city: { ...cityData(s), interviewing: { status: "error", error: (error as Error).message, at: new Date().toISOString() } } })).catch(() => {})
+  })
+  return getStyle(styleId)
+}
+
+// --- New ideas: nearby directions ---
+
+export type DirectionsRequest = {
+  /** How many directions, 1 to 6. */
+  count: number
+  /** The cities each direction is painted on; `set` paints three pictures of the city instead of one. */
+  cities: { name: string; set: boolean }[]
+  delivery: "now" | "batch"
+  /** The style itself painted on the same cities too, to compare. */
+  main: boolean
+}
+
+const DIRECTIONS_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    directions: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { name: STRING, label: STRING, consistency: STRING, change: STRING },
+        required: ["name", "label", "consistency", "change"],
+        propertyOrdering: ["name", "label", "change", "consistency"],
+      },
+    },
+  },
+  required: ["directions"],
+}
+
+/**
+ * New ideas for a style: `count` nearby but different styles, each kept as a
+ * variant with what holds it together, and each painted on the same cities
+ * (one poster each, or a set of three), next to the style itself. One the
+ * shop owner likes becomes the main guide or a style of its own.
+ */
+export async function newDirections(styleId: string, request: DirectionsRequest) {
+  const style = await getStyle(styleId)
+  const data = cityData(style)
+  if (!style.guide || !data.guide) throw new Error("Read the board first")
+  const count = Math.max(1, Math.min(6, Math.round(request.count)))
+  const cities = request.cities.map((c) => ({ name: c.name.trim().slice(0, 80), set: c.set })).filter((c) => c.name).slice(0, 6)
+  if (!cities.length) throw new Error("Name at least one city")
+  // Directions of an earlier run make room; variants made by hand stay.
+  const kept = data.candidates.filter((c) => !c.batch)
+  if (kept.length + count > MAX_CANDIDATES) throw new Error(`At most ${MAX_CANDIDATES} variants at once: adopt or drop some first`)
+
+  const board = await Promise.all(pick(style.images, 4).map((i) => getFile(fileKey(style.id, i.file)).then(small)))
+  const answer = await askJson<{ directions?: { name?: string; label?: string; consistency?: string; change?: string }[] }>(
+    `You are the art director of a city poster shop. The images are the moodboard of a style called "${style.name}"; its guide is below. Propose ${count} new directions for it: NEARBY siblings of this exact style, not new styles. Someone who loves the original must love every one of them, and each could hang next to it as a related collection.
+Every direction keeps: the medium family (ink and watercolour stays ink with watercolour, gouache or coloured pencil; a photo look stays a photo look), the lightness (light paper or sky, bright and airy: never dark, black or night backgrounds, never neon, never monochrome), the mood (as light, warm and joyful as the original) and its charm.
+Every direction changes one or two things, moderately: the palette (e.g. pink and mint becomes peach and sky blue, or gains a lemon-yellow accent), the wash (drier crayon fill or wetter bleeding washes), the line (a thicker marker or a finer pen, more or less wobble), how much colour against bare paper, the skies (bare paper, a soft wash, little doodled clouds), the figures (stick figures or little dressed people), the amount of detail. The directions differ from each other; order them from the closest to the original to a little further.
+
+THE GUIDE NOW
+${styleText(style.guide)}
+${cityText(data.guide)}
+
+For each direction:
+- name: 2–4 words.
+- label: one sentence, what it changes against the style.
+- change: precise instructions for rewriting the guide into this direction (medium, line, colour, palette with hex codes, paper, detail, skies, buildings, figures).
+- consistency: two or three sentences on what holds every poster of this direction together so a series stays one collection: the line, the palette, the paper, how buildings, trees, people and skies are always drawn.`,
+    board,
+    { schema: DIRECTIONS_SCHEMA, temperature: 0.9 }
+  )
+  const proposed = (answer.directions ?? []).filter((d) => d.name && d.change).slice(0, count)
+  if (!proposed.length) throw new Error("No directions came back, try again")
+
+  const batch = newId()
+  const made: StyleCandidate[] = []
+  // Three guides rewritten at a time.
+  for (let at = 0; at < proposed.length; at += 3) {
+    const revised = await Promise.all(proposed.slice(at, at + 3).map((d) => revise(style, `${d.label}\n${d.change}`).then((r) => ({ d, r })).catch(() => null)))
+    for (const item of revised) {
+      if (!item) continue
+      made.push({
+        id: newId(),
+        name: text(item.d.name, 60),
+        label: text(item.d.label, 240),
+        consistency: text(item.d.consistency, 600),
+        batch,
+        guide: item.r.guide,
+        city: item.r.city,
+        at: new Date().toISOString(),
+      })
+    }
+  }
+  if (!made.length) throw new Error("The directions couldn't be written, try again")
+  await updateStyle(styleId, (s) => {
+    const d = cityData(s)
+    return { ...s, city: { ...d, candidates: [...d.candidates.filter((c) => !c.batch), ...made] } }
+  })
+
+  const names = cities.map((c) => c.name)
+  const sets = Object.fromEntries(cities.filter((c) => c.set).map((c) => [c.name, 3]))
+  const round = { blocks: ["prompt"] as LabBlock[], delivery: request.delivery, cities: { prompt: names }, sets, batch }
+  if (request.main) await startRound(styleId, round)
+  for (const candidate of made) await startRound(styleId, { ...round, candidate: candidate.id })
   return getStyle(styleId)
 }
 
