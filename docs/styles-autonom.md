@@ -124,7 +124,17 @@ Augen, gleiche weiche Malweise, nur Sektflöte und Schleife neu. Tiger-Ideen: Ge
 Schneeleopard im Beiwagen (High): Palette, lockere Hand und das ruhig-verspielte Gefühl nah am Original, nicht mehr
 dunkel oder überladen wie der Löwe in der Bibliothek.
 
-**Kosten der Tests:** 45 Bilder (dopamin 33 inklusive der verworfenen zweiten Versuche, Impasto 5, Katze 2,
+**Validierung mit dem Endstand** (5 dopamin-Bilder, je Stufe eins, plus 1 über den Button im Browser):
+Champagner-Tiger als Geschwister der dicken Katze (Minimal), schwarze Katze im Outfit des Pudels (Subtle), zwei
+Pandas mit Trauben im Bett der Pizza-Tiger (Low), Tiger beim Maskenritual vor dem Spiegel mit „treat yourself“
+(Medium), Blick von unter dem Glastisch auf die Gartenparty und Tiger im pinken Flur durch die Tür (High): alle
+sechs stilecht und eigenständig; Gemini gab trotzdem meist Stil 6–7.
+
+**Robins Review währenddessen** (13:41–13:43 UTC): 13 freigegeben, darunter fünf, die Gemini mit Stil 5–6
+durchfallen lassen wollte (Discokugel-Katze, Tigerbaby mit Torte, Panda auf der Gartenparty, Panda in der Wanne,
+Katze auf der Toilette) — der Grund, warum nichts automatisch abgelehnt wird.
+
+**Kosten der Tests:** 50 Bilder (dopamin 38 inklusive der verworfenen zweiten Versuche, Impasto 5, Katze 2,
 Tiger 5), freigegeben waren 200.
 
 ## 7 · Bedienung
