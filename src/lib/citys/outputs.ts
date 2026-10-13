@@ -198,7 +198,7 @@ async function addCityBatch(set: GenerationSet, request: CityRequest) {
     expanded: false,
     city: request,
   }
-  const next = await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch] }))
+  const next = await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch], heals: 0 }))
   enqueue(set.id)
   return next
 }

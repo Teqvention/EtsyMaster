@@ -51,7 +51,8 @@ export const ART_LEVELS: Record<Level, string> = {
 /** What every real photo must be. */
 const REAL_RULES = `Rules for a real photo:
 - It is the real place. Every building, bridge, tower, church, coastline, hill and street in view stays where it is, with its real shape, height and proportions. Never invent, move or merge landmarks; never change the skyline; never add landmarks of other places.
-- It looks like a real photograph by a professional: true perspective, real lens behaviour, fine detail in brickwork, windows, leaves and water, natural colour. No AI look: no oversaturation, no plastic or waxy surfaces, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections.
+- Buildings are real buildings, each with its own shape, colour, windows, balconies and roof, as in the photos of the place: never generic filler houses, a slope of near-identical boxes, or invented hotels and towers.
+- It looks like a real photograph by a professional: true perspective, real lens behaviour, natural colour, fine detail up close (brickwork, leaves, water) that softens with distance and haze, far hills and houses soft. No AI look: no oversaturation, no plastic or waxy surfaces, no uniform crisp detail everywhere, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections.
 - ${SKY_RULES}
 - No text, logos, watermarks, borders or frames. Real signs stay as they are but never readable brand names or logos; never new lettering.
 - People and cars small and incidental, fewer rather than more, never posed, no faces in focus; never crowds, packed beaches or rows of umbrellas and sunbeds.
@@ -75,20 +76,32 @@ const PHOTO_STYLE_RULES = `The style is a photographic look (its colour grading,
 
 /**
  * How best-selling travel photo posters are composed, studied on the top
- * sellers of Traposto, Postour and Advntre (13 Oct): the icon from its
- * classic vantage point, a framing foreground, a leading line, generous sky,
- * calm and uncrowded, the place shown as a dream to travel to.
+ * sellers of Traposto, Postour and Advntre and on each place's top shops
+ * (13 Oct): real views a traveller can stand at, the icon from its classic
+ * vantage point, simple and calm, a generous sky, uncrowded. A "framing
+ * foreground" and a "leading line" made the art director reach for stony
+ * beaches, a stone pier and a viaduct's arches on Amalfi: loud, not sold.
  */
 export const PHOTO_COMPOSITION = `Compose like the best-selling travel photo posters, as a professional photographer hired to make people want to travel there:
-- One clear subject recognised at a glance (the landmark, the town on its cliff, the bay, the skyline), large enough to read, on a third or centred with intent, with room around it.
-- Its classic, postcard-perfect vantage point: from across the water or a bridge, from a hill, terrace or rooftop above the town, or straight down an avenue that ends in the landmark. A coast from the cliffs or the road above, the town and the bay below.
-- A foreground that frames and invites, kept to the edges: a lemon or olive branch, bougainvillea, a pine or cypress, a terrace balustrade, a bicycle on a canal railing, rocks or grass at the water's edge.
-- A leading line into the picture: a road, river, coastline, pier, path or avenue of trees, curving toward the subject.
-- Depth in layers: the foreground, the subject, the sea or mountains beyond, the sky.
-- A generous, luminous sky, often a third to half of the frame, the horizon on a third.
-- The place's true colours, vivid but natural: pastel houses, turquoise and emerald water, green cliffs, warm stone, a sky with real colour.
-- Calm and uncrowded: never crowds, rows of umbrellas or sunbeds, packed beaches, traffic jams, tour buses, scaffolding or clutter. People only tiny and few (a lone walker, a cyclist, a boat), if at all. The place looks like a dream to travel to, not a busy day.
+- A real view a traveller can stand at, the kind the place's best-selling posters show: nothing staged, nothing invented.
+- One clear subject recognised at a glance (the landmark, the town on its cliff, the bay, the island, the beach), on a third or centred with intent, with room around it.
+- Its classic vantage point: across the water, from the hill, terrace or road above the town, straight down an avenue that ends in the landmark; a coast seen from above, the town and the calm bay below.
+- Simple: few elements, depth in soft layers, a generous luminous sky (often a third to half of the frame). A light touch of foreground at most, at one edge: a lemon, olive or pine branch, bougainvillea, palm fronds, dune grass, a terrace railing.
+- Calm wherever there is sea, beach or nature: calm clear water, soft sand, gentle waves at most; never a stony beach, dark walls, piers, arches or rocks filling the foreground, never crashing surf across the frame, never dramatic low angles.
+- The place's true colours, vivid but natural: pastel houses, turquoise and emerald water, green hills, warm stone, a sky with real colour.
+- Uncrowded: never crowds, rows of umbrellas or sunbeds, packed beaches, traffic jams, tour buses, scaffolding or clutter. People only tiny and few, if at all. The place looks like a dream to travel to, not a busy day.
 - Built for a vertical poster: the subject never cut, nothing important at the edges.`
+
+/**
+ * Places of sea, beaches and nature. What sells there is calm and pure:
+ * Traposto's dune paths, boardwalks and empty beaches from above, Postour's
+ * island alone in a pastel sea, the Amalfi towns seen from the road above.
+ */
+const calmText = (place: string) => `${place} is a place of sea, beaches and nature: every picture is calm, airy and pure, one people hang on the wall to feel on holiday.
+- Quiet, honest views: the town or the bay from the road or a terrace high above, an island alone in a turquoise sea, an empty beach from above with soft waves on the sand, a sandy path through the dunes, a lone pine or palms over calm water, the coastline curving away.
+- Calm, clear water, soft light, gentle colours, a soft horizon, lots of air. A town is part of the landscape, seen from a distance or from above, never a wall of houses filling the frame.
+- Never loud or heavy: no stony or pebble beach in the foreground, no dark stone walls, piers, arches, viaducts or big rocks dominating, no crashing surf or white foam across the picture, no boat bows or railings cutting in, no dramatic low angles.
+- Choosing among photos of the place, take such calm views and leave out ones that break this, even best sellers.`
 
 /**
  * The same for drawn posters, from the top 100 sellers of every city shop
@@ -310,6 +323,16 @@ export type BriefGroup = {
   follow?: Follow
   /** Real photos of the place follow last, numbered for the briefs to pick from. */
   geo?: number
+  /**
+   * New real photos re-take those photos: each picture is one of them
+   * photographed again (a different one each), so its composition and its
+   * houses are real; without, they're for the motif's geography only.
+   */
+  retake?: boolean
+  /** A place of sea, beaches and nature: composed calm. */
+  calm?: boolean
+  /** A second ask: what the first answer got wrong. */
+  redo?: string
   /** A redrawn art style: the moodboard's posters are numbered for each brief to pick the one it's redrawn from. */
   boards?: number
   notes?: string
@@ -331,10 +354,11 @@ const PLAN_SCHEMA = {
           sky: { type: "STRING", nullable: true },
           motif: { type: "STRING", nullable: true },
           photo: { type: "INTEGER", nullable: true },
+          landmarks: { type: "ARRAY", items: STRING, nullable: true },
           board: { type: "INTEGER", nullable: true },
         },
         required: ["title", "brief"],
-        propertyOrdering: ["title", "level", "sky", "motif", "board", "photo", "brief"],
+        propertyOrdering: ["title", "level", "sky", "motif", "board", "photo", "landmarks", "brief"],
       },
     },
   },
@@ -362,6 +386,19 @@ function itemLine(g: BriefGroup, item: BriefItem, i: number) {
 /** What a set of a place must be, for sets in a style. */
 const SET_RULE = `the first three show three different signature motifs that capture the heart of the place, like the best-selling sets of three (e.g. Paris: the Eiffel Tower, Montmartre with Sacré-Cœur, a Seine bridge with Notre-Dame; Sydney: the Opera House, Bondi Beach, the Harbour Bridge; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill). The place's most famous icon is always one of them. One landmark leads one picture only, never two (landmarks that stand together count as one: Big Ben and the Houses of Parliament, the Colosseum and the Forum), and the three are different kinds of scene (a street or square with the icon, a park, market or neighbourhood, a waterfront, bridge or panorama). Any further pictures are creative variations, never a repeat. Name each one's motif in "motif".`
 
+/**
+ * A set chosen from the place's top-selling photos (13 Oct: a Honolulu set
+ * took the same photo for two pictures, and Diamond Head stood behind all
+ * three): every picture its own subject and backdrop, a pure nature picture
+ * wherever there's nature, different distances.
+ */
+const retakeSetRule = (g: BriefGroup, n: number) => `choose ${n} of the numbered photos, like the best-selling sets of three:
+- The place's most famous view is one of them.
+- Every picture shows a different subject and a different backdrop: a landmark, beach, bay or town appears in one picture only (if a mountain or tower rises behind one picture, no other shows it).
+- Different kinds of picture: the classic view of the place; wherever it has sea, beaches or nature, one pure picture of its nature with no buildings at all (the island alone in the sea, the bay or the beach from above, palms over turquoise water, a path through the dunes); and one closer scene with character that belongs with the others on one wall (a pink hotel among palms, a lemon terrace, a quiet lane down to the sea).
+- Different distances and vantage points: never three from a balcony, never three from the beach.
+Any further pictures take other photos, never a repeat.${g.hasReference ? " The reference's own view is made already: choose others." : ""} Only when no photo shows another landmark or scene the set needs (all of them show the same icon, say), put 0 in "photo" for that picture and compose it from the place's motifs and viewpoints below, as real as the others. Name each picture's motif in "motif".`
+
 /** Groups that compose the picture themselves (rather than keep the reference's framing) get the composition lessons. */
 const composes = (g: BriefGroup) =>
   g.kind === "idea" || g.kind === "set" || g.kind === "auto" || (g.kind === "style" && g.items.some((i) => i.refMode !== "photo")) || (g.kind === "real" && g.items.some((i) => (i.level ?? 0) >= 4))
@@ -386,7 +423,9 @@ function briefPrompt(g: BriefGroup) {
   }
   if (g.geo) {
     roles.push(
-      `${g.geo === 1 ? `Image ${image} is a real photo` : `Images ${image}–${image + g.geo - 1} are real photos`} of ${g.place}, numbered 1 to ${g.geo}: what its landmarks, coast and streets really look like. For each brief put in "photo" the number of the one that shows its motif best, so the painter gets the geography right (0 when none shows it). Choose motifs these photos show where you can; never copy their light or framing.`
+      g.retake
+        ? `${g.geo === 1 ? `Image ${image} is a real photograph` : `Images ${image}–${image + g.geo - 1} are real photographs`} of ${g.place} from the best-selling posters of its top shops, each with its number (1 to ${g.geo}) written large in its top-left corner: compositions that really sell, and how the place really looks. Every picture we make is one of them photographed again: put the number written on it in "photo", a different one for every picture, never one twice, and make sure the brief describes that very photo. In "landmarks" name the landmarks and named buildings in view in it (not the sea, the sky or the skyline as such). Choose the most beautiful and calm ones for a poster; skip any that is busy, dark, cluttered, a detail without a sense of the place, or not ${g.place}. A black-and-white or oddly graded photo counts as much as a colour one: only its scene is taken, the look comes from ${g.style ? "the style" : "the reference"}. Each brief first describes that photo's scene exactly as it is (the subject and the landmarks by name, where the camera stands, what is in front and behind), then what makes it our own photograph of that view, never the same photo again: where our camera stands instead, concretely (e.g. "twenty steps to the left and higher, the towers smaller in the lower right, more of the coastline and sea"; "closer, the island larger, the palms only at the edge"), another moment (the sky, the light), other boats, people and cars or none, clutter gone, and the vertical poster crop. Never a view none of them shows.`
+        : `${g.geo === 1 ? `Image ${image} is a real photo` : `Images ${image}–${image + g.geo - 1} are real photos`} of ${g.place}, each with its number (1 to ${g.geo}) written large in its top-left corner: what its landmarks, coast and streets really look like. For each brief put in "photo" the number written on the one that shows its motif best, so the painter gets the geography right (0 when none shows it). Choose motifs these photos show where you can; never copy their light or framing.`
     )
   }
 
@@ -405,11 +444,15 @@ function briefPrompt(g: BriefGroup) {
     auto: `Decide yourself what this reference should become: ${n} new versions ${made}. For each choose a level from 1 to 5 and a sky.
 Levels: ${Object.entries(art ? ART_LEVELS : REAL_LEVELS).map(([l, t]) => `${l}: ${t.split(":")[0].replace(/^Level \d, /, "")}`).join("; ")}.
 Mostly stay close (levels 1–3): keep everything that makes the picture beautiful and change subtly. Take level 4 only when a nearby view would clearly make a more beautiful poster, 5 rarely. Skies: ${SKIES.map((s) => `"${s.id}" (${s.hint.toLowerCase()})`).join(", ")}, or "keep" for the reference's own sky made a little prettier. The ${n} versions differ from each other (e.g. one faithful with its sky made prettier, one with a blush or golden sky). Put the level in "level" and the sky in "sky".`,
-    idea: `Write ${n} briefs for NEW pictures of ${g.place} ${made}: each a different composition, freed from the reference's framing: another signature view, landmark or scene of the place (use the motifs and viewpoints below), true to the place. Vary how far each goes: one may stay close in kind to the reference's scene (a street scene becomes another street scene), others are freer. Every one is as beautiful as the reference and unmistakably the same look, so they hang together.`,
-    set: `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall: one look, one palette and sky family, the same kind of framing and the same distance, but every picture showing something different (like the best-selling sets of three: a street with the landmark, a park or waterfront scene, the skyline or a second landmark). Balance the set: the first three show three different signature motifs that capture the heart of the place (e.g. New York: the skyline, Central Park, the Statue of Liberty; Sydney: the Opera House, Bondi Beach, palms on the harbour; Paris: the Eiffel Tower, Montmartre and Sacré-Cœur, a Seine bridge with Notre-Dame; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill; a beach town: the beach, its landmark, nature), chosen so they complement each other (a wide view, a close icon, a scene with life). The place's most famous icon is always one of them. One landmark is the subject of one picture only: never the same tower, bridge or building leading two pictures (landmarks that stand together count as one: Big Ben and the Houses of Parliament), and never three pictures of the same kind of scene (three canals, three streets). Any further pictures are creative variations: other motifs, other compositions, never a repeat.${g.hasReference ? " The reference's own view is made already: every picture of the set shows something else." : ""} Name each picture's motif in "motif".`,
+    idea: g.retake
+      ? `Write ${n} briefs for NEW pictures of ${g.place} ${made}: each one of the numbered photos photographed again (its number in "photo", a different one each), never the reference's view. Prefer the views people love most and vary the subject and the distance. Every one is as beautiful as the reference and unmistakably the same look, so they hang together.`
+      : `Write ${n} briefs for NEW pictures of ${g.place} ${made}: each a different composition, freed from the reference's framing: another signature view, landmark or scene of the place (use the motifs and viewpoints below), true to the place. Vary how far each goes: one may stay close in kind to the reference's scene (a street scene becomes another street scene), others are freer. Every one is as beautiful as the reference and unmistakably the same look, so they hang together.`,
+    set: g.retake
+      ? `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall (one look, one sky family): ${retakeSetRule(g, n)}`
+      : `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall: one look, one palette and sky family, the same kind of framing and the same distance, but every picture showing something different (like the best-selling sets of three: a street with the landmark, a park or waterfront scene, the skyline or a second landmark). Balance the set: the first three show three different signature motifs that capture the heart of the place (e.g. New York: the skyline, Central Park, the Statue of Liberty; Sydney: the Opera House, Bondi Beach, palms on the harbour; Paris: the Eiffel Tower, Montmartre and Sacré-Cœur, a Seine bridge with Notre-Dame; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill; a beach town: the beach, its landmark, nature), chosen so they complement each other (a wide view, a close icon, a scene with life). The place's most famous icon is always one of them. One landmark is the subject of one picture only: never the same tower, bridge or building leading two pictures (landmarks that stand together count as one: Big Ben and the Houses of Parliament), and never three pictures of the same kind of scene (three canals, three streets). Any further pictures are creative variations: other motifs, other compositions, never a repeat.${g.hasReference ? " The reference's own view is made already: every picture of the set shows something else." : ""} Name each picture's motif in "motif".`,
     style:
       g.style?.medium === "photo"
-        ? `Write ${n} briefs for real photographs of ${g.place} ${made}. ${g.hasReference ? "Take the view from the reference where an item says so; the look always comes from the style, never from the reference." : ""}${g.setSize ? ` Together they are a set of ${g.setSize}: ${SET_RULE}` : ""}`
+        ? `Write ${n} briefs for real photographs of ${g.place} ${made}${g.retake ? ", each one of the numbered photos photographed again in the style's look" : ""}. ${g.hasReference ? "Take the view from the reference where an item says so; the look always comes from the style, never from the reference." : ""}${g.setSize ? ` Together they are a set of ${g.setSize}: ${g.retake ? retakeSetRule(g, n) : SET_RULE}` : ""}`
         : `Write ${n} briefs for posters of ${g.place} ${made}. Each says what the poster shows (which landmarks, from where, foreground and background), how it is composed, and how the style renders it. Where an item works from the reference's composition, describe that composition so precisely it can be painted from words alone.${g.setSize ? ` Together they are a set of ${g.setSize}: ${SET_RULE}` : ""}`,
   }
 
@@ -425,6 +468,7 @@ Mostly stay close (levels 1–3): keep everything that makes the picture beautif
     (g.kind === "real" || g.kind === "auto") &&
       `Every brief is a new version of THIS reference: the same place, the same main subject and the landmarks it shows${g.read?.landmarks.length ? ` (${g.read.landmarks.join(", ")})` : ""}. Never another landmark or another part of the city. Name only what you can see in the reference.`,
     composes(g) && (art ? ART_COMPOSITION : PHOTO_COMPOSITION),
+    composes(g) && g.calm && calmText(g.place),
     !g.items.some((i) => i.sky) && g.kind !== "auto" && skyText(undefined, { art }),
     !art && SKY_RULES,
     art && `Art rules: keep the look exactly, its palette and its lightness; skies and light stay bright and inviting (never night, a darkening twilight or a deep blue sky); no poster title or caption (in-scene signs only where the look has them, few and correctly spelled).`,
@@ -435,6 +479,7 @@ Mostly stay close (levels 1–3): keep everything that makes the picture beautif
       ? `Each brief: a short, concrete scene in plain words, the way you'd brief a gifted illustrator, 2 to 4 sentences: what we see and from where, the few elements that make it this place, the sky and the feel. For example: "A London street: a magenta double-decker bus, the clock tower behind it, a striped awning on the corner, a few scribbled trees, a loose crowd of small figures walking." Signs and small objects are optional: one only where it helps; the style lives in the line, colour, paper and how buildings, trees and people are drawn. Ask for no more detail than the look's own pictures have. Each "title" is 2 to 5 words naming the picture.`
       : `Each brief: 3 to 6 sentences a photographer can shoot from: the place and its landmarks by name, viewpoint and lens, the sky (named exactly, e.g. "a soft gradient from blush pink at the horizon to white"), the light, the colours, what's tidied away. Never anything that isn't really there. Each "title" is 2 to 5 words, e.g. "Blush harbour morning".`,
     `Never name artists, shops, brands or copyrighted characters.`,
+    g.redo && `Your last answer was wrong: ${g.redo}`,
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -443,17 +488,53 @@ Mostly stay close (levels 1–3): keep everything that makes the picture beautif
 const toLevel = (v: unknown): Level | undefined => (Number.isInteger(v) && Number(v) >= 1 && Number(v) <= 5 ? (Number(v) as Level) : undefined)
 const toSky = (v: unknown): SkyId | undefined => (typeof v === "string" && skyById(v) ? (v as SkyId) : v === "keep" ? "auto" : undefined)
 
-/** One brief per item of the group, in order; `images` are the reference (if any), the style's images and the best sellers. */
+type Answer = { title?: string; brief?: string; level?: number; sky?: string; motif?: string; photo?: number; landmarks?: string[]; board?: number }
+
+/**
+ * What's wrong with a set's re-takes: a photo taken twice (or none), or a
+ * landmark in two of its first three pictures (13 Oct: the Eiffel Tower
+ * stood in two of a Paris set's three, Diamond Head behind all of Honolulu's).
+ */
+function retakeProblems(group: BriefGroup, got: Answer[], count: number, taken: (number | undefined)[]) {
+  const problems: string[] = []
+  const photos = got.slice(0, count).map((b) => b?.photo)
+  while (photos.length < count) photos.push(undefined)
+  const wrong = photos.some((p, i) => !Number.isInteger(p) || p! < 1 || p! > group.geo! || photos.indexOf(p) !== i || taken.includes(p))
+  if (wrong && group.geo! >= count + taken.length) {
+    problems.push(`every picture must take its own numbered photo in "photo" (1 to ${group.geo}), never one twice${taken.length ? ` and none of ${taken.join(", ")}` : ""}; ${photos.map((p, i) => `picture ${i + 1} took ${p ?? "none"}`).join(", ")}.`)
+  }
+  if (group.kind === "set" || group.setSize) {
+    const key = (name: string) => name.toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, " ").trim()
+    const seen = new Map<string, number>()
+    got.slice(0, 3).forEach((b, i) => {
+      for (const name of new Set((b?.landmarks ?? []).map(key))) {
+        if (!name || /\b(ocean|sea|sky|skyline)\b/.test(name)) continue
+        const first = seen.get(name)
+        if (first !== undefined && first !== i) problems.push(`pictures ${first + 1} and ${i + 1} both show ${name}: a landmark is in one picture only, so choose other photos for one of them.`)
+        else seen.set(name, i)
+      }
+    })
+  }
+  return problems
+}
+
+/** One brief per item of the group, in order; `images` are the reference (if any), the style's images, the best sellers and the place's photos (numbered). */
 export async function planCityBriefs(group: BriefGroup, images: Buffer[]): Promise<Brief[]> {
   const out: Brief[] = []
   for (let at = 0; at < group.items.length; at += 10) {
     const items = group.items.slice(at, at + 10)
-    const answer = await askJson<{ briefs?: { title?: string; brief?: string; level?: number; sky?: string; motif?: string; photo?: number; board?: number }[] }>(
-      briefPrompt({ ...group, items, avoid: [...group.avoid, ...out.map((b) => `${b.title}: ${b.brief}`)] }),
-      images,
-      { schema: PLAN_SCHEMA, temperature: 0.9 }
-    )
-    const got = answer.briefs ?? []
+    const avoid = [...group.avoid, ...out.map((b) => `${b.title}: ${b.brief}`)]
+    let got: Answer[] = []
+    // Re-takes must each take their own photo: asked once more when they don't, while there are photos enough.
+    for (let redo: string | undefined, attempt = 0; attempt < 2; attempt++) {
+      const answer = await askJson<{ briefs?: Answer[] }>(briefPrompt({ ...group, items, avoid, redo }), images, { schema: PLAN_SCHEMA, temperature: 0.9 })
+      got = answer.briefs ?? []
+      if (!group.retake || !group.geo || attempt) break
+      const problems = retakeProblems(group, got, items.length, at ? out.map((b) => b.photo) : [])
+      if (!problems.length) break
+      redo = problems.join(" ")
+      console.info(`Planning ${group.place}: asked again, ${redo}`)
+    }
     items.forEach((item, i) => {
       const b = got[i]
       out.push(
@@ -504,6 +585,8 @@ export type PaintParts = {
   placeLine?: string
   /** A real photo of the motif follows the moodboard: for its true geography only. */
   geo?: boolean
+  /** That photo is the scene to photograph again (a composition the place's top shops sell), not just its geography. */
+  retake?: boolean
   /** A photo of the sky asked for follows last (a sky of the shop's own). */
   skyImage?: boolean
   /**
@@ -526,17 +609,37 @@ export type PaintParts = {
   series?: boolean
 }
 
+/**
+ * What a re-taken photo keeps of its scene: everything real, neither its
+ * look nor its framing. 13 Oct: told to "keep its composition", Nano Banana
+ * gave Ravello back framed exactly as the competitor's photo, whatever the
+ * art direction said about the camera.
+ */
+const retakeScene = (place: string, look: string) =>
+  `a real photograph of ${place}: the place to photograph again. Everything in it stays exactly as it really is: every building and house with its own shape, colour, windows and roof, where it stands; the coastline, cliffs, beach, hills, trees and landmarks in their places. Its framing doesn't: our camera stands where the art direction says. Take nothing of its colours, grading, sky or light, even if it is black and white: ${look}.`
+
+/** What changes when a scene is photographed again. */
+const RETAKE_MOMENT = `Our own photograph of this place, never the same photo again: the framing visibly different from the photo (the camera where the art direction puts it, else a few steps higher, lower or to the side with a wider or tighter lens), another moment with the sky and light as asked, other boats, people and cars or none, clutter gone. The place and everything built in it stay exactly as they are. Fit the vertical poster by stepping back (more sky, sea or foreground), never by squeezing.`
+
 export function paintCityPrompt(p: PaintParts) {
   const roles: string[] = []
   let n = 1
+  let geoAt = 0
   const styled = p.kind === "style" || p.kind === "lab"
   if (p.lookOnly) {
     if (p.geo) {
-      roles.push(`Image ${n} is a real photo of ${p.place} showing the new photograph's subject, only for its true geography: where the landmarks, coast and streets really are and how they look. Never its light, colours, people or framing.`)
+      roles.push(
+        p.retake
+          ? `Image ${n} is ${retakeScene(p.place, "the look comes from the reference")}`
+          : `Image ${n} is a real photo of ${p.place} showing the new photograph's subject, only for its true geography: where the landmarks, coast and streets really are and how they look. Never its light, colours, people or framing.`
+      )
+      geoAt = n
       n++
     }
     if (p.reference) {
-      roles.push(`Image ${n} is the reference photo: take only its photographic look (colour grading, light, mood). Never its view, subject or framing: the new photograph shows something else.`)
+      // Named, so it can't take the scene's place (13 Oct: a Diamond Head reference put Diamond Head where Mokoliʻi was asked for).
+      const own = p.read?.landmarks.length ? ` (${p.read.landmarks.join(", ")}: never in the picture unless ${p.geo ? `image ${geoAt} shows it` : "the art direction asks for it"})` : ""
+      roles.push(`Image ${n} is the reference photo: take only its photographic look (colour grading, light, mood). Never its view, subject or framing${own}: the new photograph shows something else.`)
       n++
     }
   } else if (p.reference) {
@@ -568,8 +671,11 @@ export function paintCityPrompt(p: PaintParts) {
   }
   if (p.geo && !p.lookOnly) {
     roles.push(
-      `Image ${n} is a real photo of this very place, only for its true geography: where the landmarks, coast and streets really are and how they look. Take nothing else from it: not its light, colours, people, framing or ${p.medium === "art" ? "medium (the picture stays drawn in the style)" : "look"}.`
+      p.retake && p.medium === "photo"
+        ? `Image ${n} is ${retakeScene(p.place, "the look comes from the style's pictures")}`
+        : `Image ${n} is a real photo of this very place, only for its true geography: where the landmarks, coast and streets really are and how they look. Take nothing else from it: not its light, colours, people, framing or ${p.medium === "art" ? "medium (the picture stays drawn in the style)" : "look"}.`
     )
+    geoAt = n
     n++
   }
   if (p.skyImage) {
@@ -584,11 +690,15 @@ export function paintCityPrompt(p: PaintParts) {
       p.kind === "idea"
         ? art
           ? `Draw a new poster of ${p.place} in exactly the reference's art style, as if the same artist drew the next poster of the series: a new composition, as the art direction says, never its composition again; the same hand, line, colouring and amount of detail.`
-          : `Create a new real photograph of ${p.place}, as the art direction says: a different subject and view than the reference, in its photographic look (colour grading, light, mood).`
+          : p.retake && geoAt
+            ? `Create a new real photograph of ${p.place}: the place in image ${geoAt} photographed again, as the art direction says, in the reference's photographic look (colour grading, light, mood). ${RETAKE_MOMENT}`
+            : `Create a new real photograph of ${p.place}, as the art direction says: a different subject and view than the reference, in its photographic look (colour grading, light, mood).`
         : p.kind === "set"
           ? art
             ? `Draw one poster of a set of ${p.place} in exactly the reference's art style, as the art direction says: the same artist drew the whole set, so the hand, line, colouring and amount of detail match the reference exactly.`
-            : `Create one real photograph of a set of ${p.place}, as the art direction says: its own subject and view, never the reference's, in the reference's photographic look so the set hangs together.`
+            : p.retake && geoAt
+              ? `Create one real photograph of a set of ${p.place}: the place in image ${geoAt} photographed again, as the art direction says, in the reference's photographic look so the set hangs together. ${RETAKE_MOMENT}`
+              : `Create one real photograph of a set of ${p.place}, as the art direction says: its own subject and view, never the reference's, in the reference's photographic look so the set hangs together.`
           : art
             ? `Draw a new version of this illustrated poster of ${p.place} in exactly its art style, as the art direction says. ${ART_LEVELS[p.level ?? 2]}`
             : `Create a new version of this ${p.fromArt ? "picture" : "real photo"} of ${p.place} as a real photograph, as the art direction says. ${REAL_LEVELS[p.level ?? 2]}`
@@ -616,7 +726,9 @@ export function paintCityPrompt(p: PaintParts) {
           ? `Make a real photograph of ${p.place} from the view of image 1, in exactly the style's photographic look.`
           : `Repaint the view of ${p.place} in image 1 as a poster in exactly this style: its viewpoint and main landmarks in their places, reduced to the style's own level of detail. Keep only what the style would draw (the main subject and a few supporting shapes); a dense photo of a whole city becomes a simple, airy picture with as few elements as the style's own pictures.`
         : photoStyle
-          ? `Make a real photograph of ${p.place} in exactly the style's photographic look, as the art direction says.`
+          ? p.retake && geoAt
+            ? `Photograph the place in image ${geoAt} again: a real photograph of ${p.place} in exactly the style's photographic look, as the art direction says. ${RETAKE_MOMENT}`
+            : `Make a real photograph of ${p.place} in exactly the style's photographic look, as the art direction says.`
           : `The style's pictures are posters of one series by one artist. Paint the next poster of that series: ${p.place}, as the art direction says, drawn by the same hand with the same pens, colours and paper, as simple or as detailed as they are. Never repeat one of their compositions: where they already show this place, show another view of it.`
   // Art leads with its manner in a few plain words and keeps the notes short: the style's
   // pictures carry the look, a long list of rules only makes the model tidy it up.

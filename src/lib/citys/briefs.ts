@@ -49,7 +49,21 @@ export async function placeByName(name: string) {
   const state = await rankingState()
   const key = name.toLowerCase().split(",")[0].trim()
   const found = state.ranking.places.filter((p) => p.name.toLowerCase() === key).sort((a, b) => a.position - b.position)[0]
-  return found ? { id: found.id, name: found.name, country: found.countryName, kind: found.kind } : null
+  return found ? { id: found.id, name: found.name, country: found.countryName, kind: found.kind, setting: found.setting } : null
+}
+
+/** Settings whose posters are mostly sea, beach and nature: what sells there is calm and pure. */
+const CALM_SETTINGS = ["beach", "island", "nature", "lake", "mountains"]
+
+/**
+ * Whether the place is one of sea, beaches and nature (Amalfi Coast, Maui,
+ * Lake Tahoe), where every picture is composed calm; a city by the sea
+ * (Honolulu, Sydney) isn't, though its beach pictures are calm too.
+ */
+export async function isCalmPlace(placeId: string) {
+  const state = await rankingState().catch(() => null)
+  const place = state?.ranking.places.find((p) => p.id === placeId)
+  return !!place && (CALM_SETTINGS.includes(place.setting) || place.kind === "coast")
 }
 
 // --- Its pictures ---
@@ -59,17 +73,27 @@ const PHOTO_TAGS = ["real", "blackwhite", "black and white", "photo", "photograp
 
 const isPhoto = (e: RefEntry) => e.look === "photo" || e.look === "bw" || (e.look === "unknown" && e.labels.some((l) => PHOTO_TAGS.includes(l.toLowerCase())))
 
-export type PlacePicture = { listingId: number; file: string; photo: boolean; image: Buffer }
+export type PlacePicture = { listingId: number; file: string; photo: boolean; image: Buffer; shop: string }
 
 /**
  * The pictures of the place's best-selling posters, best first, real photos
  * first (only those with `photosOnly`), taken out of their posters. Ones the
  * Stealer hasn't taken out yet are asked for now and waited for a while.
+ * `spread` takes each shop's best one first, so the pictures are what the
+ * place's top shops chose to show; `exclude` leaves listings out.
  */
-export async function placePictures(placeId: string, { count = 6, photosOnly = false, wait = 45_000 } = {}): Promise<PlacePicture[]> {
+export async function placePictures(
+  placeId: string,
+  { count = 6, photosOnly = false, wait = 45_000, spread = false, exclude = [] as number[] } = {}
+): Promise<PlacePicture[]> {
   const state = await rankingState()
-  const seen = new Set<number>()
-  const entries = (state.index.get(placeId) ?? []).filter((e) => e.kind === "place" && e.listing.images[0] && !seen.has(e.listing.id) && !!seen.add(e.listing.id))
+  const seen = new Set<number>(exclude)
+  let entries = (state.index.get(placeId) ?? []).filter((e) => e.kind === "place" && e.listing.images[0] && !seen.has(e.listing.id) && !!seen.add(e.listing.id))
+  if (spread) {
+    const shops = new Set<number>()
+    const first = entries.filter((e) => !shops.has(e.shopId) && !!shops.add(e.shopId))
+    entries = [...first, ...entries.filter((e) => !first.includes(e))]
+  }
   const photos = entries.filter(isPhoto)
   const wanted = (photosOnly ? photos.slice(0, count + 2) : [...photos.slice(0, count - 2), ...entries.filter((e) => !isPhoto(e)).slice(0, 2), ...photos.slice(count - 2, count + 2)]).slice(0, count + 2)
   if (!wanted.length) return []
@@ -97,7 +121,7 @@ export async function placePictures(placeId: string, { count = 6, photosOnly = f
     const image = await readRefFile(e.listing.id, print.file)
       .then((data) => sharp(data).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer())
       .catch(() => null)
-    if (image) out.push({ listingId: e.listing.id, file: print.file, photo: isPhoto(e), image })
+    if (image) out.push({ listingId: e.listing.id, file: print.file, photo: isPhoto(e), image, shop: e.shop })
   }
   return out
 }

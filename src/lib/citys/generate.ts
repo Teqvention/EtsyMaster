@@ -9,7 +9,7 @@ import { fileKey as styleFileKey, getStyle, pick } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 import { getFile } from "@/lib/storage/files"
 
-import { placeBrief, placeByName, placeLine, placePictures } from "./briefs"
+import { isCalmPlace, placeBrief, placeByName, placeLine, placePictures, type PlacePicture } from "./briefs"
 import { listCustomSkies, skyPhoto } from "./sky-store"
 import { photoUrl } from "./photos"
 import { paintCityPrompt, planCityBriefs, readReference, type BriefGroup } from "./prompts"
@@ -95,7 +95,8 @@ export async function startCityJobs(jobs: CityJob[], enqueue: (id: string) => vo
     let set = await findSet(job)
     if (!set) set = await newCitySet(job)
     const batch: Batch = { id: newId(), options: NO_OPTIONS, createdAt: new Date().toISOString(), expanded: false, city: job.request }
-    await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch] }))
+    // `heals` as for every new batch (run.ts addBatch): images lost while painting (a dropped connection) are painted again.
+    await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch], heals: 0 }))
     enqueue(set.id)
     touched.push(set.id)
   }
@@ -363,6 +364,8 @@ async function plan(id: string) {
   // New ideas, sets and styled posters are planned one group after another, each told what the
   // others chose, so no motif comes twice; variants (one per reference view) all at once.
   const planned: string[] = []
+  // The top shops' photos re-taken so far in this run: the next group takes others.
+  const retaken: number[] = []
   const planGroup = async (outputs: Output[]) => {
     const c = outputs[0].city!
     const lab = c.kind === "lab"
@@ -376,19 +379,34 @@ async function plan(id: string) {
     // A redrawn art style shows the planner its board, numbered, to pick the poster each new one is redrawn from.
     const redraws = !!style && style.medium === "art" && (candidate?.paint ?? style.paint) === "redraw" && !reference
     const moodboard = redraws ? style.board.slice(0, 6).map((b) => b.image) : (style?.images.slice(0, 3) ?? [])
-    const sellers = c.follow && c.follow !== "free" && set.city ? await bestSellers(set.city.placeId, 3) : []
     // A lab city from words is a place of the ranking too: its brief and photos come with it.
     const target = lab && c.block === "prompt" && c.target ? await placeByName(c.target).catch(() => null) : null
     const placeOf = lab ? target : set.city ? { id: set.city.placeId, name: set.city.place, country: set.city.country, kind: "" } : null
     const known = lab ? (target ? await placeBrief(target.id, target.name, target.country, target.kind) : null) : brief
+    const medium = style ? style.medium : (c.medium ?? "photo")
     // New compositions see real photos of the place, to pick the one showing each motif for the painter.
     const fresh = newComposition(kind) && (!lab || c.block === "prompt") && !(c.kind === "style" && c.refMode === "photo")
-    // Never the reference itself: its view is made already, a set or new idea shows something else.
-    const geo = fresh && placeOf ? (await placePictures(placeOf.id, { count: 6, photosOnly: true }).catch(() => [])).filter((g) => g.listingId !== set.source.listingId).slice(0, 5) : []
+    // New real photos re-take what the place's top shops sell, a different photo each, so the
+    // composition and the houses are real (13 Oct: invented ones looked generic); a photo
+    // style only when it's asked to follow the best sellers.
+    const retake = fresh && !lab && medium === "photo" && (!style || c.follow === "mid" || c.follow === "high")
+    const sellers = c.follow && c.follow !== "free" && set.city && !retake ? await bestSellers(set.city.placeId, 3) : []
+    // Never the reference itself (its view is made already), nor a photo re-taken before for
+    // this reference in the same look; when those leave too few, they may come again.
+    const pictures = (exclude: number[]): Promise<PlacePicture[]> =>
+      placeOf
+        ? placePictures(placeOf.id, { count: retake ? Math.min(16, Math.max(10, outputs.length * 3 + 6)) : 5, photosOnly: true, spread: retake, exclude }).catch(() => [])
+        : Promise.resolve([])
+    const used = retake
+      ? [...set.outputs.filter((o) => !todo.includes(o) && o.city?.geo?.retake && sameFamily(briefKind(o.city), kind) && o.city.styleId === c.styleId).map((o) => o.city!.geo!.listingId), ...retaken]
+      : []
+    let geo = fresh ? await pictures([set.source.listingId, ...used]) : []
+    if (retake && used.length && geo.length < outputs.length) geo = await pictures([set.source.listingId])
+    const calm = !!placeOf && (await isCalmPlace(placeOf.id))
     const group: BriefGroup = {
       kind,
       place: lab ? (new Set(outputs.map((o) => o.city?.target)).size > 1 ? "each place named below" : (c.target ?? place)) : place,
-      medium: style ? style.medium : (c.medium ?? "photo"),
+      medium,
       fromArt: c.realPhoto && read?.medium === "art",
       items: outputs.map((o) => ({
         level: o.city?.level,
@@ -407,22 +425,27 @@ async function plan(id: string) {
       ...(redraws && { boards: moodboard.length }),
       sellers: sellers.length,
       geo: geo.length,
+      ...(retake && geo.length > 0 && { retake: true }),
+      ...(calm && { calm: true }),
       ...(c.follow && { follow: c.follow }),
       notes: outputs[0].feedback,
       // Only what was made before in the same look: another style's posters of the place must not keep this one from its icon.
       avoid: lab
         ? []
         : [
+            // Re-takes only mind earlier re-takes: views invented before mustn't keep them from the classic ones.
             ...set.outputs
-              .filter((o) => o.brief && !todo.includes(o) && o.city && sameFamily(briefKind(o.city), kind) && o.city.styleId === c.styleId && (o.city.medium ?? "") === (c.medium ?? ""))
+              .filter((o) => o.brief && !todo.includes(o) && o.city && sameFamily(briefKind(o.city), kind) && o.city.styleId === c.styleId && (o.city.medium ?? "") === (c.medium ?? "") && (!retake || o.city.geo?.retake))
               .map((o) => `${o.title ?? ""}: ${o.brief}`),
             ...(newComposition(kind) ? planned : []),
           ],
     }
-    const images = [...(reference ? [reference] : []), ...moodboard, ...sellers, ...geo.map((g) => g.image)]
+    // The place's photos carry their numbers drawn in, so a brief names the photo it describes.
+    const images = [...(reference ? [reference] : []), ...moodboard, ...sellers, ...(await Promise.all(geo.map((g, i) => numbered(g.image, i + 1))))]
     try {
       const briefs = await planCityBriefs(group, images)
       if (newComposition(kind)) planned.push(...briefs.map((b) => `${b.title}: ${b.brief}`))
+      if (retake) retaken.push(...briefs.flatMap((b) => (b.photo && geo[b.photo - 1] ? [geo[b.photo - 1].listingId] : [])))
       await updateSet(id, (s) => ({
         ...s,
         outputs: s.outputs.map((o) => {
@@ -435,7 +458,7 @@ async function plan(id: string) {
             ...(b.level && { level: b.level }),
             ...(b.sky && { sky: b.sky }),
             ...(o.city.set && b.motif && { set: { ...o.city.set, motif: b.motif } }),
-            ...(shows && { geo: { listingId: shows.listingId, file: shows.file } }),
+            ...(shows && { geo: { listingId: shows.listingId, file: shows.file, ...(retake && { retake: true }) } }),
             ...(redraws && style && { board: style.board[(b.board ?? (i % Math.min(style.board.length, 6)) + 1) - 1]?.file }),
           }
           return { ...o, title: b.title, brief: b.brief, city, ...(b.level && { creativity: LEVEL_CREATIVITY[b.level] }) }
@@ -524,6 +547,7 @@ export async function cityRequest(set: GenerationSet, output: Output, test: { mo
     // The place's landmarks spelled out pull a drawing toward detail: only for photos and the full prompt.
     placeLine: artStyle && (test.mode ?? "lean") === "lean" ? undefined : placeLine(brief),
     geo: !!geo,
+    retake: !!geo && !!c.geo?.retake,
     mode: test.mode,
     redraw: !!picked,
     lookOnly,
@@ -552,4 +576,20 @@ async function candidateGuide(styleId: string, candidateId: string) {
 }
 
 const small = (data: Buffer) => sharp(data).resize(1280, 1280, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer()
+
+/**
+ * A photo with its number drawn large in its top-left corner, for the art
+ * director to name it by. 13 Oct: counted by position, and then captioned
+ * "Photo N" between the images, it named the photo after the one it meant
+ * every time (a caption reads as the image before it).
+ */
+async function numbered(image: Buffer, n: number) {
+  const { width = 1024, height = 1024 } = await sharp(image).metadata()
+  const size = Math.round(Math.max(44, Math.min(width, height) * 0.1))
+  const w = Math.round(size * (n > 9 ? 1.9 : 1.4))
+  const h = Math.round(size * 1.35)
+  const badge = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${Math.round(size * 0.22)}" fill="#111" fill-opacity="0.85"/><text x="${w / 2}" y="${Math.round(h * 0.72)}" font-family="Helvetica, Arial, sans-serif" font-size="${size}" font-weight="700" fill="#fff" text-anchor="middle">${n}</text></svg>`
+  const at = Math.round(size * 0.3)
+  return sharp(image).composite([{ input: Buffer.from(badge), top: at, left: at }]).jpeg({ quality: 85 }).toBuffer()
+}
 

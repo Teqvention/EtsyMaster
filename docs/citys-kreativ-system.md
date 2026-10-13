@@ -56,24 +56,66 @@ Set (3–9) und/oder Einzelposter. Kompositionen: **100 % Freiheit** oder **nach
 wir den meistverkauften Postern des Ortes folgen; die Bestseller-Bilder sieht nur der Art Director). Alles landet in
 Outputs unter dem Stil, jede Produktion als eigene Gruppe (`/citys/outputs?group=production:<id>`).
 
-## 6 · Kompositionen wie ein Profi-Fotograf (13.10.)
+## 6 · Echte Kompositionen statt erfundener (13.10.)
 
-Studiert an den Bestsellern von Traposto, Postour und Advntre (`PHOTO_COMPOSITION` in `prompts.ts`):
-- **Ein klares Motiv**, auf einen Blick erkennbar, vom **klassischen Postkarten-Standpunkt**: über das Wasser oder von
-  der Brücke, vom Hügel, von der Terrasse oder dem Dach, die Allee hinunter zum Wahrzeichen; eine Küste von den Klippen
-  oder der Straße darüber.
-- **Rahmender Vordergrund** an den Rändern (Zitronenzweig, Bougainvillea, Pinie, Zypresse, Balustrade, Fahrrad an der
-  Gracht), **führende Linie** (Straße, Fluss, Küste, Steg, Allee), **Tiefe in Ebenen**, **viel Himmel**.
-- **Echte Farben** des Ortes, kräftig aber natürlich.
-- **Nie Massentourismus:** keine Menschenmassen, keine Schirm- oder Liegenreihen, keine vollen Strände, kein Stau.
-  Menschen nur winzig und wenige. Der Ort soll aussehen wie ein Traumziel.
-- Für Kunst die Kurzfassung (`ART_COMPOSITION`).
+**Feedback 13.10.:** Die Foto-Sets sahen generisch aus. Honolulu hatte zweimal dieselbe Komposition, Diamond Head
+stand hinter allen drei Bildern. Amalfi zeigte Steinstrand, Steinmole und Viadukt-Bögen, also laut statt ruhig. Die
+Häuser wirkten leicht KI-generisch. **Ursache:** Der Art Director hat jede Komposition selbst erfunden. Die alten
+Regeln („rahmender Vordergrund: Felsen“, „führende Linie: Steg“) haben ihn zu harten Stein-Vordergründen verleitet.
+Das Geografie-Foto bekam der Maler nur „für die Geografie“, die Häuser hat Nano Banana dazu erfunden.
 
-**Ortswissen aus den Bestsellern:** Das Orts-Briefing (Version 2) wird aus den Bildern der meistverkauften Poster des
-Ortes geschrieben, mit den Kompositionen, die sich dort verkaufen (z. B. „Bondis Bogen vom Klippenweg im Süden, das
-Icebergs-Becken im Vordergrund“). **Geografie-Fotos:** Für New ideas, Sets, Produktionen und Lab-Städte sieht der
-Art Director bis zu 5 echte Fotos des Ortes und wählt pro Bild das, welches das Motiv zeigt; der Maler bekommt es nur
-für die echte Geografie (nicht Licht, nicht Rahmen, nicht Stil).
+**Jetzt: Re-take.** Neue echte Fotos fotografieren echte, verkaufte Kompositionen neu. Das gilt für New ideas, Sets
+und Foto-Stile mit „nach Bestsellern Mid/High“:
+- Der Art Director sieht 8–12 Fotos aus den Bestseller-Postern der **Top-Shops des Ortes**, nummeriert. Von jedem
+  Shop kommt zuerst das beste Foto, dann der Rest. Die Referenz selbst ist nie dabei.
+- Jedes Bild nimmt eines davon (`photo`), nie eines doppelt. Nimmt er eins doppelt oder keins, wird einmal
+  nachgefragt.
+- **Die Nummer steht im Foto.** Der Art Director sieht sie groß oben links (`numbered` in `generate.ts`), der Maler
+  bekommt das Foto ohne. Nach Position gezählt und auch mit „Photo N“ zwischen den Bildern hat er jedes Mal das Foto
+  nach dem gemeinten genannt, weil er eine Beschriftung dem Bild davor zuordnet. Das zeigte der Test am 13.10.
+- Fotos, die frühere Sets **dieser Referenz** schon genommen haben, kommen erst wieder dran, wenn zu wenige übrig sind.
+  Früher erfundene Ansichten sperren die klassischen Motive nicht mehr.
+- Der Maler bekommt das Foto **als Szene**, die er noch einmal fotografiert. Jedes Haus, die Küste, die Berge und die
+  Wahrzeichen bleiben wie im echten Foto. Es soll aber **unser eigenes Foto** werden, nie dasselbe noch einmal: Die
+  Kamera steht ein paar Schritte weiter (etwas höher, tiefer oder seitlich, etwas weiter oder enger), dazu ein anderer
+  Moment (Sky, Licht), andere oder keine Boote und Menschen, kein Kram, Hochformat. Im ersten Test kam ein Positano
+  sonst mit demselben roten Boot an derselben Stelle. Den Look übernimmt er nur von der Referenz, nie Farben oder
+  Grading des Fotos, auch nicht bei Schwarzweiß.
+- **Prüfung der Antwort** (`retakeProblems`): Der Planer nennt zu jedem gewählten Foto die sichtbaren Wahrzeichen
+  (`landmarks`). Steht eines in zwei der ersten drei Bilder (Paris: zweimal Eiffelturm) oder ist ein Foto doppelt,
+  wird einmal nachgefragt. Für Sets sieht er 10–16 Fotos statt 8, damit auch bei Paris mehr als der Eiffelturm
+  dabei ist. Zeigt wirklich keines ein anderes nötiges Motiv, setzt er `photo` = 0 und komponiert dieses eine Bild aus
+  dem Orts-Briefing.
+- **Die Referenz nur für den Look:** Der Maler erfährt, welche Wahrzeichen die Referenz zeigt (`read.landmarks`), und
+  dass sie nicht ins Bild dürfen, außer die Szene zeigt sie. Eine Diamond-Head-Referenz hatte sonst Mokoliʻi durch
+  Diamond Head ersetzt. Und „behalte ihre Komposition“ steht nicht mehr im Prompt: Damit kam Ravello Pixel für Pixel
+  wie im Konkurrenzfoto zurück. Jetzt heißt es „alles darin bleibt echt, der Bildausschnitt nicht“.
+- **Set-Regel** (`retakeSetRule`):
+  - Die berühmteste Ansicht ist immer dabei.
+  - Jedes Bild hat ein eigenes Motiv **und einen eigenen Hintergrund**, Diamond Head steht also nur in einem Bild.
+  - Wo es Natur gibt, ist **ein reines Naturbild ohne Häuser** dabei: die Insel allein im Meer, die Bucht oder der
+    Strand von oben, Palmen über türkisem Wasser, ein Dünenweg.
+  - Die Bilder haben verschiedene Abstände und Standpunkte, also nie dreimal vom Balkon.
+
+**Ruhig an Natur- und Strandorten** (`calmText`, für die Settings beach, island, nature, lake und mountains sowie
+Küsten wie die Amalfiküste). Gelernt bei Traposto (Dünenwege, Holzstege, leere Strände von oben), bei Postour (die
+Insel allein im Pastellmeer) und an Amalfis Top-Shops (die Orte vom Weg oder einer Terrasse darüber):
+- Stille, ehrliche Blicke, ruhiges klares Wasser, viel Luft. Ein Ort ist Teil der Landschaft, aus der Ferne oder von
+  oben gesehen, nie eine Häuserwand über das ganze Bild.
+- Nie laut oder schwer: kein Kies- oder Steinstrand im Vordergrund, keine dunklen Mauern, Molen, Bögen oder Viadukte,
+  keine Brandung quer durchs Bild, keine Bootsbuge, keine dramatischen Untersichten.
+
+**Fotografische Grundregeln** (`PHOTO_COMPOSITION`, neu gefasst): ein echter Standpunkt, wie ihn die Bestseller zeigen;
+ein klares Motiv vom klassischen Standpunkt; einfach, wenig Elemente, viel Himmel; Vordergrund höchstens leicht am Rand
+(Zweig, Bougainvillea, Palmwedel, Dünengras, Geländer); am Wasser immer ruhig; nie Massentourismus.
+
+**Echte Häuser** (`REAL_RULES`): Jedes Gebäude hat seine eigene Form, Farbe, Fenster und Dach wie in den Fotos des
+Ortes. Nie generische Füllhäuser oder einen Hang aus fast gleichen Kisten. Dazu echte Optik: Details werden mit der
+Entfernung und im Dunst weicher, nichts ist überall gleich scharf.
+
+**Ortswissen aus den Bestsellern:** Das Orts-Briefing (Version 2) wird weiter aus den Bildern der meistverkauften
+Poster geschrieben. Für Kunst-Stile sieht der Art Director die Fotos weiterhin nur zur Geografie, der Maler bekommt
+keine.
 
 ## 7 · Stil-Treue mit „Manner“
 
@@ -210,4 +252,18 @@ lockeren Stilen (der Pink-Sketch hat dickere, wackeligere Linien als unsere Bild
   Amalfi mit Holzboot, Atrani durch den Viadukt-Bogen; Waikiki mit Diamond Head, Royal Hawaiian, Palmen über türkisem
   Wasser), alle echt, ohne Massen, mit dem Look der Referenz.
 
-**Gesamt seit 12.10.: über 150 Sync-Bilder, 0 Malfehler.**
+- **Re-take, 13.10. (Feedback zu Honolulu und Amalfi):**
+  - Erster Lauf: Bei Amalfi passten die gewählten Vorlagen. Bei Honolulu beschrieb der Planer jeweils das Foto
+    *vor* der genannten Nummer, nach Position gezählt und auch mit „Photo N“ als Text zwischen den Bildern. Mit der
+    Nummer groß im Foto stimmte jede Zuordnung.
+  - Neue Referenzen (Diamond Head von Postour, Amalfi von Postour): Positano mit neuem Boot und mehr Abstand, die
+    Skyline vom Diamond Head aus sowie Mokoliʻi mit Palmen waren echt und neu fotografiert. Ravello, die Statue und
+    die Faraglioni kamen zunächst fast deckungsgleich mit der Vorlage zurück. Mit „Bildausschnitt nicht übernehmen“
+    und einem konkreten Kamerastandpunkt vom Planer kamen sie mit neuem Ausschnitt.
+  - Kompletter Durchlauf mit der Atrani-Referenz: Positano vom Klippenweg (ruhig, Strand ohne Schirme), die Klippen
+    als reines Naturbild und Atrani vom Wasser aus, alle echt. Paris: Eiffelturm vom Trocadéro mit Wasserbecken,
+    Louvre-Pyramide mit Spiegelung und Pont d'Iéna, alle mit echter Architektur und eigenem Ausschnitt. Der Eiffelturm
+    kam dabei zweimal vor, daher die neue Wahrzeichen-Prüfung. Danach plante Paris Eiffelturm, Louvre und ein
+    Dächer-Panorama.
+
+**Gesamt seit 12.10.: über 180 Sync-Bilder, 0 Malfehler** (Ausfälle nur durch den Netzwerkausfall am 13.10.).

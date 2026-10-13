@@ -447,8 +447,12 @@ export type CityOutputInfo = {
   realPhoto?: boolean
   /** One of a set: its place in the set and its motif once planned. */
   set?: { index: number; size: number; motif?: string }
-  /** A real photo of the place showing its motif, given to the painter for the true geography only. */
-  geo?: { listingId: number; file: string }
+  /**
+   * A real photo of the place showing its motif, from a top shop's best
+   * seller: given to the painter for the true geography only, or with
+   * `retake` as the scene to photograph again (new real photos).
+   */
+  geo?: { listingId: number; file: string; retake?: boolean }
   /** Art styles painted by redrawing: the board poster (style file) the art director picked to redraw. */
   board?: string
   /** Old outputs: the inspirations it took on. */
