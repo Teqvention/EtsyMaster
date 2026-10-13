@@ -31,8 +31,13 @@ export { MAX_AUTO } from "./types"
 // board's images), so they're reviewed like any other, through the same lane
 // and batch jobs; every few go out as soon as they're planned.
 
-/** Posters planned per Gemini answer: a careful answer, and painting starts early. */
-const CHUNK = 8
+/**
+ * Posters planned per Gemini answer. A run up to this size is planned in one
+ * answer, so every poster in it is chosen knowing all the others (planned in
+ * eights, a run of 15 had three tigers and two bubblegum cats); a longer one
+ * goes in parts that each see the run so far.
+ */
+const CHUNK = 20
 const FOLDER = "Styles"
 const EMPTY: GenerateOptions = {
   variants: { count: 0, creativity: ["medium"], styleId: null },
@@ -165,7 +170,9 @@ export function expandAuto(batch: Batch): Output[] {
 
 // --- Planning ---
 
-type Plan = { level: string; anchor: number; refs: number[]; title: string; brief: string }
+type Plan = { level: string; anchor: number; refs: number[]; title: string; brief: string; subject: string }
+/** One poster to plan: its level and the board image (1-based) it takes its hand and kind of motif from. */
+type Slot = { level: Creativity; anchor: number }
 
 /** Plans the set's waiting Autonomous scale posters, a few at a time; `dispatch` sends each few out once planned. */
 export async function planAuto(id: string, dispatch: (outputs: string[]) => Promise<unknown>) {
@@ -182,19 +189,36 @@ export async function planAuto(id: string, dispatch: (outputs: string[]) => Prom
       return numbered(data, i + 1, study.files.length > 30 ? 384 : 512)
     })
   )
+  // Every poster of a run gets a board image of its own as anchor, the least used first: a run
+  // covers the board, its vibe pictures as much as its animals, and no two posters start alike.
+  const anchors = assignAnchors(set, study, todo.length)
+  const run = new Set(todo.map((o) => o.batch))
+  // Main subjects the run has planned so far ("tiger", "champagne bottle"…).
+  const taken: string[] = []
   for (let at = 0; at < todo.length; at += CHUNK) {
     set = await getSet(id)
     if (set.stopping) return
     const chunk = todo.slice(at, at + CHUNK)
+    const slots = chunk.map((o, i): Slot => ({ level: o.creativity, anchor: anchors[at + i] }))
     // Second tries share their first's brief.
     const made = set.outputs.filter((o) => o.auto && o.brief && !o.from)
     let plans: Plan[]
     try {
-      plans = await planChunk(set, study, chunk.map((o) => o.creativity), made, board)
+      plans = await planChunk(set, study, slots, made, run, board, taken)
+      // A main subject the run has already gets planned once more, told which ones are taken.
+      const twice = plans.map((p, i) => i).filter((i) => repeats(plans, i, taken))
+      if (twice.length) {
+        const again = await planChunk(set, study, twice.map((i) => slots[i]), made, run, board, [
+          ...taken,
+          ...plans.filter((_, i) => !twice.includes(i)).map((p) => p.subject),
+        ])
+        twice.forEach((i, k) => (plans[i] = again[k]))
+      }
     } catch (error) {
       console.error(`Generation ${id}, planning autonomous posters:`, error)
-      plans = chunk.map((o, i) => fallbackPlan(study, o.creativity, made.length + at + i))
+      plans = slots.map((slot) => fallbackPlan(study, slot))
     }
+    taken.push(...plans.map((p) => p.subject).filter(Boolean))
     const posterOf = (n: number) => {
       const index = set.style!.files.indexOf(study.files[n - 1] ?? "")
       return index < 0 ? 0 : index
@@ -212,15 +236,56 @@ export async function planAuto(id: string, dispatch: (outputs: string[]) => Prom
   }
 }
 
+/** `count` anchors (board numbers): each time one of the least used so far, by chance among them. */
+function assignAnchors(set: GenerationSet, study: StyleStudy, count: number) {
+  const numberOf = (poster: number) => study.files.indexOf(set.style!.files[poster] ?? "") + 1
+  const used = new Map<number, number>()
+  for (const o of set.outputs) {
+    const n = o.auto && o.brief && !o.from ? numberOf(o.poster) : 0
+    if (n > 0) used.set(n, (used.get(n) ?? 0) + 1)
+  }
+  // Weak posters only once the others can't fill the run.
+  const all = study.images.map((c) => c.n)
+  const strong = all.filter((n) => (study.images[n - 1]?.strength ?? 3) >= 3)
+  const pool = strong.length >= Math.min(count, all.length) ? strong : all
+  const anchors: number[] = []
+  for (let i = 0; i < count; i++) {
+    // Not twice in a run until every image has had its turn in it.
+    const fresh = pool.filter((n) => !anchors.slice(i - (i % pool.length)).includes(n))
+    const least = Math.min(...fresh.map((n) => used.get(n) ?? 0))
+    const options = fresh.filter((n) => (used.get(n) ?? 0) === least)
+    const n = options[Math.floor(Math.random() * options.length)]
+    anchors.push(n)
+    used.set(n, (used.get(n) ?? 0) + 1)
+  }
+  return anchors
+}
+
+/** A main subject as words to compare: "The Giant Pandas" and "panda" are one. */
+const subjectKey = (subject: string) =>
+  subject
+    .toLowerCase()
+    .replace(/^(a|an|the|two|three|four|five|six|several)\s+/, "")
+    .replace(/[^a-z ]/g, "")
+    .trim()
+    .replace(/(es|s)$/, "")
+
+/** Whether plan `i` repeats a main subject taken earlier in the run or by an earlier plan of the same answer. */
+function repeats(plans: Plan[], i: number, taken: string[]) {
+  const key = subjectKey(plans[i].subject)
+  if (!key) return false
+  return taken.some((t) => subjectKey(t) === key) || plans.slice(0, i).some((p) => subjectKey(p.subject) === key)
+}
+
 const LEVELS: Record<Creativity, string> = {
   minimal:
-    "minimal — a sibling of its anchor: the same kind of subject in the same pose, scene, composition, colours and feeling, with two or three small, visible changes (a prop, the food or drink, a pattern, a background detail, the animal's markings or kind). Expressions, pose, energy, light and palette stay exactly the anchor's.",
+    "minimal — a sibling of its anchor: the same kind of motif in the same pose, scene, composition, colours and feeling, with two or three small, visible changes (a prop, the food or drink, a pattern, a background detail; for an animal its kind or markings). Expressions, pose, energy, light and palette stay exactly the anchor's.",
   subtle:
-    "subtle — the anchor's scene idea with one real change: a different character, OR a different prop or activity, OR a similar but different setting; composed the way the anchor is, in its colours.",
-  low: "low — a remix within the series: the anchor's scene combined with an element of another board image (its character, setting or activity), in a fresh arrangement — a combination no board image shows already.",
+    "subtle — the anchor's scene idea with one real change: another main subject of the same kind, OR another prop or activity, OR a similar but different setting; composed the way the anchor is, in its colours.",
+  low: "low — a new picture of the anchor's kind in the series' world: its own subject and setting, borrowing freely from other board images — but never a picture any board image already shows.",
   medium:
-    "medium — a new scene from the series' world that isn't on the board: a character, setting and activity the anchor doesn't show (never the anchor's own setting or composition with another animal), composed the way the series composes.",
-  high: "high — the artist's most inventive next poster: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…) built from the series' world, unlike any board image. A new idea and composition — never a new look or a new feeling.",
+    "medium — a motif the board doesn't have, of the anchor's kind, in the series' world and feeling: new subject, setting and activity, freely composed the way the series composes.",
+  high: "high — the artist's most inventive next poster: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…), unlike any board image, with any kind of motif the board has. A new idea and composition — never a new look or a new feeling.",
 }
 
 const PLAN_SCHEMA = {
@@ -232,105 +297,128 @@ const PLAN_SCHEMA = {
         type: "OBJECT",
         properties: {
           level: { type: "STRING" },
-          anchor: { type: "INTEGER" },
+          subject: { type: "STRING" },
           refs: { type: "ARRAY", items: { type: "INTEGER" } },
           title: { type: "STRING" },
           brief: { type: "STRING" },
         },
-        required: ["level", "anchor", "refs", "title", "brief"],
-        propertyOrdering: ["level", "anchor", "refs", "title", "brief"],
+        required: ["level", "subject", "refs", "title", "brief"],
+        propertyOrdering: ["level", "subject", "refs", "title", "brief"],
       },
     },
   },
   required: ["posters"],
 }
 
-async function planChunk(set: GenerationSet, study: StyleStudy, levels: Creativity[], made: Output[], board: Buffer[]) {
-  const numberOf = (poster: number) => study.files.indexOf(set.style!.files[poster] ?? "") + 1
-  const used = new Map<number, number>()
-  for (const o of made) used.set(numberOf(o.poster), (used.get(numberOf(o.poster)) ?? 0) + 1)
+async function planChunk(
+  set: GenerationSet,
+  study: StyleStudy,
+  slots: Slot[],
+  made: Output[],
+  run: Set<string>,
+  board: Buffer[],
+  taken: string[]
+) {
+  const line = (o: Output) => `${o.title ?? "Poster"}: ${o.brief}`
   const answer = await askJson<{ posters?: Partial<Plan>[] }>(
-    planPrompt(set.style!.name, study, levels, made.map((o) => `${o.title ?? "Poster"}: ${o.brief}`), used),
+    planPrompt(
+      set.style!.name,
+      study,
+      slots,
+      made.filter((o) => run.has(o.batch)).map(line),
+      made.filter((o) => !run.has(o.batch)).map(line),
+      taken
+    ),
     board,
     { schema: PLAN_SCHEMA, temperature: 1 }
   )
   const got = answer.posters ?? []
   const count = study.files.length
   const valid = (n: unknown) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= count
-  return levels.map((level, i): Plan => {
+  return slots.map((slot, i): Plan => {
     const p = got[i]
-    if (!p?.brief || !valid(p.anchor)) return fallbackPlan(study, level, made.length + i)
-    const anchor = p.anchor as number
-    const family = familyOf(study, anchor)
-    // Two more of the anchor's hand when the family has them: the hand reads clearer from three.
+    if (!p?.brief) return fallbackPlan(study, slot)
+    const { anchor } = slot
+    // Two more of the anchor's hand when its family has them: the hand reads clearer from three.
     const refs = (p.refs ?? []).filter((n, k, all) => valid(n) && n !== anchor && all.indexOf(n) === k).slice(0, 2)
-    const kin = (family?.images ?? []).filter((n) => n !== anchor && !refs.includes(n))
+    const kin = (familyOf(study, anchor)?.images ?? []).filter((n) => n !== anchor && !refs.includes(n))
     const strongest = kin.toSorted((a, b) => (study.images[b - 1]?.strength ?? 0) - (study.images[a - 1]?.strength ?? 0))
     return {
-      level,
+      level: slot.level,
       anchor,
       refs: [...refs, ...strongest].slice(0, 2),
       title: (p.title ?? "").trim().slice(0, 80) || "New poster",
       brief: p.brief.trim(),
+      subject: (p.subject ?? "").trim().slice(0, 60),
     }
   })
 }
 
 const familyOf = (study: StyleStudy, n: number) => study.families.find((f) => f.images.includes(n))
+const kindOf = (study: StyleStudy, n: number) => study.kinds?.find((k) => k.images.includes(n))
+const letter = (i: number) => String.fromCharCode(65 + i)
 
-/** A plan without Gemini: the strongest images in turn, with the level's own words. */
-function fallbackPlan(study: StyleStudy, level: Creativity, k: number): Plan {
-  const strong = study.images.toSorted((a, b) => b.strength - a.strength)
-  const card = strong[k % strong.length]
+/** A plan without Gemini: the slot's anchor, with the level's own words. */
+function fallbackPlan(study: StyleStudy, { level, anchor }: Slot): Plan {
+  const card = study.images[anchor - 1]
   return {
     level,
-    anchor: card.n,
-    refs: familyOf(study, card.n)?.images.filter((n) => n !== card.n).slice(0, 1) ?? [],
-    title: card.title,
-    brief: `A new poster after image 1 (${card.title}: ${card.subject}), creativity ${LEVELS[level]}`,
+    anchor,
+    refs: familyOf(study, anchor)?.images.filter((n) => n !== anchor).slice(0, 1) ?? [],
+    title: card?.title ?? "New poster",
+    brief: `A new poster after image 1${card ? ` (${card.title}: ${card.subject})` : ""}, creativity ${LEVELS[level]}`,
+    subject: "",
   }
 }
 
-function planPrompt(name: string, study: StyleStudy, levels: Creativity[], made: string[], used: Map<number, number>) {
-  const family = (n: number) => {
-    const at = study.families.findIndex((f) => f.images.includes(n))
-    return at < 0 ? "" : `family ${String.fromCharCode(65 + at)}, `
+function planPrompt(name: string, study: StyleStudy, slots: Slot[], run: string[], earlier: string[], taken: string[]) {
+  const kinds = study.kinds ?? []
+  const tag = (n: number) => {
+    const kind = kinds.findIndex((k) => k.images.includes(n))
+    const family = study.families.findIndex((f) => f.images.includes(n))
+    return [kind >= 0 && `kind ${letter(kind)}`, family >= 0 && `family ${letter(family)}`].filter(Boolean).join(", ")
   }
-  const most = Math.max(1, Math.ceil((levels.length * 1.5) / study.files.length))
-  const busy = [...used.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1])
+  const levels = [...new Set(slots.map((s) => s.level))]
   return [
     `You are the art director of a successful Etsy wall-art shop. The images are the board of our style "${name}" — ${study.files.length} best sellers, each numbered in a dark badge top left. We continue the series with NEW, ORIGINAL posters that a buyer can't tell apart from the board: the same look and the same feeling, new pictures.`,
     `The series (our study of every image):
 ${study.essence}
 Emotion: ${study.emotion}
 World — subjects: ${study.world.subjects.join("; ")}. Settings: ${study.world.settings.join("; ")}. Props: ${study.world.props.join("; ")}. Activities: ${study.world.activities.join("; ")}.
-Compositions: ${study.compositions.join("; ")}.
+Compositions: ${study.compositions.join("; ")}.${
+      kinds.length
+        ? `\nKinds of motif (the series is all of them, not only its most common subject):\n${kinds.map((k, i) => `${letter(i)}. ${k.name} (images ${k.images.join(", ")}): ${k.why}`).join("\n")}`
+        : ""
+    }
 Families (one hand each):
-${study.families.map((f, i) => `${String.fromCharCode(65 + i)}. ${f.name} (images ${f.images.join(", ")}): ${f.look}`).join("\n")}
+${study.families.map((f, i) => `${letter(i)}. ${f.name} (images ${f.images.join(", ")}): ${f.look}`).join("\n")}
 Keep: ${study.keep.join("; ")}.
 Avoid: ${study.avoid.join("; ")}.`,
-    `The board, image by image:\n${study.images.map((c) => `${c.n}. ${c.title} — ${c.subject}; ${c.scene}. Composition: ${c.composition}. Emotion: ${c.emotion}.${c.text ? ` Text: ${c.text}.` : ""} [${family(c.n)}strength ${c.strength}]`).join("\n")}`,
-    `Task: plan ${levels.length} new posters, one per line below, each at its creativity level. An image model paints each from its anchor — the board image whose look it must match — and one or two more board images of the anchor's family. The creativity level says how far the PICTURE moves from the board; the look and the feeling never move.`,
-    `Creativity levels:\n${[...new Set(levels)].map((l) => `- ${LEVELS[l]}`).join("\n")}`,
+    `The board, image by image:\n${study.images.map((c) => `${c.n}. ${c.title} — ${c.subject}; ${c.scene}. Composition: ${c.composition}. Emotion: ${c.emotion}.${c.text ? ` Text: ${c.text}.` : ""} [${tag(c.n)}, strength ${c.strength}]`).join("\n")}`,
+    `Task: plan ${slots.length} new posters, one per line below. Each has its creativity level and its anchor: the board image whose hand (the whole look) and kind of motif it takes. An image model paints each from its anchor and one or two more board images of the anchor's family. The creativity level says how far the PICTURE moves from the board; the look and the feeling never move.`,
+    `Creativity levels:\n${levels.map((l) => `- ${LEVELS[l]}`).join("\n")}`,
     `For every poster:
-- Feeling: exactly the series' — the characters' expressions, body language and energy belong in it. Never quieter, sadder, darker, moodier, more dramatic or more serious than the board.
+- Motif: keep the anchor's kind of motif. A kind without animals stays without them: a hand with a champagne bottle in the waves leads to new pictures of hands, drinks, water, summer and parties — never to an animal; a garden party leads to people, tables, food and places. Within its kind, be free and inventive: subjects, objects, places and situations the board doesn't show. Only at high creativity may a poster take another kind the board has.
+- All different: every poster of this run is its own picture. No two posters of the run — the list below and "This run so far" — share their main subject (a second tiger, a second panda or a second champagne bottle is a repeat; two cats of different colours are a repeat too), their setting or their activity. Draw on the whole range of the series' world and beyond it, within each anchor's kind. Never repeat a combination from "Earlier runs".
+- Free from the board's pictures: from low upwards take the anchor's hand and feeling, not its scene; invent pictures the board doesn't have.
+- Feeling: exactly the series' — expressions, body language, energy, warmth and humour belong in it. Never quieter, sadder, darker, moodier, more dramatic or more serious than the board.
 - Simplicity: about as many elements as the anchor; anything new is as simple as the anchor's own things (a library is a few shelves of colour blocks, not a hundred books).
 - Look: never describe palette, light, texture or rendering — the painter takes all of that from the anchor. Name colours only for new objects, from the anchor's palette.
-- Unique: each poster is a different picture — vary characters, settings, activities and compositions across the list. Medium and high posters differ from every other poster here and in "Already made" in their setting or activity, not just their animal (a lotus pool with another animal is a repeat); minimal, subtle and low ones never repeat another's combination.
 - Plain words: describe things plainly (a pink tub, a lotus pool, a striped robe) — never words that ask for more detail or finish than the anchor has (intricate, detailed, ornate, elaborate, glossy, realistic, geometric patterns), unless the anchor has exactly that.
-- Original: a new painting, never a copy of a board image; even a minimal sibling has its own visible changes. Above minimal, no poster may end up as another board image's picture (e.g. pigs at a brunch table when a board image already shows pigs at a brunch table).
+- Original: a new painting, never a copy of a board image; even a minimal sibling has its own visible changes. Above minimal, no poster may end up as another board image's picture.
 - Lettering: only where the anchor has lettering — then new, short words in the same lettering; otherwise none.
-- Anchor: the board image whose family and look fit the new picture best. Spread the anchors over the board: no anchor more than ${most} times in this list, strong images (strength 4–5) first. "refs": one or two other images of the anchor's family, never the anchor.
+- "refs": one or two other images of the anchor's family whose hand is closest to the anchor's, never the anchor.
 - It sells: instantly charming, funny or beautiful on its own, like the best images on the board.`,
-    busy.length > 0 && `Anchors used often already (prefer others): ${busy.map(([n, k]) => `${n} (${k}×)`).join(", ")}.`,
-    `Posters to plan, in order:\n${levels.map((l, i) => `${i + 1}. creativity ${l}`).join("\n")}`,
-    // The latest in full, older ones by title: a long run still sees everything it made.
-    made.length > 0 &&
-      `Already made — every new poster must differ clearly from these:\n${[
-        ...made.slice(0, -40).map((m) => `- ${m.split(": ")[0]}`),
-        ...made.slice(-40).map((m) => `- ${m}`),
+    `Posters to plan, in order:\n${slots.map((s, i) => `${i + 1}. creativity ${s.level} — anchor ${s.anchor}${kindOf(study, s.anchor) ? ` (kind: ${kindOf(study, s.anchor)!.name})` : ""}`).join("\n")}`,
+    run.length > 0 && `This run so far — every new poster differs from these in subject, setting and activity:\n${run.map((m) => `- ${m}`).join("\n")}`,
+    taken.length > 0 && `Main subjects this run has already — use none of them again: ${[...new Set(taken)].join(", ")}.`,
+    // The latest in full, older ones by title: a long history still shows everything made.
+    earlier.length > 0 &&
+      `Earlier runs — never repeat one of these combinations:\n${[
+        ...earlier.slice(0, -30).map((m) => `- ${m.split(": ")[0]}`),
+        ...earlier.slice(-30).map((m) => `- ${m}`),
       ].join("\n")}`,
-    `For each poster, in order: "level" (as given), "anchor" (board number), "refs" (board numbers), "title" (2–5 words), "brief" (3–5 sentences the painter follows: the subject and what it does, its expression and body language, the setting and props, the composition — viewpoint, framing, where the subject sits and how much of the canvas it fills — and the lettering, or "no lettering"). Write what the picture shows; the look comes from the anchor. Never name artists, shops, brands or copyrighted characters.`,
+    `For each poster, in order: "level" (as given), "subject" (its main subject in one to three plain words, e.g. "tiger", "champagne bottle", "woman"), "refs" (board numbers), "title" (2–5 words), "brief" (3–5 sentences the painter follows: the subject and what it does, its expression and body language where it has any, the setting and props, the composition — viewpoint, framing, where the subject sits and how much of the canvas it fills — and the lettering, or "no lettering"). Write what the picture shows; the look comes from the anchor. Never name artists, shops, brands or copyrighted characters.`,
   ]
     .filter(Boolean)
     .join("\n\n")

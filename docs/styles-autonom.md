@@ -15,13 +15,21 @@ sein Gefühl treffen, und wie Variants und New ideas näher am echten Stil bleib
    Gemini jedes Bild einzeln (Motiv, Komposition, Emotion, Malweise, Stärke als Poster) und danach das Board als
    Serie (Welt, Gefühl, Familien gleicher Hand, Regeln). Die Studie bleibt am Style gespeichert und wird nur neu
    gelesen, wenn sich das Board ändert.
-3. **Jedes neue Poster hat einen Anker:** das Board-Bild, dessen Hand es übernimmt, plus ein bis zwei Bilder derselben
-   Familie. Nano Banana bekommt diese Bilder, nicht eine Beschreibung des Stils.
-4. **Der Planer beschreibt nur den Inhalt.** Kein Wort über Palette, Textur oder Pinselstrich (Nano Banana übertreibt
+3. **Jedes neue Poster hat einen Anker:** das Board-Bild, dessen Hand und Art von Motiv es übernimmt, plus ein bis
+   zwei Bilder derselben Familie. Nano Banana bekommt diese Bilder, nicht eine Beschreibung des Stils. Die Anker teilt
+   der Code zu: in einer Runde jedes Board-Bild höchstens einmal (bis alle dran waren), die bisher seltensten zuerst.
+4. **Die Art des Motivs bleibt, das Motiv ist frei.** Die Studie teilt das Board in Motiv-Arten (dopamin: Tiere im
+   Luxus, Solo-Porträts, Muster und Draufsicht, Feier-Vibes ohne Tiere). Ein Vibe-Anker (Hand mit Champagner im Meer,
+   Gartenparty, Discokugel-Gläser) ergibt neue Vibe-Bilder — Hände, Getränke, Menschen, Orte, Stillleben —, nie ein
+   hineingesetztes Tier. Erst Stufe High darf die Art wechseln.
+5. **In einer Runde ist jedes Bild anders:** anderes Hauptmotiv, anderer Ort, andere Tätigkeit. Bis 20 Bilder plant
+   Gemini die Runde in einer Antwort; jedes Bild nennt sein Hauptmotiv, und ein doppeltes wird mit der Liste der
+   vergebenen einmal neu geplant.
+6. **Der Planer beschreibt nur den Inhalt.** Kein Wort über Palette, Textur oder Pinselstrich (Nano Banana übertreibt
    solche Worte: „heavy impasto“ wird zu Wülsten, „detailed fur“ zu feinem Fell). Den Look nimmt der Maler aus dem Anker.
-5. **Jedes Poster wird geprüft.** Gemini vergleicht es mit seinem Anker (gleiche Hand? gleiches Gefühl? starkes
+7. **Jedes Poster wird geprüft.** Gemini vergleicht es mit seinem Anker (gleiche Hand? gleiches Gefühl? starkes
    Poster?) und schreibt die Noten ans Bild. Abgelehnt oder neu gemalt wird automatisch nichts (warum: siehe 5).
-6. **Styles fassen beliebig viele Bilder** (`MAX_IMAGES` = 1000). Die Style-Beschreibung liest weiter eine Auswahl,
+8. **Styles fassen beliebig viele Bilder** (`MAX_IMAGES` = 1000). Die Style-Beschreibung liest weiter eine Auswahl,
    die Studie für Autonomous scale jedes Bild.
 
 ## 2 · Die fünf Stufen bei Autonomous scale
@@ -133,6 +141,14 @@ sechs stilecht und eigenständig; Gemini gab trotzdem meist Stil 6–7.
 **Robins Review währenddessen** (13:41–13:43 UTC): 13 freigegeben, darunter fünf, die Gemini mit Stil 5–6
 durchfallen lassen wollte (Discokugel-Katze, Tigerbaby mit Torte, Panda auf der Gartenparty, Panda in der Wanne,
 Katze auf der Toilette) — der Grund, warum nichts automatisch abgelehnt wird.
+
+**Robins Feedback danach (13.10., 13:50):** dasselbe Bild kam doppelt (die zweiten Versuche der damaligen
+Prüfschleife, inzwischen aus und gelöscht); überall Tiger, Katzen und Pandas, auch in Vibe-Bildern („Hand und
+Champagner im Wasser“ wurde ein Tiger im Bett mit Händen); alle Bilder einer Runde sollen verschieden sein. Daraus die
+Motiv-Arten in der Studie (Version 2, ältere Studien werden neu gelesen), feste verschiedene Anker pro Runde, eine Runde
+bis 20 in einer Antwort und die Prüfung doppelter Hauptmotive. Gegenprobe (15 Bilder): 15 verschiedene Anker,
+Hauptmotive Schneeleopard, Schildkröten, Faultier, Giraffe, Löwenpfote, Jaguar, Perserkatze, Pool-Party, Gepard,
+Eisbär, Dalmatiner, Löwe, roter Panda, Waschbär, Tennis-Stillleben mit Discokugel.
 
 **Kosten der Tests:** 50 Bilder (dopamin 38 inklusive der verworfenen zweiten Versuche, Impasto 5, Katze 2,
 Tiger 5), freigegeben waren 200.

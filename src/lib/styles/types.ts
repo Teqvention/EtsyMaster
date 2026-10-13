@@ -94,6 +94,14 @@ export type StyleStudy = {
   compositions: string[]
   /** Images painted by one hand; every image is in one. */
   families: { name: string; look: string; images: number[] }[]
+  /**
+   * Kinds of motif (e.g. animals in human luxury, celebration vibes with only
+   * hands and drinks); every image is in one. A new poster keeps its anchor's
+   * kind, so a board's vibe pictures don't all turn into its most common animal.
+   */
+  kinds?: { name: string; why: string; images: number[] }[]
+  /** What the study was read for (see `STUDY_VERSION` in study.ts). */
+  version?: number
   images: StudyImage[]
   /** What every new poster keeps. */
   keep: string[]

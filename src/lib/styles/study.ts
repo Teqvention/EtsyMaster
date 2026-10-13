@@ -22,9 +22,15 @@ const CHUNK = 6
 const global = globalThis as typeof globalThis & { __styleStudyRuns?: Map<string, Promise<StyleStudy>> }
 const studying = (global.__styleStudyRuns ??= new Map())
 
-/** Whether `study` was read from the board as it is now. */
+/** 2: the kinds of motif (13 Oct): studies before them are read again. */
+const STUDY_VERSION = 2
+
+/** Whether `study` was read from the board as it is now, for what this code needs. */
 export const studyFits = (style: Style, study = style.study) =>
-  !!study && study.files.length === style.images.length && study.files.every((f, i) => style.images[i]?.file === f)
+  !!study &&
+  (study.version ?? 1) >= STUDY_VERSION &&
+  study.files.length === style.images.length &&
+  study.files.every((f, i) => style.images[i]?.file === f)
 
 /** The style's study, read again first when the board changed since (one read at a time per style). */
 export async function ensureStudy(id: string): Promise<StyleStudy> {
@@ -141,8 +147,9 @@ Study the board as one series and write:
 - emotion: the feeling every poster shares, precisely (expressions, energy, humour, warmth of light), and what it never is (e.g. never moody, dark or melancholic; never slapstick).
 - world: what recurs — subjects (kinds of characters or objects), settings, props, activities. 6–15 concrete items each, as observed.
 - compositions: 4–8 recurring compositions (viewpoint, framing, where the subject sits), e.g. "one animal centred, full figure, in a clawfoot tub seen slightly from above".
+- kinds: group the images by their kind of motif — e.g. "animals living in human luxury", "celebration vibes without animals: hands, drinks, people, tables", "pattern compositions". 1–5 kinds; every image in exactly one. For each: a short name, "why" (1–2 sentences: what these pictures show and why they work) and its image numbers. A board is often more than its most common subject: name the kinds without it too.
 - families: group the images by the hand that painted them — images sharing one rendering (medium, paint handling, edges, detail, space, palette, light). 1–5 families; every image in exactly one. For each: a short name, "look" (3–5 sentences, precise enough for a painter to match: medium, stroke size and looseness, edges and outlines, detail level, depth, palette with hex, light), and its image numbers.
-- keep: 5–8 rules every new poster keeps to belong to the series.
+- keep: 5–8 rules every new poster keeps to belong to the series. Emotion, keep and avoid must hold for every kind of image on the board: never a rule from one kind that the others break (like "every poster shows an animal" when some show none).
 - avoid: 5–8 things that would break it — first what image models do by default (glossy or realistic rendering, cinematic light, more detail than the board, darker or muted colours, smooth digital gradients), then what this series never does.
 
 Never name artists, shops or brands.`
@@ -184,7 +191,7 @@ const CARDS_SCHEMA = {
   required: ["images"],
 }
 
-const SERIES_FIELDS = ["essence", "emotion", "world", "compositions", "families", "keep", "avoid"]
+const SERIES_FIELDS = ["essence", "emotion", "world", "compositions", "kinds", "families", "keep", "avoid"]
 const SERIES_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -196,6 +203,15 @@ const SERIES_SCHEMA = {
       required: ["subjects", "settings", "props", "activities"],
     },
     compositions: STRINGS,
+    kinds: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { name: STRING, why: STRING, images: { type: "ARRAY", items: { type: "INTEGER" } } },
+        required: ["name", "why", "images"],
+        propertyOrdering: ["name", "why", "images"],
+      },
+    },
     families: {
       type: "ARRAY",
       items: {
@@ -237,25 +253,40 @@ function toCards(value: unknown, numbers: number[]): StudyImage[] {
   })
 }
 
+/** Groups of image numbers from Gemini, each image in one group; ones left out join the first group. */
+function grouped<T extends { images: number[] }>(value: unknown, count: number, make: (g: Record<string, unknown>) => Omit<T, "images">, empty: Omit<T, "images">): T[] {
+  const seen = new Set<number>()
+  const groups = (Array.isArray(value) ? value : [])
+    .map((g: Record<string, unknown>) => ({
+      ...make(g),
+      images: (Array.isArray(g?.images) ? g.images : [])
+        .map(Number)
+        .filter((n: number) => Number.isInteger(n) && n >= 1 && n <= count && !seen.has(n) && seen.add(n)),
+    }) as T)
+    .filter((g) => g.images.length)
+  const missing = Array.from({ length: count }, (_, i) => i + 1).filter((n) => !seen.has(n))
+  if (missing.length) {
+    if (groups.length) groups[0].images.push(...missing)
+    else groups.push({ ...empty, images: missing } as T)
+  }
+  return groups
+}
+
 function toStudy(v: Record<string, unknown>, images: StudyImage[], files: string[]): StyleStudy {
   const world = (v.world ?? {}) as Record<string, unknown>
   const count = files.length
-  const seen = new Set<number>()
-  const families = (Array.isArray(v.families) ? v.families : [])
-    .map((f: Record<string, unknown>) => ({
-      name: text(f?.name, 80) || "Family",
-      look: text(f?.look, 1400),
-      images: (Array.isArray(f?.images) ? f.images : [])
-        .map(Number)
-        .filter((n: number) => Number.isInteger(n) && n >= 1 && n <= count && !seen.has(n) && seen.add(n)),
-    }))
-    .filter((f) => f.images.length)
-  // An image left out of every family joins the first one.
-  const missing = images.map((c) => c.n).filter((n) => !seen.has(n))
-  if (missing.length) {
-    if (families.length) families[0].images.push(...missing)
-    else families.push({ name: "The board", look: "", images: missing })
-  }
+  const families = grouped<StyleStudy["families"][number]>(
+    v.families,
+    count,
+    (f) => ({ name: text(f?.name, 80) || "Family", look: text(f?.look, 1400) }),
+    { name: "The board", look: "" }
+  )
+  const kinds = grouped<NonNullable<StyleStudy["kinds"]>[number]>(
+    v.kinds,
+    count,
+    (k) => ({ name: text(k?.name, 120) || "Motif", why: text(k?.why, 600) }),
+    { name: "The board", why: "" }
+  )
   return {
     essence: text(v.essence, 1200),
     emotion: text(v.emotion, 1200),
@@ -267,10 +298,12 @@ function toStudy(v: Record<string, unknown>, images: StudyImage[], files: string
     },
     compositions: texts(v.compositions, 10),
     families,
+    kinds,
     images,
     keep: texts(v.keep, 10),
     avoid: texts(v.avoid, 10),
     files,
     at: new Date().toISOString(),
+    version: STUDY_VERSION,
   }
 }
