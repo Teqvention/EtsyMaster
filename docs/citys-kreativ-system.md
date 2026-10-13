@@ -352,3 +352,13 @@ relevanter Ort; die Lücke war die Faltung.
   als Vorbelegung, Titel-Zuordnung ohne Gemini für bekannte Namen, Etsy-Suchvolumen als Zusatzsignal.
 - Hinweis: Das Ranking steht seit 13.10. 06:47 auf Scope „Real“ (8 von 22 Shops) — für „welche Orte fehlen“ alle
   Shops wählen.
+
+## 17 · Set of 3: das Wahrzeichen in einem Bild, Textur (13.10.)
+
+- **Ein Wahrzeichen steht in genau einem Bild eines Sets** — auch nicht im Hintergrund, am Horizont oder hinter einer
+  Brücke. Ein Paris-Set hatte den Eiffelturm vom Trocadéro und noch einmal hinter dem Pont d'Iéna, ein Style-Set in
+  allen drei Bildern. Robin: lieber Montmartre, Arc de Triomphe oder ein süßes Café. Geprüft für jedes Set (Fotos und
+  Styles) über die `landmarks` jedes Bildes und den Namen in den anderen Briefs (`setRepeats` in prompts.ts); bei einer
+  Wiederholung wird einmal neu geplant.
+- **Textur:** gemalte Poster bekommen die Textur ihres Originals (Korn, bei Kunst leicht fleckige Farbe, weichere
+  Kanten), siehe `docs/styles-autonom.md` Abschnitt 8.

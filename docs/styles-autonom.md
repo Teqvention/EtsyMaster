@@ -188,3 +188,25 @@ Tiger 5), freigegeben waren 200.
   ein Klick filtert auf die Poster eines Ankers. **Scale more** startet die nächste Runde, die alle bisherigen kennt.
 - Review wie gewohnt; „Art direction“ zeigt Brief und Prüfnoten. Gute Bilder können per „Add to style“ wieder aufs
   Board, dann kennt die nächste Studie sie mit.
+
+## 8 · Textur: weniger KI-glatt (13.10.)
+
+Robin: „alles so glatt“ — die Bilder sehen neben den Originalen zu stark nach KI aus. Gemessen (100-%-Ausschnitte, in
+den Flächen bei 1024 px Höhe): unsere Bilder hatten die Hälfte bis ein Drittel des feinen Korns der Originale,
+messerscharfe Kanten und bei Fotos einen glasglatten Himmel. Ein Prompt allein ändert das kaum.
+
+**Textur-Schritt** (`src/lib/generation/texture.ts`), nach dem Malen jedes Posters (nicht bei Mockups), in `bringIn`
+und `draw` (run.ts):
+1. Die Textur des Originals wird gemessen (feines Korn und Fleckigkeit in mittlerer Größe, Kanten ausgenommen): der
+   Referenz-Poster des Sets, der Anker bei Autonomous scale oder das erste Bild eines gewählten Styles.
+2. Kanten einen Hauch weicher (Kunst 0,45, Foto 0,25 px bei 1024 px).
+3. Korn (Graustufen-Rauschen, leicht weich, per Soft-Light) bis zum Korn des Originals, höchstens 2,2.
+4. Nur Kunst: leicht fleckige Farbe wie echte Pigmente, bis zum Original, höchstens 3,5. Bei Fotos nicht: dort
+   sah es aus wie Schmutz am Himmel.
+Die Stärke wird pro Bild durch einen Probelauf bestimmt (Korn addiert sich quadratisch). Alles Schwere läuft in
+sharp/libvips, höchstens zwei Poster gleichzeitig, etwa 2–3 s je Bild. Ein glattes, flaches Original bekommt
+entsprechend wenig dazu.
+
+Dazu in allen Maler-Prompts (Variants, Ideas, Autonomous scale, Citys-Kunst): echtes Material — Papierkorn oder
+Leinwand, leicht ungleichmäßige Farbe im Strich, trockene Kanten; Citys-Fotos: kein glasglatter Himmel, feines
+natürliches Korn wie aus einer echten Kamera.
