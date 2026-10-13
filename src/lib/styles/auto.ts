@@ -293,7 +293,7 @@ const LEVELS: Record<Creativity, string> = {
   low: "low — a new picture of the anchor's kind in the series' world: its own subject and setting, borrowing freely from other board images — but never a picture any board image already shows.",
   medium:
     "medium — a motif the board doesn't have, of the anchor's kind, in the series' world and feeling: new subject, setting and activity, freely composed the way the series composes.",
-  high: "high — the artist's most inventive next poster: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…), unlike any board image, with any kind of motif the board has. A new idea and composition — never a new look or a new feeling.",
+  high: "high — the artist's most inventive next poster of the anchor's kind: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…), unlike any board image. A new idea and composition — never a new look or a new feeling.",
 }
 
 /** For own compositions the level says how far the motif goes beyond the board's world. */
@@ -420,7 +420,7 @@ Avoid: ${study.avoid.join("; ")}.`,
     freeLevels.length > 0 &&
       `Own compositions: the posters marked "own composition" start from no board picture. Their anchor only lends its hand (the look the painter matches); its picture and kind don't bind them. Invent a picture of your own — composition, subject, setting and idea — that a buyer would place in this series at once: the series' look, feeling and humour, any kind of motif the board has, a composition unlike any board image.`,
     `For every poster:
-- Motif: keep the anchor's kind of motif. A kind without animals stays without them: a hand with a champagne bottle in the waves leads to new pictures of hands, drinks, water, summer and parties — never to an animal; a garden party leads to people, tables, food and places. Within its kind, be free and inventive: subjects, objects, places and situations the board doesn't show. Only at high creativity may a poster take another kind the board has.
+- Motif: keep the anchor's kind of motif. A kind without animals stays without them: a hand with a champagne bottle in the waves leads to new pictures of hands, drinks, water, summer and parties — never to an animal; a garden party leads to people, tables, food and places. Within its kind, be free and inventive: subjects, objects, places and situations the board doesn't show. This holds at every level, high included; only an own composition may take any kind.
 - All different: every poster of this run is its own picture. No two posters of the run — the list below and "This run so far" — share their main subject (a second tiger, a second panda or a second champagne bottle is a repeat; two cats of different colours are a repeat too), their setting or their activity. Draw on the whole range of the series' world and beyond it, within each anchor's kind. Never repeat a combination from "Earlier runs".
 - Free from the board's pictures: from low upwards take the anchor's hand and feeling, not its scene; invent pictures the board doesn't have.
 - Feeling: exactly the series' — expressions, body language, energy, warmth and humour belong in it. Never quieter, sadder, darker, moodier, more dramatic or more serious than the board.
@@ -456,6 +456,7 @@ Avoid: ${study.avoid.join("; ")}.`,
 // --- Painting ---
 
 const RULES = `Rules:
+- The images may be photos of framed prints, on a wall or in someone's hands: only the artwork inside counts — never paint a frame, wall, room or hands that hold it.
 - Original work: paint every element new. Never reproduce a board image's exact composition, characters, linework or wording, and never include logos, brands, trademarks, signatures, watermarks, artist names or copyrighted characters.
 - Any text must be new wording, spelled correctly and cleanly lettered; leave text out unless the description asks for it.
 - Output only the flat artwork, front-on, filling the canvas edge to edge: no frame, mat, wall, room, mockup, hands, drop shadow or border that isn't part of the art.`
