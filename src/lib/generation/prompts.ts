@@ -118,6 +118,10 @@ function briefPrompt({ mode, levels, analysis, title, style, feedback, avoid, ba
     !style && KEEP_FEELING(analysis),
     base &&
       `Start from our own earlier poster, the second image ("${base.title}": ${base.brief}). The shop owner liked enough of it to want more: each brief develops it further — keep what works, change what the notes ask for, and at higher creativity move further away from it.`,
+    // "More like this" with notes ("without the right paw, everything else the same") turned a cake into a donut too (13 Oct).
+    base &&
+      feedback &&
+      `The notes are the change. At minimal and subtle creativity, change exactly what they ask and keep everything else of the earlier poster as it is — the same subject, pose, props, food, colours and composition; no other new details. At higher creativity, apply them first, then move as far as the level allows.`,
     inspiration?.length &&
       `Images 2–${inspiration.length + 1} are our own posters from this reference that the shop owner approved:\n${inspiration.map((b, i) => `${i + 2}. ${b.title}: ${b.brief}`).join("\n")}\nWork out what they have in common — the kind of characters, places, activities, humour and finish the owner picks — and write new ideas in that spirit. Each must be a new picture of its own, never a copy or small edit of one of them.`,
     style && `Style to use:\n${styleText(style)}`,
@@ -203,7 +207,10 @@ export function paintPrompt({
     moodboard > 0 && `Images 2–${moodboard + 1} are a moodboard: they define the visual style to paint in (medium, palette, texture, lighting). Take only their style, never their subjects.`,
     inspiration > 0 &&
       `The next ${inspiration === 1 ? "image is one" : `${inspiration} images are`} of our own approved posters: match their art style, finish and quality bar, but paint the new idea below — never copy their scenes.`,
-    previous && `The last image is our previous attempt: keep what works in it and change what the notes ask for.`,
+    previous &&
+      (feedback
+        ? `The last image is our previous attempt: change exactly what the notes ask for and keep everything else in it as it is, unless the art direction says otherwise.`
+        : `The last image is our previous attempt: keep what works in it and change what the notes ask for.`),
   ].filter(Boolean)
   return [
     ...images,
