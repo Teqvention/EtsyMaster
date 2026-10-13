@@ -167,16 +167,26 @@ const ANALYSIS_PROMPT = (title: string) => `You are an art director for a succes
 Return:
 - summary: one vivid line of what the poster shows.
 - subject, setting, action: the main character/object, where it is, what it's doing (empty string if not applicable).
-- style: medium and rendering in precise art terms — how loose or tight, how thick the paint, how much detail and where (e.g. "gouache illustration, loose visible brush strokes, flat shading, slightly naive proportions, few details", "Japanese woodblock print, bold outlines, flat colour, washi texture").
-- palette: 4–7 dominant colours as hex, most dominant first.
+- style: medium and rendering in precise art terms — how loose or tight, how thick the paint, how much detail and where, how sharply the subject stands out or melts into its surroundings, how realistic or dreamy it is (e.g. "gouache illustration, loose visible brush strokes, flat shading, slightly naive proportions, few details", "dreamy oil, the tiger half dissolved in hazy jungle colour, drips", "Japanese woodblock print, bold outlines, flat colour, washi texture").
+- palette: 4–7 dominant colours as hex, most dominant first, as they are — soft, hazy, muted or pastel colours aren't neon.
 - composition: framing, viewpoint, placement, negative space, borders.
 - typography: the exact words on the poster and how they're lettered, or null if there is no text.
 - mood: the feeling it gives, precisely: the characters' expressions and body language (e.g. eyes closed in bliss, smug side-eye), the energy (calm, cheeky, exuberant), the warmth of the light, the humour.
 - audience: who buys it and which room it's for.
 - hook: why it sells — the concept, joke, contrast or feeling that makes people buy it.
+Describe what you see, without exaggerating: a soft, dreamy, hazy painting is no "neon-drenched", "electric" or "wild" one, and a softly painted animal isn't a realistic one.
 - swaps: ideas for new posters on the same hook. subjects: 6 other characters/objects that would work just as well; settings: 6 other places; props: 6 other props/activities. Make them specific, funny or charming where the original is, and commercially appealing.`
 
+/**
+ * 2 (13 Oct): mood, style and palette read precisely (dreaminess, how the
+ * subject sits in the paint, colours as they are). Version 1 called Robin's
+ * dreamy jungle tiger "neon-drenched, wild, electric" with a "realistic gaze",
+ * and every idea from it came out dark and realistic.
+ */
+export const ANALYSIS_VERSION = 2
+
 /** What a poster is, for every prompt drawn from it. */
-export function analysePoster(poster: Buffer, title: string) {
-  return askJson<PosterAnalysis>(ANALYSIS_PROMPT(title), [poster], { schema: ANALYSIS_SCHEMA, temperature: 0.4 })
+export async function analysePoster(poster: Buffer, title: string): Promise<PosterAnalysis> {
+  const analysis = await askJson<PosterAnalysis>(ANALYSIS_PROMPT(title), [poster], { schema: ANALYSIS_SCHEMA, temperature: 0.4 })
+  return { ...analysis, version: ANALYSIS_VERSION }
 }

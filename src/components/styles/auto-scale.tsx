@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { CountField, CreativityField, DeliveryField, useDelivery } from "@/components/generation/generate-dialog"
 import { CreativityMeter } from "@/components/generation/parts"
 import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,8 @@ export function AutoScaleDialog({
   const router = useRouter()
   const [levels, setLevels] = React.useState<Creativity[]>([...CREATIVITIES])
   const [count, setCount] = React.useState(20)
+  // Percent of the posters that start from a board picture; the rest are own compositions.
+  const [ref, setRef] = React.useState(60)
   const [delivery, setDelivery] = useDelivery()
   const [busy, setBusy] = React.useState(false)
 
@@ -60,7 +63,7 @@ export function AutoScaleDialog({
       const response = await fetch(`/api/styles/${styleId}/auto`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ levels, count, delivery }),
+        body: JSON.stringify({ levels, count, delivery, ref: ref / 100 }),
       })
       const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(body.error ?? response.statusText)
@@ -91,6 +94,7 @@ export function AutoScaleDialog({
           <div className="flex flex-col gap-4 border-t px-4 py-4">
             <CountField label="Posters" value={count} min={1} max={MAX_AUTO} onChange={setCount} />
             <CreativityField group={{ count, creativity: levels }} onChange={setLevels} />
+            <RefField value={ref} count={count} onChange={setRef} />
             <ul className="grid gap-1 text-xs text-muted-foreground sm:pl-[6.25rem]">
               {CREATIVITIES.map((level) => (
                 <li key={level} className={levels.includes(level) ? "text-foreground" : "opacity-60"}>
@@ -117,5 +121,32 @@ export function AutoScaleDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** How many posters start from a board picture; the others are compositions of our own in the board's hand. */
+function RefField({ value, count, onChange }: { value: number; count: number; onChange: (value: number) => void }) {
+  // The same split the server makes (styles/auto.ts `expandAuto`).
+  const own = Array.from({ length: count }, (_, i) => i).filter(
+    (i) => Math.floor((i + 1) * (1 - value / 100)) > Math.floor(i * (1 - value / 100))
+  ).length
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:items-start">
+      <span className="pt-0.5 text-xs font-medium text-muted-foreground">From the board</span>
+      <div className="flex flex-col gap-1.5">
+        <Slider
+          value={[value]}
+          min={0}
+          max={100}
+          step={10}
+          onValueChange={(next) => onChange(Array.isArray(next) ? next[0] : next)}
+          aria-label="Share of posters that start from a board picture"
+        />
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          {count - own} after a board picture · {own} own {own === 1 ? "composition" : "compositions"} in the
+          board&apos;s hand
+        </p>
+      </div>
+    </div>
   )
 }

@@ -59,6 +59,8 @@ export type PosterAnalysis = {
   hook: string
   /** Raw material for new ideas on the same concept. */
   swaps: { subjects: string[]; settings: string[]; props: string[] }
+  /** What it was read for (see `ANALYSIS_VERSION` in poster.ts): an older reading is done again. */
+  version?: number
 }
 
 export type ExtractedPoster = Asset & {
@@ -108,6 +110,8 @@ export type Output = Asset & {
   auto?: boolean
   /** More board images (poster indices) it was painted with, for their look. */
   refs?: number[]
+  /** Autonomous scale: an own composition — its anchor gives the hand only, not a picture to start from. */
+  free?: boolean
   /** Autonomous scale: Gemini's look at it once painted, against its series (styles/auto-check.ts). */
   check?: AutoCheck
 }
@@ -198,8 +202,12 @@ export type Batch = {
   expanded: boolean
   /** A city set's batch: what it asks for instead of `options` (whose counts are then 0). */
   city?: CityRequest
-  /** An Autonomous scale batch (styles/auto.ts): `count` new posters spread over `levels`. */
-  auto?: { levels: Creativity[]; count: number }
+  /**
+   * An Autonomous scale batch (styles/auto.ts): `count` new posters spread
+   * over `levels`; `ref` of them (a share, 0–1; all when not given) start
+   * from a board image, the rest are own compositions in the board's hand.
+   */
+  auto?: { levels: Creativity[]; count: number; ref?: number }
 }
 
 export type SetStatus = "queued" | "running" | "done" | "error"

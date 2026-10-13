@@ -31,7 +31,7 @@ import { reviewAuto } from "@/lib/styles/auto-check"
 import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
-import { analysePoster, extractPosters } from "./poster"
+import { analysePoster, ANALYSIS_VERSION, extractPosters } from "./poster"
 import { paintPrompt, planBriefs } from "./prompts"
 import {
   deleteSet,
@@ -409,7 +409,8 @@ async function poster(id: string) {
   set = await getSet(id)
   await Promise.all(
     set.posters
-      .filter((p) => !p.analysis)
+      // An older reading is done again: its words steer every brief.
+      .filter((p) => !p.analysis || (p.analysis.version ?? 1) < ANALYSIS_VERSION)
       .map(async (p) => {
         try {
           const analysis = await analysePoster(await readSetFile(id, p.file!), set.source.title)
@@ -1808,7 +1809,7 @@ const healer = ((global as typeof global & { __generationHealer?: Healer }).__ge
 const SET_FIELDS = new Set(["id", "kind", "folder", "source", "status", "createdAt", "updatedAt", "original", "layout", "posters", "extraction", "batches", "outputs", "jobs", "stopping", "doneAt", "mockup", "sceneId", "heals", "runner", "style"])
 const BATCH_FIELDS = new Set(["id", "options", "createdAt", "expanded", "auto"])
 const OPTION_FIELDS = new Set(["variants", "ideas", "feedback", "posters", "from", "inspiration", "delivery"])
-const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "note", "id", "poster", "batch", "mode", "creativity", "styleId", "title", "brief", "feedback", "from", "inspiration", "job", "model", "review", "reviewedAt", "createdAt", "auto", "refs", "check"])
+const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "note", "id", "poster", "batch", "mode", "creativity", "styleId", "title", "brief", "feedback", "from", "inspiration", "job", "model", "review", "reviewedAt", "createdAt", "auto", "refs", "check", "free"])
 
 /**
  * Sets this code knows how to run: nothing on them it doesn't know. Other

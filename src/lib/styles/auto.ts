@@ -1,5 +1,7 @@
 import { askJson } from "@/lib/mockups/gemini"
 import { getFile } from "@/lib/storage/files"
+import { ANALYSIS_VERSION } from "@/lib/generation/poster"
+import { plainBrief } from "@/lib/generation/prompts"
 import { createSet, getSet, newId, readSetFile, saveFile, updateSet } from "@/lib/generation/storage"
 import {
   spread,
@@ -49,7 +51,7 @@ export const isStyleSet = (set: GenerationSet) => !!set.style
 /** Queues `count` new posters in the style over `levels`, in the style's set (made the first time). */
 export async function startAuto(
   styleId: string,
-  { levels, count, delivery }: { levels: Creativity[]; count: number; delivery: Delivery }
+  { levels, count, delivery, ref = 1 }: { levels: Creativity[]; count: number; delivery: Delivery; ref?: number }
 ): Promise<GenerationSet> {
   const style = await getStyle(styleId)
   if (!style.images.length) throw new Error("Add images to the board first")
@@ -66,7 +68,7 @@ export async function startAuto(
     options: { ...EMPTY, delivery },
     createdAt: new Date().toISOString(),
     expanded: false,
-    auto: { levels, count },
+    auto: { levels, count, ref },
   }
   return updateSet(set.id, (s) => ({
     ...s,
@@ -146,14 +148,16 @@ function analysisOf(card: StudyImage, study: StyleStudy): PosterAnalysis {
       settings: study.world.settings.slice(0, 6),
       props: study.world.props.slice(0, 6),
     },
+    version: ANALYSIS_VERSION,
   }
 }
 
-/** The posters an Autonomous scale batch asks for, waiting to be planned. */
+/** The posters an Autonomous scale batch asks for, waiting to be planned; the own compositions spread evenly among them. */
 export function expandAuto(batch: Batch): Output[] {
   const now = new Date().toISOString()
+  const free = 1 - (batch.auto?.ref ?? 1)
   return spread(batch.auto?.count ?? 0, batch.auto?.levels ?? []).map(
-    (creativity): Output => ({
+    (creativity, i): Output => ({
       id: newId(),
       status: "pending",
       file: null,
@@ -164,6 +168,7 @@ export function expandAuto(batch: Batch): Output[] {
       mode: "idea",
       creativity,
       auto: true,
+      ...(Math.floor((i + 1) * free) > Math.floor(i * free) && { free: true }),
     })
   )
 }
@@ -171,8 +176,11 @@ export function expandAuto(batch: Batch): Output[] {
 // --- Planning ---
 
 type Plan = { level: string; anchor: number; refs: number[]; title: string; brief: string; subject: string }
-/** One poster to plan: its level and the board image (1-based) it takes its hand and kind of motif from. */
-type Slot = { level: Creativity; anchor: number }
+/**
+ * One poster to plan: its level and the board image (1-based) it takes its
+ * hand and kind of motif from; an own composition (`free`) takes the hand only.
+ */
+type Slot = { level: Creativity; anchor: number; free?: boolean }
 
 /** Plans the set's waiting Autonomous scale posters, a few at a time; `dispatch` sends each few out once planned. */
 export async function planAuto(id: string, dispatch: (outputs: string[]) => Promise<unknown>) {
@@ -199,7 +207,7 @@ export async function planAuto(id: string, dispatch: (outputs: string[]) => Prom
     set = await getSet(id)
     if (set.stopping) return
     const chunk = todo.slice(at, at + CHUNK)
-    const slots = chunk.map((o, i): Slot => ({ level: o.creativity, anchor: anchors[at + i] }))
+    const slots = chunk.map((o, i): Slot => ({ level: o.creativity, anchor: anchors[at + i], free: o.free }))
     // Second tries share their first's brief.
     const made = set.outputs.filter((o) => o.auto && o.brief && !o.from)
     let plans: Plan[]
@@ -288,6 +296,15 @@ const LEVELS: Record<Creativity, string> = {
   high: "high — the artist's most inventive next poster: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…), unlike any board image, with any kind of motif the board has. A new idea and composition — never a new look or a new feeling.",
 }
 
+/** For own compositions the level says how far the motif goes beyond the board's world. */
+const FREE_LEVELS: Record<Creativity, string> = {
+  minimal: "own composition, minimal — a picture of your own with motifs typical of the board (its kinds, subjects, settings and props), simply composed.",
+  subtle: "own composition, subtle — a picture of your own with the board's typical motifs in a setting or situation it doesn't show.",
+  low: "own composition, low — a new motif within the series' world, composed your own way.",
+  medium: "own composition, medium — a motif beyond the board that still lives in the series' world and feeling.",
+  high: "own composition, high — your most surprising idea that still clearly belongs to the series.",
+}
+
 const PLAN_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -359,14 +376,16 @@ const kindOf = (study: StyleStudy, n: number) => study.kinds?.find((k) => k.imag
 const letter = (i: number) => String.fromCharCode(65 + i)
 
 /** A plan without Gemini: the slot's anchor, with the level's own words. */
-function fallbackPlan(study: StyleStudy, { level, anchor }: Slot): Plan {
+function fallbackPlan(study: StyleStudy, { level, anchor, free }: Slot): Plan {
   const card = study.images[anchor - 1]
   return {
     level,
     anchor,
     refs: familyOf(study, anchor)?.images.filter((n) => n !== anchor).slice(0, 1) ?? [],
-    title: card?.title ?? "New poster",
-    brief: `A new poster after image 1${card ? ` (${card.title}: ${card.subject})` : ""}, creativity ${LEVELS[level]}`,
+    title: free ? "Own composition" : (card?.title ?? "New poster"),
+    brief: free
+      ? `A new poster of our own for the series, in the hand of the images: ${FREE_LEVELS[level]}`
+      : `A new poster after image 1${card ? ` (${card.title}: ${card.subject})` : ""}, creativity ${LEVELS[level]}`,
     subject: "",
   }
 }
@@ -378,7 +397,8 @@ function planPrompt(name: string, study: StyleStudy, slots: Slot[], run: string[
     const family = study.families.findIndex((f) => f.images.includes(n))
     return [kind >= 0 && `kind ${letter(kind)}`, family >= 0 && `family ${letter(family)}`].filter(Boolean).join(", ")
   }
-  const levels = [...new Set(slots.map((s) => s.level))]
+  const levels = [...new Set(slots.filter((s) => !s.free).map((s) => s.level))]
+  const freeLevels = [...new Set(slots.filter((s) => s.free).map((s) => s.level))]
   return [
     `You are the art director of a successful Etsy wall-art shop. The images are the board of our style "${name}" — ${study.files.length} best sellers, each numbered in a dark badge top left. We continue the series with NEW, ORIGINAL posters that a buyer can't tell apart from the board: the same look and the same feeling, new pictures.`,
     `The series (our study of every image):
@@ -396,12 +416,15 @@ Keep: ${study.keep.join("; ")}.
 Avoid: ${study.avoid.join("; ")}.`,
     `The board, image by image:\n${study.images.map((c) => `${c.n}. ${c.title} — ${c.subject}; ${c.scene}. Composition: ${c.composition}. Emotion: ${c.emotion}.${c.text ? ` Text: ${c.text}.` : ""} [${tag(c.n)}, strength ${c.strength}]`).join("\n")}`,
     `Task: plan ${slots.length} new posters, one per line below. Each has its creativity level and its anchor: the board image whose hand (the whole look) and kind of motif it takes. An image model paints each from its anchor and one or two more board images of the anchor's family. The creativity level says how far the PICTURE moves from the board; the look and the feeling never move.`,
-    `Creativity levels:\n${levels.map((l) => `- ${LEVELS[l]}`).join("\n")}`,
+    `Creativity levels:\n${[...levels.map((l) => `- ${LEVELS[l]}`), ...freeLevels.map((l) => `- ${FREE_LEVELS[l]}`)].join("\n")}`,
+    freeLevels.length > 0 &&
+      `Own compositions: the posters marked "own composition" start from no board picture. Their anchor only lends its hand (the look the painter matches); its picture and kind don't bind them. Invent a picture of your own — composition, subject, setting and idea — that a buyer would place in this series at once: the series' look, feeling and humour, any kind of motif the board has, a composition unlike any board image.`,
     `For every poster:
 - Motif: keep the anchor's kind of motif. A kind without animals stays without them: a hand with a champagne bottle in the waves leads to new pictures of hands, drinks, water, summer and parties — never to an animal; a garden party leads to people, tables, food and places. Within its kind, be free and inventive: subjects, objects, places and situations the board doesn't show. Only at high creativity may a poster take another kind the board has.
 - All different: every poster of this run is its own picture. No two posters of the run — the list below and "This run so far" — share their main subject (a second tiger, a second panda or a second champagne bottle is a repeat; two cats of different colours are a repeat too), their setting or their activity. Draw on the whole range of the series' world and beyond it, within each anchor's kind. Never repeat a combination from "Earlier runs".
 - Free from the board's pictures: from low upwards take the anchor's hand and feeling, not its scene; invent pictures the board doesn't have.
 - Feeling: exactly the series' — expressions, body language, energy, warmth and humour belong in it. Never quieter, sadder, darker, moodier, more dramatic or more serious than the board.
+- Expression and gaze, played with like an artist: sweet, sleepy, dreamy, eyes closed in bliss, smug and half-lidded, looking away or over a shoulder, mid-yawn, mischievous — whatever suits the series' feeling and the picture. Never the image model's default of a character staring straight and seriously out of the picture, unless the anchor does exactly that at minimal. At minimal keep the anchor's own expression and gaze.
 - Simplicity: about as many elements as the anchor; anything new is as simple as the anchor's own things (a library is a few shelves of colour blocks, not a hundred books).
 - Look: never describe palette, light, texture or rendering — the painter takes all of that from the anchor. Name colours only for new objects, from the anchor's palette.
 - Plain words: describe things plainly (a pink tub, a lotus pool, a striped robe) — never words that ask for more detail or finish than the anchor has (intricate, detailed, ornate, elaborate, glossy, realistic, geometric patterns), unless the anchor has exactly that.
@@ -409,7 +432,13 @@ Avoid: ${study.avoid.join("; ")}.`,
 - Lettering: only where the anchor has lettering — then new, short words in the same lettering; otherwise none.
 - "refs": one or two other images of the anchor's family whose hand is closest to the anchor's, never the anchor.
 - It sells: instantly charming, funny or beautiful on its own, like the best images on the board.`,
-    `Posters to plan, in order:\n${slots.map((s, i) => `${i + 1}. creativity ${s.level} — anchor ${s.anchor}${kindOf(study, s.anchor) ? ` (kind: ${kindOf(study, s.anchor)!.name})` : ""}`).join("\n")}`,
+    `Posters to plan, in order:\n${slots
+      .map((s, i) =>
+        s.free
+          ? `${i + 1}. own composition, creativity ${s.level} — hand from image ${s.anchor}`
+          : `${i + 1}. creativity ${s.level} — anchor ${s.anchor}${kindOf(study, s.anchor) ? ` (kind: ${kindOf(study, s.anchor)!.name})` : ""}`
+      )
+      .join("\n")}`,
     run.length > 0 && `This run so far — every new poster differs from these in subject, setting and activity:\n${run.map((m) => `- ${m}`).join("\n")}`,
     taken.length > 0 && `Main subjects this run has already — use none of them again: ${[...new Set(taken)].join(", ")}.`,
     // The latest in full, older ones by title: a long history still shows everything made.
@@ -443,12 +472,15 @@ const LEVEL_LINES: Record<Creativity, string> = {
 /** What Nano Banana is told for one Autonomous scale poster; images: its anchor, then its refs. */
 export function autoPrompt({
   level,
+  free,
   brief,
   study,
   refs,
   feedback,
 }: {
   level: Creativity
+  /** An own composition: the images give the hand only. */
+  free?: boolean
   brief: string
   study?: StyleStudy
   /** How many more board images follow the anchor. */
@@ -458,13 +490,17 @@ export function autoPrompt({
   const images = refs > 0 ? `Images 1–${refs + 1} are` : "Image 1 is"
   return [
     `${images} ${refs > 0 ? "posters" : "a poster"} by one artist, from a best-selling series. Paint one NEW poster for this series, by the same hand: it must hang next to image 1 as part of the same set.`,
-    LEVEL_LINES[level],
-    `The new poster: ${brief}`,
+    free
+      ? "The images give the hand only: paint the new poster described, a composition of its own — not a scene from them."
+      : LEVEL_LINES[level],
+    `The new poster: ${plainBrief(brief)}`,
     [
       `Paint it exactly like image 1${refs > 0 ? ` (image${refs > 1 ? "s" : ""} 2${refs > 1 ? `–${refs + 1}` : ""} confirm the hand)` : ""} — look at it, don't interpret it:`,
       "- The same paint handling: brush strokes as big, loose and rough — or as flat and clean — as image 1's, at the same scale relative to the canvas; the same edges and outlines; the same surface. Where image 1 leaves things vague, leave them vague.",
       "- No refining, the usual mistake: no finer lines, no extra detail in fur, faces, patterns or backgrounds, no smoother blending, no thicker or crisper impasto, nothing glossier, sharper or more realistic than image 1. A new animal or object is painted as roughly and simply as image 1 paints its own.",
       "- Animals and figures exactly as image 1 paints them: fur as a few broad strokes or patches of colour, stripes and spots as rough dabs, faces simplified to a few marks — never a finely furred, realistic or cleanly illustrated animal.",
+      "- The subject sits in the paint the way image 1's does: where image 1 lets it melt into soft, hazy colour or half hides it, do the same — never a crisp, sharply drawn subject in front of a painterly background.",
+      "- Expressions and gazes as the description says them; never a stiff, serious stare out of the picture unless it asks for one.",
       "- The same palette as image 1 — its hues, their saturation and contrast, nothing brighter, more neon, darker or more muted — and the same kind of light.",
       "- The same flatness or depth of space as image 1.",
     ].join("\n"),
@@ -517,7 +553,7 @@ export async function autoRequest(set: GenerationSet, output: Output) {
   }
   // A sibling (minimal, subtle) takes its anchor's hand alone: a family can hold more than one
   // hand, and a ref pulled the dark anchor of a subtle poster towards a bright one (13 Oct).
-  const sibling = output.creativity === "minimal" || output.creativity === "subtle"
+  const sibling = !output.free && (output.creativity === "minimal" || output.creativity === "subtle")
   const refs = (sibling ? [] : (output.refs ?? []))
     .map((i) => set.posters.find((p) => p.index === i && p.file && p.index !== anchor.index))
     .filter((p): p is ExtractedPoster => !!p)
@@ -527,6 +563,7 @@ export async function autoRequest(set: GenerationSet, output: Output) {
   const images = await Promise.all([anchor, ...refs].map((p) => readSetFile(set.id, p.file!)))
   const prompt = autoPrompt({
     level: output.creativity,
+    free: output.free,
     brief: output.brief ?? `A new poster for the series, creativity ${LEVELS[output.creativity]}`,
     study,
     refs: refs.length,

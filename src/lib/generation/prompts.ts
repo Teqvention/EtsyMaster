@@ -47,7 +47,7 @@ const IDEA_LEVELS: Record<Creativity, string> = {
 // another artist (Robin, 13 Oct: a lion in a dark library after a tiger in
 // a sunny bar; a blissful cat turned grumpy at the lowest level).
 const KEEP_FEELING = (analysis?: PosterAnalysis) =>
-  `Keep the reference's feeling in every brief${analysis?.mood ? ` (${analysis.mood})` : ""}: the characters' expressions, body language and energy, the warmth of the light, the humour. Never a quieter, sadder, darker, moodier, more dramatic or more serious picture. Keep its simplicity too: about as many elements as the reference, anything new simplified the way the reference simplifies (a library is a few shelves of colour blocks, not a hundred books). Describe things plainly — never words that ask for more detail or finish than the reference has (cluttered, intricate, detailed, ornate, glossy, realistic).`
+  `Keep the reference's feeling in every brief${analysis?.mood ? ` (${analysis.mood})` : ""}: the characters' expressions, body language and energy, the warmth of the light, the humour, and its dreaminess where it has any. Never a quieter, sadder, darker, moodier, more dramatic, more realistic or more serious picture. At minimal and subtle keep the reference's expressions and gazes; from low upwards play with them like an artist — sweet, sleepy, dreamy, eyes closed in bliss, smug and half-lidded, looking away — never the default of a character staring straight and seriously out of the picture. Keep its simplicity too: about as many elements as the reference, anything new simplified the way the reference simplifies (a library is a few shelves of colour blocks, not a hundred books). Describe things plainly — never words that ask for more detail or finish than the reference has (cluttered, intricate, detailed, ornate, glossy, realistic).`
 
 export type BriefRequest = {
   mode: OutputMode
@@ -172,11 +172,25 @@ function styleText(s: StyleGuide) {
     .join("\n")
 }
 
+/**
+ * A brief without the words that make Nano Banana paint a crisp, realistic
+ * subject into a painting ("a realistic jaguar", "highly detailed fur"): the
+ * look comes from the reference, never from these.
+ */
+export function plainBrief(brief: string) {
+  return brief
+    .replace(/,?\s*(painted |rendered )?in (a |an )?(hyper-?|photo-?|ultra-?)?realistic (style|way|manner)/gi, "")
+    .replace(/\b(hyper-?|photo-?|ultra-?)?realistic(ally)?\s+/gi, "")
+    .replace(/\b(highly|finely|intricately|hyper-?)\s+detailed\s+/gi, "")
+}
+
 /** How the reference's look and feeling carry over when no saved style replaces them. */
 const SAME_HAND = `Paint it by the reference's own hand:
 - The same paint handling: strokes as big, loose and thick — or as flat and clean — as the reference's, relative to the canvas; the same edges, outlines and surface texture. No heavier impasto, no smoother finish.
 - No refining: no finer lines, no extra detail, nothing glossier, sharper or more realistic than the reference. Paint anything new as simply as the reference paints its own things.
 - Animals and figures as the reference paints them: fur as broad strokes or patches of colour, faces simplified the same way — never a finely furred, realistic or cleanly illustrated animal.
+- The subject sits in the paint the way the reference's does: if it melts into soft, hazy colour or is half hidden, keep it so — never a crisp, sharply drawn subject in front of a painterly background. Keep the reference's dreaminess and brightness.
+- Expressions and gazes as the art direction says them; never a stiff, serious stare out of the picture unless it asks for one.
 - No more objects than the art direction names: a new setting stays as sparse and as softly painted as the reference's.
 - The same palette, saturation, contrast and kind of light: nothing darker, more muted or moodier.
 - The same feeling: the characters' expressions, body language and energy, the warmth and the humour of the reference.`
@@ -219,7 +233,7 @@ export function paintPrompt({
       : style
         ? "Paint a NEW, ORIGINAL poster after the reference, as the art direction below says."
         : "Paint a NEW, ORIGINAL poster after the reference, as the art direction below says. Match the reference's art style, medium, rendering, texture, palette and lighting exactly; change only the composition and layout.",
-    `Art direction: ${brief}`,
+    `Art direction: ${plainBrief(brief)}`,
     style ? `Style: ${styleText(style)}` : SAME_HAND,
     feedback && `Notes from the shop owner (most important): ${feedback}`,
     RULES,
