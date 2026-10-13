@@ -37,7 +37,8 @@ export type StealerRef = {
   via?: string
   crop: {
     status: RefCrop["status"] | "none"
-    prints: { file: string; url: string; thumb: string; width: number; height: number; label: string }[]
+    /** `rough`: what the last look found wrong with a single print's cut-out. */
+    prints: { file: string; url: string; thumb: string; width: number; height: number; label: string; rough?: string }[]
     error?: string
     /** Made before the photo was taken out of the poster's design: taken out again. */
     stale?: boolean
@@ -162,6 +163,7 @@ async function toRefs(entries: RefEntry[]): Promise<StealerRef[]> {
           width: p.width,
           height: p.height,
           label: p.label,
+          ...(p.rough && { rough: p.rough }),
         })),
         ...(crop?.error && { error: crop.error }),
         ...(crop?.status === "done" && crop.prints.some((p) => !p.poster) && { stale: true }),

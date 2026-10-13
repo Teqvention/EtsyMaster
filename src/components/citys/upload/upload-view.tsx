@@ -159,7 +159,7 @@ export function UploadView() {
         <div className="flex flex-wrap gap-x-6 gap-y-2 border-t px-4 py-3">
           <Option checked={settings.adjacent} onChange={(adjacent) => set({ adjacent })} label="A style's posters together" hint="One style after another in the queue, else the groups take turns" />
           <Option checked={settings.oncePerDay} onChange={(oncePerDay) => set({ oncePerDay })} label="A place once a day per shop" hint="With several styles: the second poster of a place waits for tomorrow's upload" />
-          <Option checked={settings.slots} onChange={(slots) => set({ slots })} label="Take replace slots first" hint="Each new poster takes the slot of an old listing marked replace: the same place's first, then F places'" />
+          <Option checked={settings.slots} onChange={(slots) => set({ slots })} label="Take replace slots first" hint="A place's new poster takes the slot of its old one marked replace; the slot of a place without demand (F) goes to a new place, and those go up first" />
           <Option checked={settings.activate} onChange={(activate) => set({ activate })} label="Live once printable" hint="Put each listing live as soon as its print route is proven, else it waits inactive" />
         </div>
       </section>
@@ -503,14 +503,14 @@ function QueueList({ plan, state, planning, onOpen }: { plan: UploadPlanView | n
               {item.replaces && (
                 <span
                   className="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded bg-background/90 py-0.5 pr-1.5 pl-0.5 text-[10px] shadow-sm"
-                  title={`Takes the slot of “${item.replaces.title}” (${item.replaces.why})`}
+                  title={item.replaces.why === "same place" ? `Replaces our old poster “${item.replaces.title}”` : `Full replacement: a new place in the slot of “${item.replaces.title}”`}
                 >
                   {item.replaces.image && (
                     <span className="relative block size-4 overflow-hidden rounded-sm">
                       <Image src={item.replaces.image} alt="" fill unoptimized sizes="16px" className="object-cover" />
                     </span>
                   )}
-                  {item.replaces.why === "same place" ? "replaces" : "slot"}
+                  {item.replaces.why === "same place" ? "replaces" : "full swap"}
                 </span>
               )}
             </span>
@@ -590,7 +590,7 @@ function PosterPreview({ item, state, onClose }: { item: QueueItem | null; state
                     </span>
                   )}
                   <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">{item.replaces.why === "same place" ? "Replaces our old poster of the place" : "Takes the slot of"}</span>
+                    <span className="text-[11px] text-muted-foreground">{item.replaces.why === "same place" ? "Replaces our old poster of the place" : "Full replacement, a new place in the slot of"}</span>
                     <span className="truncate text-xs">{item.replaces.title}</span>
                   </span>
                 </div>

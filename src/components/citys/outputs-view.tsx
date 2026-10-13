@@ -11,6 +11,7 @@ import {
   ImagesIcon,
   LoaderCircleIcon,
   PaletteIcon,
+  RefreshCcwIcon,
   RotateCcwIcon,
   ScanSearchIcon,
   SearchIcon,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { RequestEditor, TemplatePicker } from "@/components/citys/request-editor"
 import { TierBadge } from "@/components/citys/tier"
 import { SelectionBar } from "@/components/selection"
 import { Button } from "@/components/ui/button"
@@ -30,22 +32,70 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { redoCityOutput, reviewCityOutputs, useCityOutputs } from "@/hooks/use-city-outputs"
+import { recreateCityOutput, redoCityOutput, reviewCityOutputs, useCityOutputs } from "@/hooks/use-city-outputs"
+import { useStored } from "@/hooks/use-stored"
 import type { CityOutput } from "@/lib/citys/outputs"
+import { DEFAULT_REQUEST, normalizeRequest, requestSize, type CityRequest } from "@/lib/citys/studio-types"
 import { formatNumber } from "@/lib/etsy/format"
 import { cn } from "@/lib/utils"
 
-// Every city poster made, to look through and decide on: grouped by style
-// (real photos by sky, the reference's own style, new ideas, sets, each
-// city style and each production) or by place, newest first. A
-// tile approves or rejects on hover; opened, it sits next to the reference
-// it came from, and A, R and the arrow keys go through them without the
-// mouse. Approved posters are what the city uploads take.
+// Every city poster made, to look through and decide on: grouped by action
+// (what one click asked for, newest first; one place's actions in a row
+// merge), by style (real photos by sky, the reference's own style, new
+// ideas, sets, each city style and each production) or by place. A tile
+// approves or rejects on hover, a group all at once; opened, it sits next
+// to the reference it came from (a click shows that photo in the Stealer),
+// A, R and the arrow keys go through them without the mouse, and Recreate
+// asks for more with every setting, from the reference or from the poster
+// itself. Approved posters are what the city uploads take.
 
 type Status = "review" | "approved" | "rejected" | "all"
-type Group = "style" | "place"
+type Group = "action" | "style" | "place"
+type Shelf = { id: string; label: string; note?: string; items: CityOutput[] }
 
 const key = (o: Pick<CityOutput, "setId" | "outputId">) => `${o.setId}/${o.outputId}`
+const GROUP_KEY = "citys-outputs:group"
+const GROUP_DEFAULT: { group: Group } = { group: "action" }
+/** The Stealer's request: Recreate starts from the same settings, and keeps them. */
+const REQUEST_KEY = "citys-stealer:request"
+
+const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+
+/**
+ * One shelf per action, newest first: the posters one click asked for,
+ * place by place, a set in its order. Actions on the same single place one
+ * after another merge into one shelf.
+ */
+function byAction(items: CityOutput[]): Shelf[] {
+  const actions = new Map<string, { ids: string[]; at: string; items: CityOutput[]; places: Set<string> }>()
+  for (const o of items) {
+    const a = actions.get(o.action) ?? { ids: [o.action], at: o.actionAt, items: [], places: new Set<string>() }
+    a.items.push(o)
+    a.places.add(o.place)
+    if (o.actionAt > a.at) a.at = o.actionAt
+    actions.set(o.action, a)
+  }
+  const merged: { ids: string[]; at: string; items: CityOutput[]; places: Set<string> }[] = []
+  for (const a of [...actions.values()].sort((x, y) => y.at.localeCompare(x.at))) {
+    const last = merged.at(-1)
+    if (last && last.places.size === 1 && a.places.size === 1 && [...last.places][0] === [...a.places][0]) {
+      last.items.push(...a.items)
+      last.ids.push(...a.ids)
+    } else merged.push({ ...a, ids: [...a.ids] })
+  }
+  return merged.map((a) => {
+    const places = [...a.places]
+    const what = [...new Set(a.items.map((o) => o.groupLabel))]
+    return {
+      id: `action:${a.ids.join("+")}`,
+      label: places.length > 3 ? `${places.slice(0, 3).join(", ")} +${places.length - 3}` : places.join(", "),
+      note: `${when(a.at)} · ${what.slice(0, 3).join(" · ")}${what.length > 3 ? ` +${what.length - 3}` : ""}`,
+      items: a.items.toSorted(
+        (x, y) => x.place.localeCompare(y.place) || x.group.localeCompare(y.group) || (x.set?.index ?? 0) - (y.set?.index ?? 0) || x.createdAt.localeCompare(y.createdAt)
+      ),
+    }
+  })
+}
 
 export function OutputsView() {
   const outputs = useCityOutputs()
@@ -53,7 +103,14 @@ export function OutputsView() {
   // ?group=production:<id> (from a style's productions) opens on that production, place by place.
   const asked = params.get("group")
   const [status, setStatus] = React.useState<Status>(asked || params.get("style") ? "all" : "review")
-  const [group, setGroup] = React.useState<Group>(asked?.startsWith("production:") ? "place" : "style")
+  // The grouping last chosen is kept; a production opened from its style goes place by place.
+  const [stored, keepGroup] = useStored(GROUP_KEY, GROUP_DEFAULT)
+  const [askedGroup, setAskedGroup] = React.useState<Group | null>(asked?.startsWith("production:") ? "place" : null)
+  const group = askedGroup ?? stored.group
+  const setGroup = (next: Group) => {
+    setAskedGroup(null)
+    keepGroup({ group: next })
+  }
   const [search, setSearch] = React.useState("")
   const [only, setOnly] = React.useState<string | null>(asked)
   // ?style=<id> (from a style's page): everything in that style, its productions included.
@@ -96,8 +153,9 @@ export function OutputsView() {
     })
   }, [outputs, status, only, styleOnly, search])
 
-  const groups = React.useMemo(() => {
-    const map = new Map<string, { id: string; label: string; items: CityOutput[] }>()
+  const groups = React.useMemo((): Shelf[] => {
+    if (group === "action") return byAction(shown)
+    const map = new Map<string, Shelf>()
     for (const o of shown) {
       const id = group === "style" ? o.group : o.placeId
       const entry = map.get(id) ?? { id, label: group === "style" ? o.groupLabel : o.place, items: [] }
@@ -183,6 +241,9 @@ export function OutputsView() {
           ))}
         </div>
         <div className="flex rounded-lg border p-0.5" role="group" aria-label="Group by">
+          <Segment on={group === "action"} onClick={() => setGroup("action")}>
+            By action
+          </Segment>
           <Segment on={group === "style"} onClick={() => setGroup("style")}>
             By style
           </Segment>
@@ -253,14 +314,21 @@ export function OutputsView() {
           const ready = g.items.filter((o) => o.status === "done" && !o.review)
           return (
             <section key={g.id} className="flex flex-col gap-2" aria-label={g.label}>
-              <header className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold">{g.label}</h2>
-                <span className="text-xs text-muted-foreground tabular-nums">{formatNumber(g.items.length)}</span>
+              <header className="flex min-w-0 items-center gap-2">
+                <h2 className="truncate text-sm font-semibold">{g.label}</h2>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatNumber(g.items.length)}</span>
+                {g.note && <span className="min-w-0 truncate text-xs text-muted-foreground">{g.note}</span>}
                 {ready.length > 1 && (
-                  <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={() => review(ready, "approved")}>
-                    <CheckIcon />
-                    Approve {ready.length}
-                  </Button>
+                  <div className="ml-auto flex shrink-0 gap-0.5">
+                    <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => review(ready, "rejected")}>
+                      <XIcon />
+                      Reject {ready.length}
+                    </Button>
+                    <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => review(ready, "approved")}>
+                      <CheckIcon />
+                      Approve {ready.length}
+                    </Button>
+                  </div>
                 )}
               </header>
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-4">
@@ -463,6 +531,9 @@ function Viewer({
 }) {
   const [notes, setNotes] = React.useState("")
   const [redoing, setRedoing] = React.useState(false)
+  const [recreating, setRecreating] = React.useState(false)
+  // Opened, focus rests on the pictures, not the notes, so the arrow keys move on at once.
+  const pictures = React.useRef<HTMLDivElement>(null)
   // Another poster: its own notes.
   const [notesFor, setNotesFor] = React.useState(item?.outputId)
   if (notesFor !== item?.outputId) {
@@ -470,20 +541,22 @@ function Viewer({
     setNotes("")
   }
 
+  // Caught on the way down: the dialog stops arrow keys before they'd bubble up to the window.
   React.useEffect(() => {
-    if (!item) return
+    if (!item || recreating) return
     function onKey(event: KeyboardEvent) {
-      if ((event.target as HTMLElement).closest("textarea, input")) return
+      if (event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).closest("textarea, input, select, [contenteditable]")) return
       if (event.key === "ArrowRight") onMove(1)
       else if (event.key === "ArrowLeft") onMove(-1)
       else if (event.key === "a" || event.key === "A") onReview("approved")
       else if (event.key === "r" || event.key === "R") onReview("rejected")
       else return
       event.preventDefault()
+      event.stopPropagation()
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [item, onMove, onReview])
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [item, recreating, onMove, onReview])
 
   async function redo() {
     if (!item) return
@@ -500,11 +573,12 @@ function Viewer({
   }
 
   return (
+    <>
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="grid h-[min(54rem,calc(100svh-2rem))] grid-rows-1 gap-0 overflow-hidden p-0 sm:max-w-[min(80rem,calc(100%-2rem))]">
+      <DialogContent initialFocus={pictures} className="grid h-[min(54rem,calc(100svh-2rem))] grid-rows-1 gap-0 overflow-hidden p-0 sm:max-w-[min(80rem,calc(100%-2rem))]">
         {item && (
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="relative grid min-h-0 grid-cols-2 gap-4 bg-muted/40 p-6">
+            <div ref={pictures} tabIndex={-1} className="relative grid min-h-0 grid-cols-2 gap-4 bg-muted/40 p-6 outline-none">
               <figure className="flex min-h-0 flex-col gap-2">
                 <figcaption className="text-xs font-medium">Ours</figcaption>
                 <div className="relative min-h-0 flex-1">
@@ -513,9 +587,25 @@ function Viewer({
                 </div>
               </figure>
               <figure className="flex min-h-0 flex-col gap-2">
-                <figcaption className="text-xs text-muted-foreground">Reference{item.reference?.shop && ` · ${item.reference.shop}`}</figcaption>
+                <figcaption className="text-xs text-muted-foreground">{item.reference && !item.reference.listingId ? "Recreated from our poster" : `Reference${item.reference?.shop ? ` · ${item.reference.shop}` : ""}`}</figcaption>
                 <div className="relative min-h-0 flex-1">
-                  {item.reference?.image ? (
+                  {item.reference?.image && item.reference.listingId ? (
+                    // The photo where it came from: its place in the Stealer, the listing picked out.
+                    <Link
+                      href={`/citys/stealer?place=${encodeURIComponent(item.placeId)}&ref=${item.reference.listingId}`}
+                      onClick={onClose}
+                      title="Show this photo in the Stealer"
+                      aria-label="Show this photo in the Stealer"
+                      className="group/ref absolute inset-0 grid place-items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={item.reference.image} alt="" className="max-h-full max-w-full rounded-md object-contain opacity-95 transition-opacity duration-150 group-hover/ref:opacity-100" />
+                      <span className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-medium opacity-0 shadow-sm transition-opacity duration-150 group-hover/ref:opacity-100 group-focus-visible/ref:opacity-100">
+                        <ScanSearchIcon className="size-3.5" />
+                        In the Stealer
+                      </span>
+                    </Link>
+                  ) : item.reference?.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={item.reference.image} alt="" className="absolute inset-0 m-auto max-h-full max-w-full rounded-md object-contain opacity-95" />
                   ) : (
@@ -542,10 +632,16 @@ function Viewer({
                     One more like it
                   </label>
                   <Textarea id="redo-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What should be different, e.g. warmer sky, keep the bridge" className="min-h-16 text-sm" />
-                  <Button variant="outline" size="sm" onClick={redo} disabled={redoing} className="self-start">
-                    {redoing ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-                    Make one more
-                  </Button>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button variant="outline" size="sm" onClick={redo} disabled={redoing}>
+                      {redoing ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+                      Make one more
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setRecreating(true)} disabled={!item.file} title="Every setting, from the reference or from this poster">
+                      <RefreshCcwIcon />
+                      Recreate…
+                    </Button>
+                  </div>
                 </div>
                 {item.reference && (
                   <a href={item.reference.url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
@@ -584,6 +680,107 @@ function Viewer({
             </div>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+    {item && <RecreateDialog item={item} open={recreating} onOpenChange={setRecreating} />}
+    </>
+  )
+}
+
+/**
+ * Recreate: a whole request, as in the Stealer (the same settings, kept),
+ * from a base photo picked here: the poster's reference, or the poster
+ * itself as a new reference.
+ */
+function RecreateDialog({ item, open, onOpenChange }: { item: CityOutput; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [stored, keep] = useStored<CityRequest>(REQUEST_KEY, DEFAULT_REQUEST)
+  const request = React.useMemo(() => normalizeRequest(stored), [stored])
+  const hasReference = !!item.reference?.image
+  const [base, setBase] = React.useState<"reference" | "ours">(hasReference ? "reference" : "ours")
+  const [busy, setBusy] = React.useState(false)
+  // Another poster: its reference first again.
+  const [baseFor, setBaseFor] = React.useState(item.outputId)
+  if (baseFor !== item.outputId) {
+    setBaseFor(item.outputId)
+    setBase(hasReference ? "reference" : "ours")
+  }
+  const size = requestSize(request)
+  const options: { value: "reference" | "ours"; label: string; image: string | null }[] = [
+    ...(hasReference ? [{ value: "reference" as const, label: item.reference!.listingId ? `Reference${item.reference!.shop ? ` · ${item.reference!.shop}` : ""}` : "Its base poster", image: item.reference!.image }] : []),
+    { value: "ours", label: "This poster", image: item.url },
+  ]
+  const shown = options.find((o) => o.value === base) ?? options[0]
+
+  async function start() {
+    setBusy(true)
+    try {
+      await recreateCityOutput(item.setId, item.outputId, base, request)
+      toast.success(`${size} ${size === 1 ? "image" : "images"} of ${item.place} on their way`, { description: base === "ours" ? "From this poster as the new reference." : "From the reference photo." })
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(`Couldn't start it: ${(error as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="grid h-[min(52rem,calc(100svh-2rem))] grid-rows-1 gap-0 overflow-hidden p-0 sm:max-w-[min(72rem,calc(100%-2rem))]">
+        <div className="grid min-h-0 grid-cols-1 md:grid-cols-[25rem_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col border-r">
+            <div className="flex flex-col gap-1 border-b px-4 pt-4 pb-3">
+              <div className="flex items-center gap-2">
+                {item.tier && <TierBadge tier={item.tier} />}
+                <DialogTitle className="truncate text-base">Recreate · {item.place}</DialogTitle>
+              </div>
+              <DialogDescription className="text-xs">Every setting, as in the Stealer, from the base photo on the right.</DialogDescription>
+              <div className="pt-1">
+                <TemplatePicker value={request} onPick={(next) => keep(normalizeRequest(next))} />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <RequestEditor value={request} onChange={keep} hasReference />
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {size} {size === 1 ? "image" : "images"}
+              </span>
+              <Button onClick={start} disabled={busy || !size} className="active:scale-[0.97]">
+                {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+                Generate {size}
+              </Button>
+            </div>
+          </div>
+          <div className="hidden min-h-0 flex-col bg-muted/40 md:flex">
+            <div className="relative min-h-0 flex-1 p-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {shown?.image && <img src={shown.image} alt="" className="absolute inset-6 m-auto max-h-[calc(100%-3rem)] max-w-[calc(100%-3rem)] rounded-md object-contain shadow-sm" />}
+            </div>
+            <div className="flex flex-col gap-2 border-t bg-background px-5 py-3">
+              <span className="text-xs font-medium">Base photo</span>
+              <div className="flex gap-2" role="radiogroup" aria-label="Base photo">
+                {options.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={base === o.value}
+                    onClick={() => setBase(o.value)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border-2 p-1 pr-3 text-left text-xs outline-none transition-[border-color,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+                      base === o.value ? "border-brand bg-brand/5" : "border-transparent bg-muted/60 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {o.image && <img src={o.image} alt="" className="h-12 w-9 rounded object-cover" />}
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )

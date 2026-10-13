@@ -116,7 +116,8 @@ export async function placePictures(
   const out: PlacePicture[] = []
   for (const e of wanted) {
     if (out.length >= count) break
-    const print = crops.get(e.listing.id)?.status === "done" ? crops.get(e.listing.id)!.prints[0] : undefined
+    // Never a print the last look found rough: it's no composition to re-take.
+    const print = crops.get(e.listing.id)?.status === "done" ? crops.get(e.listing.id)!.prints.find((p) => !p.rough) : undefined
     if (!print) continue
     const image = await readRefFile(e.listing.id, print.file)
       .then((data) => sharp(data).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer())

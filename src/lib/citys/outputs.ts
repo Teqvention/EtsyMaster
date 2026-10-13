@@ -49,7 +49,11 @@ export type CityOutput = {
   place: string
   country: string
   tier: Tier | null
+  /** The listing it came from (0 for one of our own posters recreated), its shop and the poster taken out of it. */
   reference: { listingId: number; shop: string | null; url: string; image: string | null } | null
+  /** What one click asked for together (Outputs' "By action"), and when. */
+  action: string
+  actionAt: string
   createdAt: string
 }
 
@@ -73,9 +77,13 @@ export async function cityOutputs(): Promise<CityOutput[]> {
   for (const set of sets) {
     if (!isCitySet(set) || set.city.lab) continue
     const refPoster = set.posters.find((p) => p.file)
+    const batches = new Map(set.batches.map((b) => [b.id, b]))
+    const ours = !!set.city.fromOutput
     for (const o of set.outputs) {
       if (!o.city || o.city.kind === "lab") continue
       const c = o.city
+      const batch = batches.get(o.batch)
+      const at = batch?.createdAt ?? o.createdAt
       const { group, groupLabel, detail } = describe(c, { styleName, lookName, productionName })
       out.push({
         setId: set.id,
@@ -103,9 +111,13 @@ export async function cityOutputs(): Promise<CityOutput[]> {
         place: set.city.place,
         country: set.city.country,
         tier: tierOf.get(set.city.placeId) ?? null,
-        reference: set.source.listingId
-          ? { listingId: set.source.listingId, shop: set.source.shop, url: set.source.url, image: refPoster?.file ? url(set.id, refPoster.file, 960) : null }
-          : null,
+        reference:
+          set.source.listingId || ours
+            ? { listingId: set.source.listingId, shop: set.source.shop, url: set.source.url, image: refPoster?.file ? url(set.id, refPoster.file, 960) : null }
+            : null,
+        // Batches from before actions: the ones asked for in the same minute go together.
+        action: batch?.city?.action ?? `at-${at.slice(0, 16)}`,
+        actionAt: at,
         createdAt: o.createdAt,
       })
     }
@@ -196,7 +208,7 @@ async function addCityBatch(set: GenerationSet, request: CityRequest) {
     options: { variants: { count: 0, creativity: ["medium"], styleId: null }, ideas: { count: 0, creativity: ["medium"] } },
     createdAt: new Date().toISOString(),
     expanded: false,
-    city: request,
+    city: { ...request, action: newId() },
   }
   const next = await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch], heals: 0 }))
   enqueue(set.id)

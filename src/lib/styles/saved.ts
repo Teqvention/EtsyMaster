@@ -1,3 +1,4 @@
+import { readRefFile, refCrop } from "@/lib/citys/refs"
 import { extractPosters } from "@/lib/generation/poster"
 import { listSets } from "@/lib/generation/storage"
 import type { ExtractedPoster, GenerationSet } from "@/lib/generation/types"
@@ -8,10 +9,10 @@ import { addImages, getStyle, readGenerationFile, updateStyle } from "./storage"
 import { scheduleReading } from "./understand"
 import { MAX_IMAGES, type Style } from "./types"
 
-// Saved listings onto a moodboard. Their photos show the poster framed in a
-// room, which Gemini would read as part of the look, so the poster is taken
-// out first: the ones a poster set already took out when there is one,
-// otherwise found here the same way. It runs in the background on this
+// Saved listings (or a shop's) onto a moodboard. Their photos show the
+// poster framed in a room, which Gemini would read as part of the look, so
+// the poster is taken out first: the ones a poster set or the City Stealer
+// already took out when there are some, otherwise found here the same way. It runs in the background on this
 // server, the style counting the listings still `incoming`; the guide is
 // read once none are.
 
@@ -88,6 +89,15 @@ async function postersOf(listing: SavedPoster, sets: GenerationSet[]): Promise<B
       return await Promise.all(set.posters.filter(done).map((p) => readGenerationFile(set.id, p.file!)))
     } catch {
       // Its files are gone: take them out again.
+    }
+  }
+  // The City Stealer's: the whole poster of each print it took out.
+  const crop = await refCrop(listing.listingId).catch(() => null)
+  if (crop?.status === "done" && crop.prints.length) {
+    try {
+      return await Promise.all(crop.prints.map((p) => readRefFile(listing.listingId, p.poster ?? p.file)))
+    } catch {
+      // Gone too: found again below.
     }
   }
   const { prints } = await extractPosters(await fetchReference(listing.image), listing.title)

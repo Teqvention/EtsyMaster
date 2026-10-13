@@ -80,6 +80,7 @@ async function findSet(job: CityJob) {
     (s) =>
       isCitySet(s) &&
       !s.city.lab &&
+      !s.city.fromOutput &&
       s.city.placeId === job.placeId &&
       (job.ref ? s.source.listingId === job.ref.listingId : s.source.listingId === 0)
   )
@@ -91,10 +92,13 @@ async function findSet(job: CityJob) {
  */
 export async function startCityJobs(jobs: CityJob[], enqueue: (id: string) => void) {
   const touched: string[] = []
+  // One action for all of them: Outputs shows what one click asked for together.
+  const action = newId()
   for (const job of jobs) {
     let set = await findSet(job)
     if (!set) set = await newCitySet(job)
-    const batch: Batch = { id: newId(), options: NO_OPTIONS, createdAt: new Date().toISOString(), expanded: false, city: job.request }
+    const city = { ...job.request, action: job.request.action ?? action, ...(job.ref?.print !== undefined && { print: job.ref.print }) }
+    const batch: Batch = { id: newId(), options: NO_OPTIONS, createdAt: new Date().toISOString(), expanded: false, city }
     // `heals` as for every new batch (run.ts addBatch): images lost while painting (a dropped connection) are painted again.
     await updateSet(set.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch], heals: 0 }))
     enqueue(set.id)
@@ -143,6 +147,43 @@ async function newCitySet(job: CityJob): Promise<GenerationSet> {
     original,
     posters,
     extraction: posters.length || !ref ? { status: "done", file: null } : s.extraction,
+    batches: [],
+  }))
+}
+
+/**
+ * More from one of our posters, with every setting of a normal request:
+ * from its reference (a batch on its own set), or with the poster itself
+ * as the reference (a set of its own, made once per poster). Answers the set.
+ */
+export async function recreate(setId: string, outputId: string, base: "reference" | "ours", request: CityRequest, enqueue: (id: string) => void) {
+  const set = await getSet(setId)
+  if (!isCitySet(set)) throw new NotFoundError("Unknown set")
+  const output = set.outputs.find((o) => o.id === outputId)
+  if (!output?.file) throw new NotFoundError("Unknown poster")
+  if (base === "reference" && !set.posters.some((p) => p.file)) throw new Error("This poster has no reference photo: recreate it from itself")
+  const target = base === "ours" ? await ownSet(set, output) : set
+  const batch: Batch = { id: newId(), options: NO_OPTIONS, createdAt: new Date().toISOString(), expanded: false, city: { ...request, action: newId() } }
+  await updateSet(target.id, (s) => ({ ...s, status: "queued", stopping: undefined, doneAt: undefined, batches: [...s.batches, batch], heals: 0 }))
+  enqueue(target.id)
+  return target.id
+}
+
+/** The set whose reference is one of our posters, made the first time it's asked for. */
+async function ownSet(set: GenerationSet & { city: CitySetInfo }, output: Output) {
+  const held = (await listSets()).find((s) => isCitySet(s) && s.city.fromOutput?.setId === set.id && s.city.fromOutput.outputId === output.id)
+  if (held) return held
+  const made = await createSet("poster", CITY_FOLDER, { listingId: 0, title: `${set.city.place} · ${output.title ?? "our poster"}`, image: "", url: "", shop: "Ours", tags: [] }, NO_OPTIONS)
+  const { data, info } = await sharp(await readSetFile(set.id, output.file!)).jpeg({ quality: 94 }).toBuffer({ resolveWithObject: true })
+  const file = `poster-1-${Date.now().toString(36)}.jpg`
+  await saveFile(made.id, file, data)
+  const city: CitySetInfo = { placeId: set.city.placeId, place: set.city.place, country: set.city.country, fromOutput: { setId: set.id, outputId: output.id } }
+  return updateSet(made.id, (s) => ({
+    ...s,
+    city,
+    original: { status: "done", file },
+    posters: [{ index: 0, status: "done", file, width: info.width, height: info.height }],
+    extraction: { status: "done", file: null },
     batches: [],
   }))
 }
@@ -211,16 +252,24 @@ async function reference(set: GenerationSet) {
   }
 }
 
-/** What the reference is and shows, read once per set; null without one or when it can't be read. */
-async function readOnce(id: string): Promise<ReferenceRead | null> {
+/**
+ * What the reference is and shows, read once per set (and per further
+ * print of a set's photo); null without one or when it can't be read.
+ */
+async function readOnce(id: string, index?: number): Promise<ReferenceRead | null> {
   const set = await getSet(id)
   if (!isCitySet(set)) return null
-  if (set.city.read) return set.city.read
-  const poster = set.posters.find((p) => p.file)
-  if (!set.source.listingId || !poster?.file) return null
+  const first = set.posters.find((p) => p.file)
+  const poster = index === undefined ? first : set.posters.find((p) => p.index === index && p.file)
+  const own = !!poster && !!first && poster.index !== first.index
+  const held = own ? set.city.reads?.[poster!.index] : set.city.read
+  if (held) return held
+  if ((!set.source.listingId && !set.city.fromOutput) || !poster?.file) return null
   try {
     const read = await readReference(await readSetFile(id, poster.file), set.city.place)
-    await updateSet(id, (s) => (isCitySet(s) ? { ...s, city: { ...s.city, read } } : s))
+    await updateSet(id, (s) =>
+      isCitySet(s) ? { ...s, city: own ? { ...s.city, reads: { ...s.city.reads, [poster.index]: read } } : { ...s.city, read } } : s
+    )
     return read
   } catch (error) {
     console.warn(`City set ${id}, reading the reference:`, (error as Error).message)
@@ -232,7 +281,9 @@ async function readOnce(id: string): Promise<ReferenceRead | null> {
 function expand(set: GenerationSet, batch: Batch, read: ReferenceRead | null): Output[] {
   const r = normalizeRequest(batch.city)
   const now = new Date().toISOString()
-  const base = { status: "pending" as const, file: null, batch: batch.id, review: null, createdAt: now, poster: 0, feedback: r.notes }
+  // A set's photo: the print picked, when the set holds it.
+  const poster = set.posters.some((p) => p.index === r.print && p.file) ? r.print! : 0
+  const base = { status: "pending" as const, file: null, batch: batch.id, review: null, createdAt: now, poster, feedback: r.notes }
   const out: Output[] = []
   const make = (city: CityOutputInfo, mode: Output["mode"], creativity: Creativity, styleId?: string): Output => ({
     ...base,
@@ -351,14 +402,14 @@ async function plan(id: string) {
     // A lab photo is planned on its own photo; the rest by what they share.
     // Lab cities from words are planned one city at a time, each with its own place knowledge.
     const city = c.kind === "lab" && c.block === "prompt" ? (c.target ?? "") : ""
-    const key = [briefKind(c), c.medium ?? "", c.block ?? "", c.block === "photo" ? o.poster : "", city, c.candidate ?? "", c.styleId ?? "", c.refMode ?? "", c.set ? "set" : "", c.follow ?? "", c.production ?? "", o.feedback ?? ""].join("|")
+    // Each print of a set's photo is a reference of its own.
+    const key = [briefKind(c), c.medium ?? "", c.block ?? "", o.poster, city, c.candidate ?? "", c.styleId ?? "", c.refMode ?? "", c.set ? "set" : "", c.follow ?? "", c.production ?? "", o.feedback ?? ""].join("|")
     groups.set(key, [...(groups.get(key) ?? []), o])
   }
   if (!groups.size) return
   // The shop's own skies, so the briefs know them by name.
   await listCustomSkies().catch(() => [])
   const place = set.city?.place ?? set.source.title
-  const read = set.city?.read ?? null
   const brief = set.city && !set.city.lab ? await placeBrief(set.city.placeId, set.city.place, set.city.country) : null
 
   // New ideas, sets and styled posters are planned one group after another, each told what the
@@ -373,6 +424,8 @@ async function plan(id: string) {
     const poster = set.posters.find((p) => p.index === outputs[0].poster && p.file) ?? (lab ? undefined : set.posters.find((p) => p.file))
     const uses = lab ? c.block === "photo" : c.kind !== "style" || c.refMode !== "city"
     const reference = uses && poster ? await readSetFile(id, poster.file!).catch(() => null) : null
+    // A set's photo: each print read on its own.
+    const read = lab || !poster ? (set.city?.read ?? null) : await readOnce(id, poster.index)
     const styleId = c.styleId ?? set.city?.lab?.styleId
     const style = styleId ? await loadCityStyle(styleId) : null
     const candidate = lab && c.candidate && styleId ? await candidateGuide(styleId, c.candidate) : null
@@ -510,7 +563,8 @@ export async function cityRequest(set: GenerationSet, output: Output, test: { mo
       : c.kind === "style" || c.kind === "lab"
         ? (style?.images ?? [])
         : []
-  const read = set.city?.read
+  // The read of the print it's made from (a set's photo holds several).
+  const read = (poster && poster.index !== set.posters.find((p) => p.file)?.index ? set.city?.reads?.[poster.index] : undefined) ?? set.city?.read
   // The place's landmarks keep new compositions true; variants have the reference for that.
   const newView = c.kind === "idea" || c.kind === "set" || (c.kind === "style" && c.refMode !== "photo") || (c.kind === "lab" && c.block === "prompt")
   const target = c.kind === "lab" && c.target ? await placeByName(c.target).catch(() => null) : null

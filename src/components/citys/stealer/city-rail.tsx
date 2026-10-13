@@ -12,9 +12,10 @@ import { cn } from "@/lib/utils"
 
 // The places down the left of the Stealer, in priority order: tier, how
 // much demand, whether we have it already. Filters on top keep it to what's
-// worth making next (tiers A–C, open places); ↑ and ↓ walk it.
+// worth making next (tiers A–C, open places, or places whose old listings
+// get a new poster of the same place); ↑ and ↓ walk it.
 
-export type RailFilter = { search: string; tiers: Tier[]; coverage: "all" | "open" | "have"; photos: boolean }
+export type RailFilter = { search: string; tiers: Tier[]; coverage: "all" | "open" | "have" | "replace"; photos: boolean }
 
 export const DEFAULT_RAIL: RailFilter = { search: "", tiers: ["A", "B", "C"], coverage: "open", photos: false }
 
@@ -23,8 +24,11 @@ export function filterCities(cities: StealerCityRow[], f: RailFilter) {
   return cities.filter((c) => {
     if (f.tiers.length && !f.tiers.includes(c.tier)) return false
     const have = !!c.coverage && (c.coverage.confirmed > 0 || c.coverage.open > 0)
-    if (f.coverage === "open" && have) return false
+    // Old listings to replace of a place with demand keep their place: a new poster of it replaces them.
+    const replace = !!c.coverage && c.coverage.replace > 0 && c.tier !== "F"
+    if (f.coverage === "open" && (have || replace)) return false
     if (f.coverage === "have" && !have) return false
+    if (f.coverage === "replace" && !replace) return false
     if (f.photos ? c.photos === 0 : c.refs === 0) return false
     if (words.length) {
       const text = `${c.name} ${c.countryName} ${c.region ?? ""} ${c.setting} ${c.kind} ${c.tags.join(" ")}`.toLowerCase()
@@ -107,7 +111,7 @@ export function CityRail({
           )
         })}
         <div className="ml-auto flex rounded-md border p-0.5 text-[11px]">
-          {(["open", "have", "all"] as const).map((c) => (
+          {(["open", "replace", "have", "all"] as const).map((c) => (
             <button
               key={c}
               type="button"
@@ -117,9 +121,17 @@ export function CityRail({
                 "rounded px-1.5 py-0.5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
                 filter.coverage === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
               )}
-              title={c === "open" ? "Places we don't have yet" : c === "have" ? "Places we have a listing of" : "Every place"}
+              title={
+                c === "open"
+                  ? "Places we don't have yet"
+                  : c === "replace"
+                    ? "Places whose old listings get a new poster of the same place"
+                    : c === "have"
+                      ? "Places we have a listing of"
+                      : "Every place"
+              }
             >
-              {c === "open" ? "Open" : c === "have" ? "Have" : "All"}
+              {c === "open" ? "Open" : c === "replace" ? "Replace" : c === "have" ? "Have" : "All"}
             </button>
           ))}
         </div>
@@ -147,11 +159,8 @@ export function CityRail({
                   <span className="block truncate text-sm font-medium">{c.name}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
                     {c.countryName}
-                    {c.coverage && (c.coverage.confirmed > 0 || c.coverage.replace > 0) && (
-                      <span className={cn("ml-1", have ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400")}>
-                        · {have ? `${c.coverage.confirmed + c.coverage.open} ours` : `${c.coverage.replace} to replace`}
-                      </span>
-                    )}
+                    {have && <span className="ml-1 text-emerald-700 dark:text-emerald-400">· {c.coverage!.confirmed + c.coverage!.open} ours</span>}
+                    {!!c.coverage?.replace && <span className="ml-1 text-amber-700 dark:text-amber-400">· {c.coverage.replace} to replace</span>}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end text-[11px] tabular-nums">

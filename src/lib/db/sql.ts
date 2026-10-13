@@ -32,6 +32,17 @@ const global = globalThis as typeof globalThis & { __db?: Db }
  */
 export const IDLE_SESSION = 15 * 60_000
 
+/**
+ * Limits on a session's waiting, so a dropped connection can't hold the
+ * others up for good. 13 Oct: after the network went, a transaction of a
+ * server that was gone held a document's row lock for hours (queries
+ * behind it waited forever, their generations never finished): the
+ * database now ends a transaction left open two minutes, a wait for a lock
+ * gives up after a minute (and says so, for the caller to try again), a
+ * statement after five.
+ */
+const LIMITS = { idle_in_transaction_session_timeout: 2 * 60_000, lock_timeout: 60_000, statement_timeout: 5 * 60_000 }
+
 const connect = (max: number, idle = 30, timeout = true) =>
   postgres(process.env.DATABASE_URL ?? "", {
     max,
@@ -39,7 +50,7 @@ const connect = (max: number, idle = 30, timeout = true) =>
     connect_timeout: 15,
     // "relation already exists, skipping" and the like.
     onnotice: () => {},
-    connection: { application_name: `etsy@${hostname()}`, ...(timeout && { idle_session_timeout: IDLE_SESSION }) },
+    connection: { application_name: `etsy@${hostname()}`, ...(timeout && { idle_session_timeout: IDLE_SESSION, ...LIMITS }) },
   })
 
 const db = (global.__db ??= { sql: connect(12), listeners: new Set(), resets: new Set() })

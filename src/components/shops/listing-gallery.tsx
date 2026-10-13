@@ -11,6 +11,7 @@ import { SelectionBar, SelectMark } from "@/components/selection"
 import { steal } from "@/components/steal/steal"
 import { StealDialog } from "@/components/steal/steal-dialog"
 import { ListingTable } from "@/components/shops/listing-table"
+import { ShopStyleActions } from "@/components/shops/shop-style-actions"
 import { FLAGS, FlagMarks, TierBadge, TIERS, TrendMark } from "@/components/shops/rank-badges"
 import { TagFilter, withAnyTag } from "@/components/shops/tag-filter"
 import { Button } from "@/components/ui/button"
@@ -552,6 +553,7 @@ export function ListingGallery({
         onSelectAll={selection.selectAll}
         onClear={selection.clear}
       >
+        <ShopStyleActions listings={picked(selection.selected)} onDone={selection.clear} />
         <Button
           size="sm"
           onClick={() => openSteal(selection.selected)}

@@ -65,6 +65,8 @@ export function cleanRequest(value: unknown): CityRequest {
     ...(typeof v.notes === "string" && v.notes.trim() && { notes: v.notes.trim().slice(0, 600) }),
     delivery: v.delivery,
     ...(typeof v.production === "string" && /^[a-z0-9-]{1,40}$/.test(v.production) && { production: v.production }),
+    ...(typeof v.action === "string" && /^[a-z0-9-]{1,40}$/.test(v.action) && { action: v.action }),
+    ...(Number.isInteger(v.print) && v.print! >= 0 && v.print! < 12 && { print: v.print }),
   }
 }
 

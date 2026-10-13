@@ -27,11 +27,14 @@ import { TIERS, type Tier } from "./types"
 // places first, keeps a style's posters together when asked, and with
 // several styles can let a place go up once a day per shop.
 //
-// Our listings marked "replace" are slots: a new poster of the same place
-// takes its old one's slot first, then the slots of places with no demand
-// (F) or none at all. The new poster goes up as a proper new listing (its
-// Gelato connection made by the pipeline); once it's live, the old one it
-// replaces is deactivated on the user's word (Artikel's bulk action).
+// Our listings marked "replace" are slots of two kinds. One of a place with
+// demand (tiers A to E) keeps its place: only a new poster of that same
+// place takes it (the Stealer's "Replace" shows those places). One of a
+// place without demand (F) or none at all is a full replacement: a new
+// place takes it, and those uploads go first in the queue. The new poster
+// goes up as a proper new listing (its Gelato connection made by the
+// pipeline); once it's live, the old one it replaces is deactivated on the
+// user's word (Artikel's bulk action).
 //
 // The upload itself is the pipeline's: a job whose items start at the
 // compose stage (pipeline/stages.ts), so the worker composes, writes the
@@ -82,8 +85,8 @@ export type QueueItem = {
   account: string
   compositionId: string | null
   group: string
-  /** The old listing whose slot it takes. */
-  replaces?: { listingId: number; title: string; image: string | null; why: "same place" | "free slot" }
+  /** The old listing whose slot it takes: of the same place, or a full replacement (a place without demand gives way to a new one). */
+  replaces?: { listingId: number; title: string; image: string | null; why: "same place" | "new place" }
 }
 
 export type UploadPlanView = {
@@ -241,6 +244,9 @@ function jobViews(jobs: UploadJob[], items: JobItem[], ours: OurListing[]): City
 // --- The plan ---
 
 const TIER_RANK: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 }
+
+/** Whether a listing of a place in this tier keeps its place when replaced (demand there: A to E). */
+export const keepsPlace = (tier: Tier | null | undefined) => !!tier && tier !== "F"
 const today = () => new Date().toISOString().slice(0, 10)
 
 export async function planUpload(settings: CityUploadSettings): Promise<UploadPlanView> {
@@ -325,22 +331,25 @@ export async function planUpload(settings: CityUploadSettings): Promise<UploadPl
     for (let i = 0; byGroup.some((list) => i < list.length); i++) for (const list of byGroup) if (list[i]) ordered.push(list[i])
   }
 
-  // Slots: a new poster of a place takes the slot of our old listing of it first, then any slot left.
+  // Slots: a new poster of a place takes the slot of our old listing of it first; a slot of a place
+  // without demand goes to a new place; one of a place with demand only ever to that place.
   const slots: UploadPlanView["slots"] = {}
   if (settings.slots) {
     const free = new Map<string, OurListing[]>()
-    for (const c of coverage.values()) {
+    const placesOf = new Map<number, string[]>()
+    for (const [placeId, c] of coverage) {
       for (const l of c.listings) {
+        placesOf.set(l.listingId, [...(placesOf.get(l.listingId) ?? []), placeId])
         if (l.status !== "replace" || l.state !== "active") continue
         if (!free.has(l.account)) free.set(l.account, [])
         if (!free.get(l.account)!.some((x) => x.listingId === l.listingId)) free.get(l.account)!.push(l)
       }
     }
-    const placeOf = new Map<number, string>()
-    for (const [placeId, c] of coverage) for (const l of c.listings) placeOf.set(l.listingId, placeId)
+    const tierOf = new Map((ranked?.places ?? []).map((p) => [p.id, p.tier]))
+    const full = (l: OurListing) => !(placesOf.get(l.listingId) ?? []).some((id) => keepsPlace(tierOf.get(id)))
     for (const [account, list] of free) slots[account] = { free: list.length, used: 0 }
     const pending = new Set(pipeline.items.filter((i) => i.city?.replaces && !leavesFree(i, jobs.get(i.jobId))).map((i) => i.city!.replaces!))
-    const take = (q: QueueItem, match: (l: OurListing) => boolean, why: "same place" | "free slot") => {
+    const take = (q: QueueItem, match: (l: OurListing) => boolean, why: "same place" | "new place") => {
       const list = free.get(q.account) ?? []
       const at = list.findIndex((l) => !pending.has(l.listingId) && match(l))
       if (at < 0) return false
@@ -349,10 +358,13 @@ export async function planUpload(settings: CityUploadSettings): Promise<UploadPl
       slots[q.account].used++
       return true
     }
-    for (const q of ordered) take(q, (l) => placeOf.get(l.listingId) === q.placeId, "same place")
-    // Free slots: oldest listings of places without demand go first.
+    for (const q of ordered) take(q, (l) => (placesOf.get(l.listingId) ?? []).includes(q.placeId), "same place")
+    // Full replacements: the oldest listings of places without demand go first.
     for (const list of free.values()) list.sort((a, b) => a.createdAt - b.createdAt)
-    for (const q of ordered) if (!q.replaces) take(q, () => true, "free slot")
+    for (const q of ordered) if (!q.replaces) take(q, full, "new place")
+    // A new place taking a dead listing's slot goes up first, then a place's new poster, then new listings.
+    const rank = (q: QueueItem) => (q.replaces?.why === "new place" ? 0 : q.replaces ? 1 : 2)
+    ordered = ordered.toSorted((a, b) => rank(a) - rank(b))
   }
 
   return { queue: ordered, skipped: [...skipped].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count), slots }

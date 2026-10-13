@@ -75,10 +75,19 @@ import {
  */
 const PARALLEL = 6
 
-type Queue = { waiting: string[]; running: Set<string> }
+/**
+ * `started`: when each running set's run began and its token, so a run
+ * that hangs (a call on a connection the network took that never answers:
+ * 13 Oct, sets stuck "running" for hours) can be let go of, and its late
+ * end never clears a newer run of the same set.
+ */
+type Queue = { waiting: string[]; running: Set<string>; started: Map<string, { at: number; token: number }>; tokens: number }
 // On globalThis, so every route (and a dev reload) shares the one queue.
 const global = globalThis as typeof globalThis & { __generationRunner?: Queue }
-const queue = (global.__generationRunner ??= { waiting: [], running: new Set() })
+const queue: Queue = (global.__generationRunner ??= { waiting: [], running: new Set(), started: new Map(), tokens: 0 })
+// Made before these were fields: a dev reload keeps the old object.
+queue.started ??= new Map()
+queue.tokens ??= 0
 
 export function enqueue(id: string) {
   if (!queue.waiting.includes(id)) queue.waiting.push(id)
@@ -96,9 +105,15 @@ function pump() {
     const i = queue.waiting.findIndex((id) => !queue.running.has(id))
     if (i < 0) return
     const [id] = queue.waiting.splice(i, 1)
+    const token = ++queue.tokens
     queue.running.add(id)
+    queue.started.set(id, { at: Date.now(), token })
     run(id).finally(() => {
-      queue.running.delete(id)
+      // Let go of already (it hung): a newer run of the set is its own.
+      if (queue.started.get(id)?.token === token) {
+        queue.running.delete(id)
+        queue.started.delete(id)
+      }
       pump()
     })
   }
@@ -1729,6 +1744,12 @@ const HEAL_WINDOW = 6 * 60 * 60_000
 /** A pass (healing, or asking after batch jobs) that's got nowhere this long has hung. */
 const HUNG_PASS = 10 * 60_000
 /**
+ * A run of a set that has gone this long without the set changing has hung
+ * (a call on a dropped connection that never answers): it's let go of, so
+ * its lost images are painted again and new batches of the set can start.
+ */
+const HUNG_RUN = 45 * 60_000
+/**
  * An image of this server's still marked as painting, with nothing here
  * painting it and its set unchanged this long, was lost. Not sooner: a
  * server on older code that took a job over (when the database was too slow
@@ -1768,6 +1789,8 @@ const OUTPUT_FIELDS = new Set(["status", "file", "width", "height", "error", "no
  */
 function ours(set: GenerationSet) {
   const only = (o: object | undefined, fields: Set<string>) => Object.keys(o ?? {}).every((key) => fields.has(key))
+  // City sets (citys/generate.ts) run here too; lab rounds are the lab's to run.
+  if (isCitySet(set)) return !set.city.lab
   return (
     (set.kind === "poster" || set.kind === "mockup") &&
     only(set, SET_FIELDS) &&
@@ -1814,17 +1837,35 @@ async function healPass() {
       kickBatches(0)
     }
     const sets = await listSets()
+    for (const [id, { at }] of queue.started) {
+      const set = sets.find((s) => s.id === id)
+      if (Date.now() - at < HUNG_RUN || (set && Date.now() - Date.parse(set.updatedAt) < HUNG_RUN)) continue
+      console.warn(`Generation ${id}: its run got nowhere for ${Math.round((Date.now() - at) / 60_000)} min, let go of`)
+      queue.running.delete(id)
+      queue.started.delete(id)
+      if (set && (set.status === "queued" || set.batches.some((b) => !b.expanded))) enqueue(id)
+    }
     for (const set of sets) {
       const gone = lost(set)
       if (gone.length) await heal(set.id, "images went missing on this server", gone)
+      // Queued here but in no line: its run failed before it began (the database full, say).
+      const runner = (set as GenerationSet & { runner?: string }).runner
+      if (set.status === "queued" && runner === instanceId && !queue.running.has(set.id) && !queue.waiting.includes(set.id) && Date.now() - Date.parse(set.updatedAt) > 3 * 60_000) {
+        console.warn(`Generation ${set.id}: queued here but in no line, put back`)
+        enqueue(set.id)
+      }
     }
-    if (pause.on || process.env.FOLLOWER === "1") return
+    if (pause.on) return
+    // A server held back (FOLLOWER=1) still heals the city sets: only this code knows how to run them.
+    const citysOnly = process.env.FOLLOWER === "1"
     await exclusive("generation:heal", async () => {
       for (const set of await listSets()) {
+        if (citysOnly && !isCitySet(set)) continue
         const why = healDue(set)
         if (why) await heal(set.id, why)
       }
     })
+    if (citysOnly) return
     // Jobs still painting are asked after here too, should nobody be polling them.
     if (!batches.ticking && !batches.timer && sets.some((s) => s.jobs?.some((j) => j.status === "running"))) kickBatches(0)
   } catch (error) {

@@ -338,6 +338,10 @@ export type CityRequest = {
   delivery: "now" | "batch"
   /** The production it's part of (set by the app, not asked for). */
   production?: string
+  /** The action it was asked in (one click of Generate: every photo's batch of it), set by the app; Outputs groups by it. */
+  action?: string
+  /** Which print of the reference photo it's made from, when the photo holds a set (set by the app). */
+  print?: number
 }
 
 export const SET_MIN = 3
@@ -482,6 +486,10 @@ export type CitySetInfo = {
   labels?: string[]
   /** What the reference shows and how it's made, read once. */
   read?: ReferenceRead
+  /** The same for the other prints of a set's photo, by print. */
+  reads?: Record<number, ReferenceRead>
   /** A lab round's set: its style and round. */
   lab?: { styleId: string; round: string }
+  /** Recreated from one of our own posters: it is this set's reference. */
+  fromOutput?: { setId: string; outputId: string }
 }

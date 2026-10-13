@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import type { CityOutput } from "@/lib/citys/outputs"
+import type { CityRequest } from "@/lib/citys/studio-types"
 
 // City posters for the Outputs page, read again every few seconds while
 // some are still being painted. Reviews show at once and go to the server
@@ -68,6 +69,17 @@ export async function reviewCityOutputs(items: { setId: string; outputId: string
     void refreshOutputs()
     throw new Error((await response.json().catch(() => ({}))).error ?? response.statusText)
   }
+}
+
+/** More from a poster with a whole request: from its reference photo, or with the poster itself as the reference. */
+export async function recreateCityOutput(setId: string, outputId: string, base: "reference" | "ours", request: CityRequest) {
+  const response = await fetch("/api/citys/outputs/recreate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setId, outputId, base, request }),
+  })
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error ?? response.statusText)
+  await refreshOutputs()
 }
 
 export async function redoCityOutput(setId: string, outputId: string, notes: string, count = 1) {

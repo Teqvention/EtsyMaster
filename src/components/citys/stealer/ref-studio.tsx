@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 export function RefStudio({
   item,
   city,
+  print: initial = 0,
   request,
   onRequest,
   mode,
@@ -30,6 +31,8 @@ export function RefStudio({
 }: {
   item: StealerRef | null
   city: StealerCityRow | null
+  /** The print to open on, for a set's photo. */
+  print?: number
   request: CityRequest
   onRequest: (next: CityRequest) => void
   /** "open": generate from here; "settings": settings of its own for a scaled run. */
@@ -37,13 +40,13 @@ export function RefStudio({
   onClose: () => void
   onKeep?: (request: CityRequest | null) => void
 }) {
-  const [print, setPrint] = React.useState(0)
+  const [print, setPrint] = React.useState(initial)
   const [busy, setBusy] = React.useState(false)
-  // Another listing: its first print.
-  const [printFor, setPrintFor] = React.useState(item?.listingId)
-  if (printFor !== item?.listingId) {
-    setPrintFor(item?.listingId)
-    setPrint(0)
+  // Another listing (or print asked for): that print.
+  const [printFor, setPrintFor] = React.useState(`${item?.listingId}|${initial}`)
+  if (printFor !== `${item?.listingId}|${initial}`) {
+    setPrintFor(`${item?.listingId}|${initial}`)
+    setPrint(initial)
   }
 
   if (!item || !city) return null

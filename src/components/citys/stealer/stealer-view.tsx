@@ -8,7 +8,7 @@ import { toast } from "sonner"
 
 import { RequestEditor, TemplatePicker } from "@/components/citys/request-editor"
 import { CityRail, DEFAULT_RAIL, filterCities, type RailFilter } from "@/components/citys/stealer/city-rail"
-import { RefCard } from "@/components/citys/stealer/ref-card"
+import { RefCard, SetCard } from "@/components/citys/stealer/ref-card"
 import { RefStudio } from "@/components/citys/stealer/ref-studio"
 import { TierBadge } from "@/components/citys/tier"
 import { SelectionBar } from "@/components/selection"
@@ -32,6 +32,8 @@ import { cn } from "@/lib/utils"
 // for; Scale mode turns clicks into a pick (across places, in the
 // all-places view too), and one button sends the whole pick off with one
 // set of settings, each photo keeping settings of its own where it has some.
+// ?place=<id>&ref=<listing> (from a poster in Outputs) opens that place with
+// that photo picked out.
 
 type Kind = "photos" | "art" | "all"
 type View = "city" | "all"
@@ -39,8 +41,8 @@ type View = "city" | "all"
 const RAIL_KEY = "citys-stealer:rail"
 const REQUEST_KEY = "citys-stealer:request"
 
-/** A pick's key: place and listing, as the same photo can belong to two places. */
-const keyOf = (placeId: string, listingId: number) => `${placeId}|${listingId}`
+/** A pick's key: place, listing and print, as the same photo can belong to two places and a set's photo holds several prints. */
+const keyOf = (placeId: string, listingId: number, print = 0) => `${placeId}|${listingId}|${print}`
 
 export function StealerView() {
   const state = useStealer()
@@ -56,10 +58,12 @@ export function StealerView() {
   const [view, setView] = React.useState<View>("city")
   const [kind, setKind] = React.useState<Kind>("photos")
   const [current, setCurrent] = React.useState<string | null>(params.get("place"))
+  // The photo asked for in the address, picked out once its place shows.
+  const [focus] = React.useState<number | null>(Number(params.get("ref")) || null)
   const [scaling, setScaling] = React.useState(false)
-  const [picked, setPicked] = React.useState<Map<string, { city: StealerCityRow; ref: StealerRef }>>(new Map())
+  const [picked, setPicked] = React.useState<Map<string, { city: StealerCityRow; ref: StealerRef; print: number }>>(new Map())
   const [overrides, setOverrides] = React.useState<Map<string, CityRequest>>(new Map())
-  const [studio, setStudio] = React.useState<{ ref: StealerRef; city: StealerCityRow; mode: "open" | "settings"; request: CityRequest } | null>(null)
+  const [studio, setStudio] = React.useState<{ ref: StealerRef; city: StealerCityRow; print: number; mode: "open" | "settings"; request: CityRequest } | null>(null)
   const [busy, setBusy] = React.useState(false)
 
   const cities = React.useMemo(() => (state ? filterCities(state.cities, { ...rail, photos: kind === "photos" }) : []), [state, rail, kind])
@@ -85,23 +89,23 @@ export function StealerView() {
     window.history.replaceState(null, "", url)
   }
 
-  function toggle(c: StealerCityRow, ref: StealerRef) {
+  function toggle(c: StealerCityRow, ref: StealerRef, print = 0) {
     setPicked((map) => {
       const next = new Map(map)
-      const key = keyOf(c.id, ref.listingId)
+      const key = keyOf(c.id, ref.listingId, print)
       if (next.has(key)) next.delete(key)
-      else next.set(key, { city: c, ref })
+      else next.set(key, { city: c, ref, print })
       return next
     })
   }
 
-  function open(c: StealerCityRow, ref: StealerRef, event?: React.MouseEvent) {
-    if (scaling || event?.shiftKey || event?.metaKey) return toggle(c, ref)
-    setStudio({ ref, city: c, mode: "open", request: overrides.get(keyOf(c.id, ref.listingId)) ?? request })
+  function open(c: StealerCityRow, ref: StealerRef, event?: React.MouseEvent, print = 0) {
+    if (scaling || event?.shiftKey || event?.metaKey) return toggle(c, ref, print)
+    setStudio({ ref, city: c, print, mode: "open", request: overrides.get(keyOf(c.id, ref.listingId, print)) ?? request })
   }
 
-  function settings(c: StealerCityRow, ref: StealerRef) {
-    setStudio({ ref, city: c, mode: "settings", request: overrides.get(keyOf(c.id, ref.listingId)) ?? request })
+  function settings(c: StealerCityRow, ref: StealerRef, print = 0) {
+    setStudio({ ref, city: c, print, mode: "settings", request: overrides.get(keyOf(c.id, ref.listingId, print)) ?? request })
   }
 
   const total = [...picked.keys()].reduce((n, key) => n + requestSize(overrides.get(key) ?? request), 0)
@@ -110,11 +114,11 @@ export function StealerView() {
   async function generatePick() {
     setBusy(true)
     try {
-      const jobs = [...picked.entries()].map(([key, { city: c, ref }]) => ({
+      const jobs = [...picked.entries()].map(([key, { city: c, ref, print }]) => ({
         placeId: c.id,
         place: c.name,
         country: c.country,
-        ref: { listingId: ref.listingId, shopId: ref.shopId, shop: ref.shop, title: ref.title, image: ref.short, tags: ref.tags, labels: ref.labels },
+        ref: { listingId: ref.listingId, shopId: ref.shopId, shop: ref.shop, title: ref.title, image: ref.short, tags: ref.tags, labels: ref.labels, print },
         request: overrides.get(key) ?? request,
       }))
       await generateCities(jobs)
@@ -205,6 +209,8 @@ export function StealerView() {
               <CityRefs
                 city={city}
                 kind={kind}
+                focus={city.id === params.get("place") ? focus : null}
+                onShowAll={() => setKind("all")}
                 scaling={scaling}
                 picked={picked}
                 overrides={overrides}
@@ -213,7 +219,7 @@ export function StealerView() {
                 onPickAll={(refs) =>
                   setPicked((map) => {
                     const next = new Map(map)
-                    for (const ref of refs) next.set(keyOf(city.id, ref.listingId), { city, ref })
+                    for (const ref of refs) next.set(keyOf(city.id, ref.listingId), { city, ref, print: 0 })
                     return next
                   })
                 }
@@ -240,20 +246,21 @@ export function StealerView() {
       <RefStudio
         item={studio?.ref ?? null}
         city={studio?.city ?? null}
+        print={studio?.print ?? 0}
         request={studio?.request ?? request}
         onRequest={(next) => setStudio((s) => (s ? { ...s, request: next } : s))}
         mode={studio?.mode ?? "open"}
         onClose={() => setStudio(null)}
         onKeep={(next) => {
           if (!studio) return
-          const key = keyOf(studio.city.id, studio.ref.listingId)
+          const key = keyOf(studio.city.id, studio.ref.listingId, studio.print)
           setOverrides((map) => {
             const out = new Map(map)
             if (next) out.set(key, next)
             else out.delete(key)
             return out
           })
-          if (next && !picked.has(key)) toggle(studio.city, studio.ref)
+          if (next && !picked.has(key)) toggle(studio.city, studio.ref, studio.print)
           setStudio(null)
         }}
       />
@@ -335,6 +342,8 @@ const kindFilter = (kind: Kind) => (r: StealerRef) => (kind === "all" ? true : k
 function CityRefs({
   city,
   kind,
+  focus,
+  onShowAll,
   scaling,
   picked,
   overrides,
@@ -344,16 +353,34 @@ function CityRefs({
 }: {
   city: StealerCityRow
   kind: Kind
+  /** A listing to pick out: scrolled to and ringed for a moment. */
+  focus?: number | null
+  /** The focused listing is hidden by the kind shown: show both. */
+  onShowAll?: () => void
   scaling: boolean
   picked: Map<string, unknown>
   overrides: Map<string, CityRequest>
-  onOpen: (city: StealerCityRow, ref: StealerRef, event?: React.MouseEvent) => void
-  onSettings: (city: StealerCityRow, ref: StealerRef) => void
+  onOpen: (city: StealerCityRow, ref: StealerRef, event?: React.MouseEvent, print?: number) => void
+  onSettings: (city: StealerCityRow, ref: StealerRef, print?: number) => void
   onPickAll: (refs: StealerRef[]) => void
 }) {
   const { city: data, error } = useStealerCity(city.id)
   const refs = (data?.refs ?? []).filter(kindFilter(kind))
   const ours = data?.coverage
+  const hidden = !!focus && !!data && !refs.some((r) => r.listingId === focus) && data.refs.some((r) => r.listingId === focus)
+  React.useEffect(() => {
+    if (hidden) onShowAll?.()
+  }, [hidden, onShowAll])
+  const shownFocus = focus && refs.some((r) => r.listingId === focus) ? focus : null
+  // Ringed for a few seconds once it shows.
+  const [faded, setFaded] = React.useState<number | null>(null)
+  const lit = shownFocus && faded !== shownFocus ? shownFocus : null
+  React.useEffect(() => {
+    if (!shownFocus) return
+    document.querySelector(`[data-ref="${shownFocus}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" })
+    const timer = setTimeout(() => setFaded(shownFocus), 4000)
+    return () => clearTimeout(timer)
+  }, [shownFocus])
 
   return (
     <div className="flex flex-col gap-3">
@@ -404,18 +431,39 @@ function CityRefs({
         </Empty>
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-5">
-          {refs.map((ref) => (
-            <li key={ref.listingId}>
-              <RefCard
-                item={ref}
-                selecting={scaling}
-                selected={picked.has(keyOf(city.id, ref.listingId))}
-                custom={overrides.has(keyOf(city.id, ref.listingId))}
-                onClick={(event) => onOpen(city, ref, event)}
-                onSettings={() => onSettings(city, ref)}
-              />
-            </li>
-          ))}
+          {refs.map((ref) =>
+            ref.crop.prints.length > 1 ? (
+              // A set's photo: its prints side by side, joined by a line behind them.
+              <li
+                key={ref.listingId}
+                data-ref={ref.listingId}
+                className="col-span-full sm:[grid-column:span_var(--span)/span_var(--span)]"
+                style={{ "--span": Math.min(ref.crop.prints.length, 3) } as React.CSSProperties}
+              >
+                <SetCard
+                  item={ref}
+                  lit={lit === ref.listingId}
+                  selecting={scaling}
+                  selected={(print) => picked.has(keyOf(city.id, ref.listingId, print))}
+                  custom={(print) => overrides.has(keyOf(city.id, ref.listingId, print))}
+                  onClick={(event, print) => onOpen(city, ref, event, print)}
+                  onSettings={(print) => onSettings(city, ref, print)}
+                />
+              </li>
+            ) : (
+              <li key={ref.listingId} data-ref={ref.listingId}>
+                <RefCard
+                  item={ref}
+                  lit={lit === ref.listingId}
+                  selecting={scaling}
+                  selected={picked.has(keyOf(city.id, ref.listingId))}
+                  custom={overrides.has(keyOf(city.id, ref.listingId))}
+                  onClick={(event) => onOpen(city, ref, event)}
+                  onSettings={() => onSettings(city, ref)}
+                />
+              </li>
+            )
+          )}
         </ul>
       )}
     </div>
@@ -448,8 +496,8 @@ function AllPlaces({
   scaling: boolean
   picked: Map<string, unknown>
   overrides: Map<string, CityRequest>
-  onOpen: (city: StealerCityRow, ref: StealerRef, event?: React.MouseEvent) => void
-  onSettings: (city: StealerCityRow, ref: StealerRef) => void
+  onOpen: (city: StealerCityRow, ref: StealerRef, event?: React.MouseEvent, print?: number) => void
+  onSettings: (city: StealerCityRow, ref: StealerRef, print?: number) => void
   onFocus: (id: string) => void
 }) {
   const [strips, setStrips] = React.useState<Record<string, StealerRef[]>>({})
@@ -523,19 +571,33 @@ function AllPlaces({
               <p className="text-xs text-muted-foreground">No references of this kind.</p>
             ) : (
               <ul className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
-                {refs.map((ref) => (
-                  <li key={ref.listingId} className="w-36 shrink-0">
-                    <RefCard
-                      size="sm"
-                      item={ref}
-                      selecting={scaling}
-                      selected={picked.has(keyOf(c.id, ref.listingId))}
-                      custom={overrides.has(keyOf(c.id, ref.listingId))}
-                      onClick={(event) => onOpen(c, ref, event)}
-                      onSettings={() => onSettings(c, ref)}
-                    />
-                  </li>
-                ))}
+                {refs.map((ref) =>
+                  ref.crop.prints.length > 1 ? (
+                    <li key={ref.listingId} className="shrink-0" style={{ width: `calc(${Math.min(ref.crop.prints.length, 3)} * 9rem + ${Math.min(ref.crop.prints.length, 3) - 1} * 0.5rem)` }}>
+                      <SetCard
+                        size="sm"
+                        item={ref}
+                        selecting={scaling}
+                        selected={(print) => picked.has(keyOf(c.id, ref.listingId, print))}
+                        custom={(print) => overrides.has(keyOf(c.id, ref.listingId, print))}
+                        onClick={(event, print) => onOpen(c, ref, event, print)}
+                        onSettings={(print) => onSettings(c, ref, print)}
+                      />
+                    </li>
+                  ) : (
+                    <li key={ref.listingId} className="w-36 shrink-0">
+                      <RefCard
+                        size="sm"
+                        item={ref}
+                        selecting={scaling}
+                        selected={picked.has(keyOf(c.id, ref.listingId))}
+                        custom={overrides.has(keyOf(c.id, ref.listingId))}
+                        onClick={(event) => onOpen(c, ref, event)}
+                        onSettings={() => onSettings(c, ref)}
+                      />
+                    </li>
+                  )
+                )}
               </ul>
             )}
           </section>
