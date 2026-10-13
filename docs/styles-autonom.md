@@ -32,6 +32,15 @@ sein Gefühl treffen, und wie Variants und New ideas näher am echten Stil bleib
 8. **Styles fassen beliebig viele Bilder** (`MAX_IMAGES` = 1000). Die Style-Beschreibung liest weiter eine Auswahl,
    die Studie für Autonomous scale jedes Bild.
 
+## 2a · Mit Vorlage oder eigene Komposition
+
+Der Regler **From the board** (0–100 %, Standard 60 %) sagt, wie viele Poster einer Runde von einem Board-Bild
+ausgehen. Die übrigen sind **eigene Kompositionen** (`free`): ihr Anker leiht nur seine Hand (Nano Banana bekommt ihn
+und zwei Bilder seiner Familie als Look), Motiv, Ort, Idee und Komposition denkt sich Gemini selbst aus, jede Art von
+Motiv, die das Board hat. Die Stufe sagt bei ihnen, wie weit das Motiv über die Welt des Boards hinausgeht (Minimal:
+typische Motive des Boards in eigener Komposition … High: die überraschendste eigene Idee, die noch klar zur Serie
+gehört). Die eigenen Kompositionen verteilen sich gleichmäßig über die Runde.
+
 ## 2 · Die fünf Stufen bei Autonomous scale
 
 | Stufe | Was sich bewegt |
@@ -85,6 +94,20 @@ Augen eine grimmige Katze mit schwerem Impasto. Die Ursache stand in den Prompts
   verfeinern, gleiche Palette und Licht, gleiches Gefühl.
 - Die Poster-Analyse beschreibt die Stimmung jetzt genauer (Ausdruck, Körpersprache, Energie, Licht, Humor) und die
   Malweise mit „wie locker, wie dick, wie viel Detail“.
+- **Ausdruck und Blick** (Robin, 13.10.: „Der Tiger guckt so gerade und ernst rein“): ab Low spielen Briefs damit wie
+  ein Künstler — süß, schläfrig, verträumt, Augen zu, halb geschlossen, zur Seite —, nie der Standard-Blick gerade und
+  ernst aus dem Bild. Minimal und Subtle behalten den Blick der Referenz. Gilt auch für Autonomous scale.
+- **Verträumtes bleibt verträumt:** Wo das Motiv der Referenz in weicher, dunstiger Farbe verschwimmt oder halb
+  verborgen ist, bleibt es so — nie ein scharf gezeichnetes Tier vor malerischem Hintergrund. Nie dunkler, düsterer
+  oder realistischer als die Referenz.
+- **Analyse Version 2** (`ANALYSIS_VERSION`): Farben, wie sie sind (weich und pastellig ist nicht „neon“), wie
+  verträumt das Bild ist, wie das Motiv in der Farbe sitzt. Version 1 nannte Robins verträumten Dschungel-Tiger
+  „neon-drenched, wild, electric“ mit „realistic gaze“ — daher die dunklen, realistischen Ideen. Ältere Analysen werden
+  beim nächsten Generieren aus dem Set einmal neu gelesen.
+- **Wortfilter** (`plainBrief`): „realistic“, „photorealistic“, „highly detailed“ und „in a realistic style“ werden
+  vor dem Malen aus jedem Brief genommen.
+- **More like this mit Notiz:** bei Minimal und Subtle ist die Notiz die einzige Änderung (vorher wurde zusätzlich
+  aus einer Torte ein Donut).
 
 ## 5 · Die Prüfung
 
@@ -149,6 +172,10 @@ Motiv-Arten in der Studie (Version 2, ältere Studien werden neu gelesen), feste
 bis 20 in einer Antwort und die Prüfung doppelter Hauptmotive. Gegenprobe (15 Bilder): 15 verschiedene Anker,
 Hauptmotive Schneeleopard, Schildkröten, Faultier, Giraffe, Löwenpfote, Jaguar, Perserkatze, Pool-Party, Gepard,
 Eisbär, Dalmatiner, Löwe, roter Panda, Waschbär, Tennis-Stillleben mit Discokugel.
+
+**Dschungel-Tiger nach Analyse v2** (Robins Beispiel, vorher: Löwe mit Neon-Drips, scharfer Tiger vor dem Dschungel):
+Variante Minimal fast das Original mit anderen Details, Low mit verträumtem Blick, Ideen Jaguar, Eule und Panda — alle im
+weichen, dunstigen Farbnebel, das Tier eingebettet statt scharf davor.
 
 **Kosten der Tests:** 50 Bilder (dopamin 38 inklusive der verworfenen zweiten Versuche, Impasto 5, Katze 2,
 Tiger 5), freigegeben waren 200.

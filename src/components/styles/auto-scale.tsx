@@ -29,8 +29,8 @@ import { MAX_AUTO } from "@/lib/styles/types"
 const MEANING: Record<Creativity, string> = {
   minimal: "A sibling of one board poster, small details changed",
   subtle: "A board poster's scene with one real change",
-  low: "Two board posters remixed into a new picture",
-  medium: "A new scene from the style's world",
+  low: "A new picture of a board poster's kind",
+  medium: "A motif the board doesn't have yet",
   high: "The boldest new idea or viewpoint",
 }
 
