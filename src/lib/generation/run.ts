@@ -32,6 +32,7 @@ import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
 import { analysePoster, ANALYSIS_VERSION, extractPosters } from "./poster"
+import { textured } from "./texture"
 import { paintPrompt, planBriefs } from "./prompts"
 import {
   deleteSet,
@@ -1561,7 +1562,7 @@ const COLLECT_PARALLEL = 6
 async function bringIn(id: string, result: PaintResult, model?: string) {
   try {
     if (result.image) {
-      const stored = await store(id, `out-${result.key}`, result.image)
+      const stored = await store(id, `out-${result.key}`, await texturedOutput(id, result.key, result.image))
       const set = await updateOutput(id, result.key, {
         ...stored.asset,
         job: undefined,
@@ -2170,7 +2171,7 @@ async function draw(id: string, output: Output, style: Promise<StyleRef | null>)
   try {
     const { prompt, images, aspect } = await request(id, output.id, style)
     const image = await paint(prompt, images, aspect)
-    const stored = await store(id, `out-${output.id}`, image)
+    const stored = await store(id, `out-${output.id}`, await texturedOutput(id, output.id, image))
     await updateOutput(id, output.id, { ...stored.asset })
   } catch (error) {
     if (error instanceof NotFoundError && error.message === "Unknown generation") throw error
@@ -2259,6 +2260,13 @@ function blankOutput(s: GenerationSet): Partial<GenerationSet> {
     createdAt: now,
   }
   return { batches: [{ ...batch, expanded: true }], outputs: [output] }
+}
+
+/** A painted poster with the texture of what it was painted after (generation/texture.ts); mockups as they are. */
+async function texturedOutput(id: string, outputId: string, image: Buffer) {
+  const set = await getSet(id).catch(() => null)
+  const output = set?.outputs.find((o) => o.id === outputId)
+  return set && output ? textured(set, output, image) : image
 }
 
 /** Saves an image (upright, at most 2400 px, JPEG) under a fresh name, so it can be cached for good. */

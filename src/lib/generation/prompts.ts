@@ -193,7 +193,8 @@ const SAME_HAND = `Paint it by the reference's own hand:
 - Expressions and gazes as the art direction says them; never a stiff, serious stare out of the picture unless it asks for one.
 - No more objects than the art direction names: a new setting stays as sparse and as softly painted as the reference's.
 - The same palette, saturation, contrast and kind of light: nothing darker, more muted or moodier.
-- The same feeling: the characters' expressions, body language and energy, the warmth and the humour of the reference.`
+- The same feeling: the characters' expressions, body language and energy, the warmth and the humour of the reference.
+- Real materials: the reference's own surface — paper grain or canvas weave, slightly uneven colour within each stroke, dry or broken brush edges. Never smooth digital fills, flawless gradients or razor-clean edges.`
 
 /** What Nano Banana is told for one output; images go in the order the text names them. */
 export function paintPrompt({

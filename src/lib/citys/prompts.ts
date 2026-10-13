@@ -52,7 +52,7 @@ export const ART_LEVELS: Record<Level, string> = {
 const REAL_RULES = `Rules for a real photo:
 - It is the real place. Every building, bridge, tower, church, coastline, hill and street in view stays where it is, with its real shape, height and proportions. Never invent, move or merge landmarks; never change the skyline; never add landmarks of other places.
 - Buildings are real buildings, each with its own shape, colour, windows, balconies and roof, as in the photos of the place: never generic filler houses, a slope of near-identical boxes, or invented hotels and towers.
-- It looks like a real photograph by a professional: true perspective, real lens behaviour, natural colour, fine detail up close (brickwork, leaves, water) that softens with distance and haze, far hills and houses soft. No AI look: no oversaturation, no plastic or waxy surfaces, no uniform crisp detail everywhere, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections.
+- It looks like a real photograph by a professional: true perspective, real lens behaviour, natural colour, fine detail up close (brickwork, leaves, water) that softens with distance and haze, far hills and houses soft. No AI look: no oversaturation, no plastic or waxy surfaces, no glassy-smooth skies or walls, no uniform crisp detail everywhere, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections; a fine, natural grain as from a real camera.
 - ${SKY_RULES}
 - No text, logos, watermarks, borders or frames. Real signs stay as they are but never readable brand names or logos; never new lettering.
 - People and cars small and incidental, fewer rather than more, never posed, no faces in focus; never crowds, packed beaches or rows of umbrellas and sunbeds.
@@ -61,6 +61,7 @@ const REAL_RULES = `Rules for a real photo:
 /** What every picture in an art style must be, after a reference or a style. */
 const ART_RULES = `Rules for an illustrated poster:
 - Keep the art style exactly: medium, line weight and character, hatching, how colour is laid in (washes, crayon, flat fills, paper showing through), palette and how saturated it is, texture, level of detail, how people, cars and trees are drawn. It must be impossible to tell the new picture from the style's own pictures except by what it shows: the same hand, the same pens, the same paper.
+- The style's real materials: its paper or canvas texture, uneven pigment, dry or broken edges — never smooth digital fills or flawless gradients.
 - Never cleaner, finer, more detailed or more polished than the style's own pictures. A loose, wobbly, naive hand stays loose, wobbly and naive; thick uneven lines stay thick and uneven; crayon texture stays crayon; few details stay few. Image models tidy everything up: don't.
 - Match the line weight at the poster's scale: as thick, as dark and as few lines as in the style's own pictures; a busy scene is simplified to their level of detail, never drawn with finer pens.
 - Draw everything new: never trace or copy a source drawing.
@@ -384,7 +385,7 @@ function itemLine(g: BriefGroup, item: BriefItem, i: number) {
 }
 
 /** What a set of a place must be, for sets in a style. */
-const SET_RULE = `the first three show three different signature motifs that capture the heart of the place, like the best-selling sets of three (e.g. Paris: the Eiffel Tower, Montmartre with Sacré-Cœur, a Seine bridge with Notre-Dame; Sydney: the Opera House, Bondi Beach, the Harbour Bridge; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill). The place's most famous icon is always one of them. One landmark leads one picture only, never two (landmarks that stand together count as one: Big Ben and the Houses of Parliament, the Colosseum and the Forum), and the three are different kinds of scene (a street or square with the icon, a park, market or neighbourhood, a waterfront, bridge or panorama). Any further pictures are creative variations, never a repeat. Name each one's motif in "motif".`
+const SET_RULE = `the first three show three different signature motifs that capture the heart of the place, like the best-selling sets of three (e.g. Paris: the Eiffel Tower, Montmartre with Sacré-Cœur, a Seine bridge with Notre-Dame; Sydney: the Opera House, Bondi Beach, the Harbour Bridge; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill). The place's most famous icon is always one of them, and it is in that one picture only: never again in another, not in the background, on the horizon, behind a bridge or between the houses (Paris: the Eiffel Tower in one picture; the others Montmartre with Sacré-Cœur, the Arc de Triomphe, a sweet café terrace or the Seine with Notre-Dame — with no Eiffel Tower anywhere). Every landmark is in one picture only (landmarks that stand together count as one: Big Ben and the Houses of Parliament, the Colosseum and the Forum), and the three are different kinds of scene (a street or square with the icon, a park, market, café or neighbourhood, a waterfront, bridge or panorama). Any further pictures are creative variations, never a repeat. Name each one's motif in "motif" and every landmark in view, the background included, in "landmarks".`
 
 /**
  * A set chosen from the place's top-selling photos (13 Oct: a Honolulu set
@@ -394,7 +395,7 @@ const SET_RULE = `the first three show three different signature motifs that cap
  */
 const retakeSetRule = (g: BriefGroup, n: number) => `choose ${n} of the numbered photos, like the best-selling sets of three:
 - The place's most famous view is one of them.
-- Every picture shows a different subject and a different backdrop: a landmark, beach, bay or town appears in one picture only (if a mountain or tower rises behind one picture, no other shows it).
+- Every picture shows a different subject and a different backdrop: a landmark, beach, bay or town appears in one picture only (if a mountain or tower rises behind one picture, no other shows it, not even small on the horizon). Paris: the Eiffel Tower in one picture; the others Montmartre, the Arc de Triomphe, a sweet café or the Seine with Notre-Dame, without the tower.
 - Different kinds of picture: the classic view of the place; wherever it has sea, beaches or nature, one pure picture of its nature with no buildings at all (the island alone in the sea, the bay or the beach from above, palms over turquoise water, a path through the dunes); and one closer scene with character that belongs with the others on one wall (a pink hotel among palms, a lemon terrace, a quiet lane down to the sea).
 - Different distances and vantage points: never three from a balcony, never three from the beach.
 Any further pictures take other photos, never a repeat.${g.hasReference ? " The reference's own view is made already: choose others." : ""} Only when no photo shows another landmark or scene the set needs (all of them show the same icon, say), put 0 in "photo" for that picture and compose it from the place's motifs and viewpoints below, as real as the others. Name each picture's motif in "motif".`
@@ -449,7 +450,7 @@ Mostly stay close (levels 1–3): keep everything that makes the picture beautif
       : `Write ${n} briefs for NEW pictures of ${g.place} ${made}: each a different composition, freed from the reference's framing: another signature view, landmark or scene of the place (use the motifs and viewpoints below), true to the place. Vary how far each goes: one may stay close in kind to the reference's scene (a street scene becomes another street scene), others are freer. Every one is as beautiful as the reference and unmistakably the same look, so they hang together.`,
     set: g.retake
       ? `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall (one look, one sky family): ${retakeSetRule(g, n)}`
-      : `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall: one look, one palette and sky family, the same kind of framing and the same distance, but every picture showing something different (like the best-selling sets of three: a street with the landmark, a park or waterfront scene, the skyline or a second landmark). Balance the set: the first three show three different signature motifs that capture the heart of the place (e.g. New York: the skyline, Central Park, the Statue of Liberty; Sydney: the Opera House, Bondi Beach, palms on the harbour; Paris: the Eiffel Tower, Montmartre and Sacré-Cœur, a Seine bridge with Notre-Dame; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill; a beach town: the beach, its landmark, nature), chosen so they complement each other (a wide view, a close icon, a scene with life). The place's most famous icon is always one of them. One landmark is the subject of one picture only: never the same tower, bridge or building leading two pictures (landmarks that stand together count as one: Big Ben and the Houses of Parliament), and never three pictures of the same kind of scene (three canals, three streets). Any further pictures are creative variations: other motifs, other compositions, never a repeat.${g.hasReference ? " The reference's own view is made already: every picture of the set shows something else." : ""} Name each picture's motif in "motif".`,
+      : `Write ${n} briefs for a set of ${g.setSize ?? n} posters of ${g.place} ${made} that hang together on one wall: one look, one palette and sky family, the same kind of framing and the same distance, but every picture showing something different (like the best-selling sets of three: a street with the landmark, a park or waterfront scene, the skyline or a second landmark). Balance the set: the first three show three different signature motifs that capture the heart of the place (e.g. New York: the skyline, Central Park, the Statue of Liberty; Sydney: the Opera House, Bondi Beach, palms on the harbour; Paris: the Eiffel Tower, Montmartre and Sacré-Cœur, a Seine bridge with Notre-Dame; Amsterdam: a canal with gabled houses, the Rijksmuseum with tulips, a flower market or windmill; a beach town: the beach, its landmark, nature), chosen so they complement each other (a wide view, a close icon, a scene with life). The place's most famous icon is always one of them, and it is in that one picture only: never again in another, not in the background, on the horizon, behind a bridge or between the houses (Paris: the Eiffel Tower in one picture; the others Montmartre with Sacré-Cœur, the Arc de Triomphe, a sweet café terrace or the Seine with Notre-Dame — with no Eiffel Tower anywhere). Every landmark is in one picture only (landmarks that stand together count as one: Big Ben and the Houses of Parliament), and never three pictures of the same kind of scene (three canals, three streets). In "landmarks" name every landmark in view in each picture, the background included. Any further pictures are creative variations: other motifs, other compositions, never a repeat.${g.hasReference ? " The reference's own view is made already: every picture of the set shows something else." : ""} Name each picture's motif in "motif".`,
     style:
       g.style?.medium === "photo"
         ? `Write ${n} briefs for real photographs of ${g.place} ${made}${g.retake ? ", each one of the numbered photos photographed again in the style's look" : ""}. ${g.hasReference ? "Take the view from the reference where an item says so; the look always comes from the style, never from the reference." : ""}${g.setSize ? ` Together they are a set of ${g.setSize}: ${g.retake ? retakeSetRule(g, n) : SET_RULE}` : ""}`
@@ -503,18 +504,42 @@ function retakeProblems(group: BriefGroup, got: Answer[], count: number, taken: 
   if (wrong && group.geo! >= count + taken.length) {
     problems.push(`every picture must take its own numbered photo in "photo" (1 to ${group.geo}), never one twice${taken.length ? ` and none of ${taken.join(", ")}` : ""}; ${photos.map((p, i) => `picture ${i + 1} took ${p ?? "none"}`).join(", ")}.`)
   }
-  if (group.kind === "set" || group.setSize) {
-    const key = (name: string) => name.toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, " ").trim()
-    const seen = new Map<string, number>()
-    got.slice(0, 3).forEach((b, i) => {
-      for (const name of new Set((b?.landmarks ?? []).map(key))) {
-        if (!name || /\b(ocean|sea|sky|skyline)\b/.test(name)) continue
-        const first = seen.get(name)
-        if (first !== undefined && first !== i) problems.push(`pictures ${first + 1} and ${i + 1} both show ${name}: a landmark is in one picture only, so choose other photos for one of them.`)
-        else seen.set(name, i)
+  return [...problems, ...setRepeats(group, got)]
+}
+
+/** Words that name no landmark on their own ("the Eiffel Tower" is known by "eiffel"). */
+const COMMON = new Set("tower bridge river cathedral museum square street park beach church palace basilica gate hill view city old town harbour harbor port bay island lake mountain castle fountain garden gardens market avenue boulevard quai quay place plaza pont ponte puente building house houses front with from and the del della des du de la le les of".split(" "))
+const plainText = (text: string) =>
+  text.toLowerCase().replace(/œ/g, "oe").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ")
+
+/**
+ * Landmarks the first three pictures of a set show twice: one named in a
+ * picture's "landmarks" and named again in another's, or in another's brief
+ * (13 Oct: the Eiffel Tower led one Paris picture and "rose majestically"
+ * behind the Pont d'Iéna in the next; another set had it in all three).
+ */
+function setRepeats(group: BriefGroup, got: Answer[]) {
+  if (group.kind !== "set" && !group.setSize) return []
+  const three = got.slice(0, 3)
+  const problems: string[] = []
+  const said = new Set<string>()
+  three.forEach((b, i) => {
+    for (const name of b?.landmarks ?? []) {
+      const words = plainText(name).split(" ").filter((w) => w.length >= 4 && !COMMON.has(w))
+      if (!words.length || /\b(ocean|sea|sky|skyline)\b/.test(plainText(name))) continue
+      // Its most telling word: "eiffel", "triomphe", "sacre".
+      const mark = words.toSorted((a, b) => b.length - a.length)[0]
+      const others = three
+        .map((o, j) => ({ o, j }))
+        .filter(({ o, j }) => j !== i && o && (plainText((o.landmarks ?? []).join(" ")).includes(mark) || plainText(o.brief ?? "").includes(mark)))
+        .map(({ j }) => j + 1)
+      const line = `${name} is in picture ${i + 1} and also in picture${others.length > 1 ? "s" : ""} ${others.join(" and ")}: a landmark is in one picture of the set only, never in another's background or horizon — give ${others.length > 1 ? "those pictures" : "that picture"} a motif without it.`
+      if (others.length && !said.has(mark)) {
+        said.add(mark)
+        problems.push(line)
       }
-    })
-  }
+    }
+  })
   return problems
 }
 
@@ -525,12 +550,13 @@ export async function planCityBriefs(group: BriefGroup, images: Buffer[]): Promi
     const items = group.items.slice(at, at + 10)
     const avoid = [...group.avoid, ...out.map((b) => `${b.title}: ${b.brief}`)]
     let got: Answer[] = []
-    // Re-takes must each take their own photo: asked once more when they don't, while there are photos enough.
+    // Re-takes must each take their own photo, and a set shows a landmark in one picture only: asked once more when not.
     for (let redo: string | undefined, attempt = 0; attempt < 2; attempt++) {
       const answer = await askJson<{ briefs?: Answer[] }>(briefPrompt({ ...group, items, avoid, redo }), images, { schema: PLAN_SCHEMA, temperature: 0.9 })
       got = answer.briefs ?? []
-      if (!group.retake || !group.geo || attempt) break
-      const problems = retakeProblems(group, got, items.length, at ? out.map((b) => b.photo) : [])
+      if (attempt) break
+      const problems =
+        group.retake && group.geo ? retakeProblems(group, got, items.length, at ? out.map((b) => b.photo) : []) : setRepeats(group, got)
       if (!problems.length) break
       redo = problems.join(" ")
       console.info(`Planning ${group.place}: asked again, ${redo}`)
