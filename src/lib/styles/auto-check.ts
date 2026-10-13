@@ -77,8 +77,15 @@ Judge like a strict art director deciding whether a buyer would believe image 1 
 - notes: when anything is off, one to three short, concrete instructions for repainting it, naming no image numbers — say "the series" (e.g. "bigger, looser brush strokes, as in the series", "fewer background details", "the series' bright pink instead of a muted mauve", "the cat's eyes closed in bliss, as in the series"); otherwise "".`
 }
 
-/** Whether to paint a poster again that misses the series (its scores are kept either way). */
-export const RETAKE = true
+/**
+ * Whether a clear miss is rejected and tried once more. Off: on the dopamin
+ * board (four families of competitors' posters) Gemini failed posters that
+ * fit the series well, judged against one anchor, and neither a second try
+ * from scratch (5 → 5) nor a repaint of the first (5 → 6, nearly the same
+ * picture) changed Nano Banana's tidier hand. The scores stay on each output
+ * for review.
+ */
+export const RETAKE = false
 
 /**
  * Looks at a freshly painted Autonomous scale poster; a clear miss is set

@@ -217,7 +217,7 @@ const LEVELS: Record<Creativity, string> = {
     "minimal — a sibling of its anchor: the same kind of subject in the same pose, scene, composition, colours and feeling, with two or three small, visible changes (a prop, the food or drink, a pattern, a background detail, the animal's markings or kind). Expressions, pose, energy, light and palette stay exactly the anchor's.",
   subtle:
     "subtle — the anchor's scene idea with one real change: a different character, OR a different prop or activity, OR a similar but different setting; composed the way the anchor is, in its colours.",
-  low: "low — a remix within the series: the anchor's scene combined with an element of another board image (its character, setting or activity), in a fresh arrangement.",
+  low: "low — a remix within the series: the anchor's scene combined with an element of another board image (its character, setting or activity), in a fresh arrangement — a combination no board image shows already.",
   medium:
     "medium — a new scene from the series' world that isn't on the board: a character, setting and activity the anchor doesn't show (never the anchor's own setting or composition with another animal), composed the way the series composes.",
   high: "high — the artist's most inventive next poster: a surprising idea, situation or viewpoint (top-down, close-up, wide, through a doorway, a reflection…) built from the series' world, unlike any board image. A new idea and composition — never a new look or a new feeling.",
@@ -318,7 +318,7 @@ Avoid: ${study.avoid.join("; ")}.`,
 - Look: never describe palette, light, texture or rendering — the painter takes all of that from the anchor. Name colours only for new objects, from the anchor's palette.
 - Unique: each poster is a different picture — vary characters, settings, activities and compositions across the list. Medium and high posters differ from every other poster here and in "Already made" in their setting or activity, not just their animal (a lotus pool with another animal is a repeat); minimal, subtle and low ones never repeat another's combination.
 - Plain words: describe things plainly (a pink tub, a lotus pool, a striped robe) — never words that ask for more detail or finish than the anchor has (intricate, detailed, ornate, elaborate, glossy, realistic, geometric patterns), unless the anchor has exactly that.
-- Original: a new painting, never a copy of a board image; even a minimal sibling has its own visible changes.
+- Original: a new painting, never a copy of a board image; even a minimal sibling has its own visible changes. Above minimal, no poster may end up as another board image's picture (e.g. pigs at a brunch table when a board image already shows pigs at a brunch table).
 - Lettering: only where the anchor has lettering — then new, short words in the same lettering; otherwise none.
 - Anchor: the board image whose family and look fit the new picture best. Spread the anchors over the board: no anchor more than ${most} times in this list, strong images (strength 4–5) first. "refs": one or two other images of the anchor's family, never the anchor.
 - It sells: instantly charming, funny or beautiful on its own, like the best images on the board.`,

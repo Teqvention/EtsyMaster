@@ -20,7 +20,7 @@ sein Gefühl treffen, und wie Variants und New ideas näher am echten Stil bleib
 4. **Der Planer beschreibt nur den Inhalt.** Kein Wort über Palette, Textur oder Pinselstrich (Nano Banana übertreibt
    solche Worte: „heavy impasto“ wird zu Wülsten, „detailed fur“ zu feinem Fell). Den Look nimmt der Maler aus dem Anker.
 5. **Jedes Poster wird geprüft.** Gemini vergleicht es mit seinem Anker (gleiche Hand? gleiches Gefühl? starkes
-   Poster?). Schwache werden einmal neu gemalt, klare Fehlgriffe zusätzlich abgelehnt (siehe 5).
+   Poster?) und schreibt die Noten ans Bild. Abgelehnt oder neu gemalt wird automatisch nichts (warum: siehe 5).
 6. **Styles fassen beliebig viele Bilder** (`MAX_IMAGES` = 1000). Die Style-Beschreibung liest weiter eine Auswahl,
    die Studie für Autonomous scale jedes Bild.
 
@@ -79,21 +79,58 @@ Augen eine grimmige Katze mit schwerem Impasto. Die Ursache stand in den Prompts
 
 ## 5 · Die Prüfung
 
-Nach dem Malen vergleicht Gemini das Poster mit Anker und Refs: erst Punkt für Punkt die Unterschiede (Strichgröße,
-Textur, Kanten, Detailmenge, Flachheit, Palette, Licht), dann Noten 1–10 für Stil, Gefühl und Poster, dazu Notizen
-für ein Neumalen. Bild-Modelle scheitern fast immer gleich: zu fein, zu detailliert, zu glatt, zu sauber, zu grell.
-Genau danach wird gesucht. Die Noten stehen am Output (`check`).
+Nach dem Malen vergleicht Gemini jedes Poster mit Anker und Refs: erst Punkt für Punkt die Unterschiede
+(Strichgröße, Textur, Kanten, Detailmenge, Flachheit, Palette, Licht), dann Noten 1–10 für Stil, Gefühl und Poster,
+dazu Notizen. Die Noten stehen am Output (`check`) und im Viewer unter „Art direction“ („Auto check · style 9 ·
+feeling 10 · poster 10“).
 
-- **Kalibrierung** (an den Testläufen gegen mein eigenes Urteil): 9–10 = hängt mit der Serie; 6–7 = etwas straffer
-  gemalt als der Anker, oft trotzdem gut; ≤ 5 = klarer Fehlgriff (andere Hand, Kopie des Board-Motivs, zu grafisch).
-- **Klarer Fehlgriff** (`MISS`: Stil oder Gefühl ≤ 5, Poster ≤ 4): das Bild wird automatisch abgelehnt (Notiz
-  „Auto check: …“, unter Rejected weiter sichtbar) und einmal neu versucht. Bei falscher Hand wird der erste Versuch
-  **übermalt** (`repaintPrompt`: Bild 1 = unser Entwurf, Bild 2 = Anker; das Bild bleibt, die Malweise wird die des
-  Ankers). Bei falschem Gefühl oder schwachem Poster wird neu gemalt, mit den Notizen.
-- **Alles andere bleibt**, auch eine 6: Neu von vorn malen brachte bei 6ern dieselbe 6 (dieselbe Verfeinerung), das
-  kostet nur Bilder.
-- Ein zweiter Versuch wird nie noch einmal neu gemalt.
+**Automatisch abgelehnt oder neu gemalt wird nichts** (`RETAKE = false`). Getestet und verworfen:
 
-## 6 · Tests (13.10., dopamin, 24 Board-Bilder)
+- Gemini urteilt gegen einen Anker zu streng, wenn das Board gemischt ist. Bei dopamin fielen Bilder durch, die gut in
+  die Serie passen (Katze im Strandstuhl, Discokugel-Katze, gestapelte Köpfe hinter dem Vorhang: alle Stil 5).
+- Neu von vorn malen mit den Notizen änderte die Hand nicht (5 → 5, 6 → 6).
+- Den ersten Versuch in der Hand des Ankers übermalen (`repaintPrompt`) gab fast dasselbe Bild zurück (5 → 6).
 
-Siehe Abschnitt 7 für die Ergebnisse der Läufe.
+Nano Banana malt Tiere und Szenen ordentlicher als ein lockeres Board; das lässt sich im ersten Versuch über die
+Regeln dämpfen (siehe 3), ein zweiter Versuch holt es nicht heraus. Die Schalter `RETAKE`/`MISS` bleiben im Code,
+falls ein einheitliches Board (wie Robins Impasto-Style) es später lohnt.
+
+## 6 · Tests (13.10.)
+
+**dopamin** (24 Board-Bilder, 4 Familien: Textured Impasto, Graphic Gouache, Vibrant Impressionist, Decorative
+Top-Down; Studie in 1,5 min). Set `mv6ol9a8-vk5co`.
+
+- **Runde 1** (5 Bilder, je Stufe eins, erste Prompts): Panda im Bett (Subtle) fast perfekt; schwarze Katze in der
+  Wanne (Minimal) stilecht, aber greller und mit Impasto-Wülsten (die Familien-Beschreibung „heavy impasto ridges“
+  wurde übertrieben); Leopard mit Martini (Low) genau das Gefühl, etwas sauberer gemalt; Panda im Lotus-Pool
+  (Medium) nur die Anker-Komposition mit anderem Tier und zu fein; Tiger hinter Streifenvorhang (High) kreativ und
+  stilecht. Daraus: Familien-Text raus aus dem Maler-Prompt, Regeln gegen Verfeinern und für Tiere, Medium/High
+  müssen Ort oder Tätigkeit wechseln, keine Detail-Wörter.
+- **Runde 2** (15 Bilder, 3 je Stufe): nach meinem Urteil 10–11 von 13 fertigen Bildern Treffer (Spa-Pudel,
+  Leopard mit Wein, Katze im Strandstuhl, Panda in der Wanne, Leopard mit Cowboyhut, Discokugel-Katze, Katze auf der
+  Toilette, Tiger im Bademantel mit Kaugummi, Tiger mit Frühstück, gestapelte Köpfe), daneben: Zebra im Lotus-Pool
+  (zu grafisch, Kopie des Pool-Motivs), Panda auf der Gartenparty (Kopie von Board-Bild 16 mit Panda), Tiger im Bett
+  mit Händen (tolle Idee, Tiger zu detailliert).
+
+**Vibrant Textured Impasto Whimsy** (20 Board-Bilder, Robins freigegebene Outputs, 2 Familien). Set
+`mv6pocvx-7iqa8`: Ente in der Wanne (Minimal) und Walross auf dem Balkon (Subtle) mit identischer Hand; Schweine
+beim Brunch (Low) im exakten Stil, aber fast Board-Bild 20 → Regel „keine Kombination, die schon auf dem Board ist“.
+Ein einheitliches Board trifft Nano Banana deutlich genauer als ein gemischtes.
+
+**Variants und Ideas ohne Style** (Robins Beispiele): die Katze (Minimal) bleibt jetzt selig mit geschlossenen
+Augen, gleiche weiche Malweise, nur Sektflöte und Schleife neu. Tiger-Ideen: Gepard in der Wanne und Bär im Diner
+(vor den Tier- und Detail-Wort-Regeln) noch zu voll und zu sauber; danach Jaguar am pinken Klavier (Medium) und
+Schneeleopard im Beiwagen (High): Palette, lockere Hand und das ruhig-verspielte Gefühl nah am Original, nicht mehr
+dunkel oder überladen wie der Löwe in der Bibliothek.
+
+**Kosten der Tests:** 45 Bilder (dopamin 33 inklusive der verworfenen zweiten Versuche, Impasto 5, Katze 2,
+Tiger 5), freigegeben waren 200.
+
+## 7 · Bedienung
+
+- Style öffnen → **Autonomous scale** → Anzahl (1–200), Stufen (Standard: alle fünf, gleichmäßig verteilt),
+  Now oder Batch (halber Preis, für große Mengen über Nacht) → **Scale N posters**. Der Toast öffnet das Set.
+- Im Set (Generation → Ordner „Styles“) liegt jede Runde als Gruppe „Autonomous scale“; links die Board-Bilder,
+  ein Klick filtert auf die Poster eines Ankers. **Scale more** startet die nächste Runde, die alle bisherigen kennt.
+- Review wie gewohnt; „Art direction“ zeigt Brief und Prüfnoten. Gute Bilder können per „Add to style“ wieder aufs
+  Board, dann kennt die nächste Studie sie mit.
