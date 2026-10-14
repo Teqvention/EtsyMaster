@@ -12,7 +12,7 @@ import { getFile } from "@/lib/storage/files"
 import { isCalmPlace, placeBrief, placeByName, placeLine, placePictures, type PlacePicture } from "./briefs"
 import { listCustomSkies, skyPhoto } from "./sky-store"
 import { photoUrl } from "./photos"
-import { paintCityPrompt, planCityBriefs, readReference, type BriefGroup } from "./prompts"
+import { markOf, paintCityPrompt, planCityBriefs, plainText, readReference, RECURS, type BriefGroup } from "./prompts"
 import { ranking } from "./ranking"
 import { pictureOf, readRefFile, refCrop } from "./refs"
 import { citySettings } from "./settings"
@@ -511,7 +511,9 @@ async function plan(id: string) {
             ...o.city,
             ...(b.level && { level: b.level }),
             ...(b.sky && { sky: b.sky }),
-            ...(o.city.set && b.motif && { set: { ...o.city.set, motif: b.motif } }),
+            ...(o.city.set && (b.motif || b.landmarks) && {
+              set: { ...o.city.set, ...(b.motif && { motif: b.motif }), ...(b.landmarks && { landmarks: b.landmarks }) },
+            }),
             ...(shows && { geo: { listingId: shows.listingId, file: shows.file, ...(retake && { retake: true }) } }),
             ...(redraws && style && { board: style.board[(b.board ?? (i % Math.min(style.board.length, 6)) + 1) - 1]?.file }),
           }
@@ -587,6 +589,7 @@ export async function cityRequest(set: GenerationSet, output: Output, test: { mo
 
   const lookOnly = (c.kind === "idea" || c.kind === "set") && (c.medium ?? "photo") === "photo" && !style
   const prompt = paintCityPrompt({
+    ...(c.set && { leaveOut: sisterLandmarks(set, output, brief?.landmarks ?? []) }),
     kind: c.kind,
     place,
     brief: output.brief ?? fallback(c, place),
@@ -615,6 +618,31 @@ export async function cityRequest(set: GenerationSet, output: Output, test: { mo
     ? [...(geo ? [geo] : []), ...(reference ? [reference] : []), ...(skyImage ? [skyImage] : [])]
     : [...(reference ? [reference] : []), ...moodboard, ...(geo ? [geo] : []), ...(skyImage ? [skyImage] : [])]
   return { prompt, images, aspect: ratio }
+}
+
+/**
+ * The landmarks the other pictures of `output`'s set show and it doesn't:
+ * those they name in their plan, and the place's signature landmarks their
+ * briefs mention.
+ */
+function sisterLandmarks(set: GenerationSet, output: Output, known: string[]) {
+  const words = (o: Output) => plainText(`${o.brief ?? ""} ${o.city?.set?.motif ?? ""} ${(o.city?.set?.landmarks ?? []).join(" ")}`)
+  const sisters = set.outputs.filter((o) => o.id !== output.id && o.batch === output.batch && o.city?.set).map(words)
+  const mine = words(output)
+  // A signature landmark's name is what comes before its description ("Eiffel Tower: wrought-iron…");
+  // what the description says it is first decides whether it may recur ("The Seine: a wide river…").
+  const names = [
+    ...set.outputs.filter((o) => o.id !== output.id && o.batch === output.batch).flatMap((o) => o.city?.set?.landmarks ?? []),
+    ...known
+      .filter((entry) => !RECURS.test(plainText(entry.split(":").slice(1).join(":").split(" ").slice(0, 8).join(" "))))
+      .map((entry) => entry.split(/[:(—–]| - /)[0].trim()),
+  ]
+  const out = new Map<string, string>()
+  for (const name of names) {
+    const mark = markOf(name)
+    if (mark && !out.has(mark) && !mine.includes(mark) && sisters.some((text) => text.includes(mark))) out.set(mark, name)
+  }
+  return [...out.values()]
 }
 
 function fallback(c: CityOutputInfo, place: string) {

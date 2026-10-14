@@ -297,7 +297,7 @@ Be factual: leave out what you are unsure of.`,
 // --- Briefs ---
 
 /** `photo`: which of the place's real photos (1-based) shows the brief's motif, for the painter's geography. */
-export type Brief = { title: string; brief: string; level?: Level; sky?: SkyId; motif?: string; photo?: number; board?: number }
+export type Brief = { title: string; brief: string; level?: Level; sky?: SkyId; motif?: string; photo?: number; board?: number; landmarks?: string[] }
 
 export type BriefItem = { level?: Level; sky?: SkyId; refMode?: RefMode; target?: string; index?: number }
 
@@ -507,10 +507,22 @@ function retakeProblems(group: BriefGroup, got: Answer[], count: number, taken: 
   return [...problems, ...setRepeats(group, got)]
 }
 
+/** What may show in more than one picture of a set: water, sky, the skyline as such. */
+export const RECURS = /\b(ocean|sea|sky|skyline|river|water|bay|harbou?r|lake|canal)\b/
+
 /** Words that name no landmark on their own ("the Eiffel Tower" is known by "eiffel"). */
 const COMMON = new Set("tower bridge river cathedral museum square street park beach church palace basilica gate hill view city old town harbour harbor port bay island lake mountain castle fountain garden gardens market avenue boulevard quai quay place plaza pont ponte puente building house houses front with from and the del della des du de la le les of".split(" "))
-const plainText = (text: string) =>
+/** Lowercase, plain letters and digits: "Sacré-Cœur" is "sacre coeur". */
+export const plainText = (text: string) =>
   text.toLowerCase().replace(/œ/g, "oe").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ")
+
+/** A landmark's most telling word ("eiffel", "triomphe", "sacre"), or "" for water, sky and the like. */
+export function markOf(name: string) {
+  const plain = plainText(name)
+  if (RECURS.test(plain)) return ""
+  const words = plain.split(" ").filter((w) => w.length >= 4 && !COMMON.has(w))
+  return words.toSorted((a, b) => b.length - a.length)[0] ?? ""
+}
 
 /**
  * Landmarks the first three pictures of a set show twice: one named in a
@@ -525,10 +537,8 @@ function setRepeats(group: BriefGroup, got: Answer[]) {
   const said = new Set<string>()
   three.forEach((b, i) => {
     for (const name of b?.landmarks ?? []) {
-      const words = plainText(name).split(" ").filter((w) => w.length >= 4 && !COMMON.has(w))
-      if (!words.length || /\b(ocean|sea|sky|skyline)\b/.test(plainText(name))) continue
-      // Its most telling word: "eiffel", "triomphe", "sacre".
-      const mark = words.toSorted((a, b) => b.length - a.length)[0]
+      const mark = markOf(name)
+      if (!mark) continue
       const others = three
         .map((o, j) => ({ o, j }))
         .filter(({ o, j }) => j !== i && o && (plainText((o.landmarks ?? []).join(" ")).includes(mark) || plainText(o.brief ?? "").includes(mark)))
@@ -570,6 +580,7 @@ export async function planCityBriefs(group: BriefGroup, images: Buffer[]): Promi
               brief: b.brief,
               ...(group.kind === "auto" && { level: toLevel(b.level) ?? (((i % 3) + 1) as Level), sky: toSky(b.sky) ?? "auto" }),
               ...(b.motif && { motif: b.motif.slice(0, 120) }),
+              ...(Array.isArray(b.landmarks) && b.landmarks.length > 0 && { landmarks: b.landmarks.filter((l) => typeof l === "string").slice(0, 8) }),
               ...(group.geo && Number.isInteger(b.photo) && b.photo! >= 1 && b.photo! <= group.geo && { photo: b.photo }),
               ...(group.boards && Number.isInteger(b.board) && b.board! >= 1 && b.board! <= group.boards && { board: b.board }),
             }
@@ -591,6 +602,8 @@ function fallbackBrief(g: BriefGroup, item: BriefItem) {
 // --- What Nano Banana is told ---
 
 export type PaintParts = {
+  /** Landmarks the set's other pictures show, to leave out of this one. */
+  leaveOut?: string[]
   kind: CityOutputInfo["kind"]
   place: string
   brief: string
@@ -647,7 +660,19 @@ const retakeScene = (place: string, look: string) =>
 /** What changes when a scene is photographed again. */
 const RETAKE_MOMENT = `Our own photograph of this place, never the same photo again: the framing visibly different from the photo (the camera where the art direction puts it, else a few steps higher, lower or to the side with a wider or tighter lens), another moment with the sky and light as asked, other boats, people and cars or none, clutter gone. The place and everything built in it stay exactly as they are. Fit the vertical poster by stepping back (more sky, sea or foreground), never by squeezing.`
 
+/**
+ * What Nano Banana is told for one city picture. A set's picture is also
+ * told what its sister pictures show (13 Oct: the Eiffel Tower, the subject
+ * of one Paris picture, was painted behind the Pont d'Iéna of the next).
+ */
 export function paintCityPrompt(p: PaintParts) {
+  const prompt = paintPromptFor(p)
+  return p.leaveOut?.length
+    ? `${prompt}\n\nNot in this picture — each is the subject of another picture of the set: ${p.leaveOut.join("; ")}. Not even small in the background, on the horizon or behind a bridge.`
+    : prompt
+}
+
+function paintPromptFor(p: PaintParts) {
   const roles: string[] = []
   let n = 1
   let geoAt = 0

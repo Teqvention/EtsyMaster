@@ -450,7 +450,8 @@ export type CityOutputInfo = {
   /** Made a real photo whatever the reference is (the Real photo switch). */
   realPhoto?: boolean
   /** One of a set: its place in the set and its motif once planned. */
-  set?: { index: number; size: number; motif?: string }
+  /** Its place in a set of N, its motif and the landmarks in view (so the set's other pictures leave them out). */
+  set?: { index: number; size: number; motif?: string; landmarks?: string[] }
   /**
    * A real photo of the place showing its motif, from a top shop's best
    * seller: given to the painter for the true geography only, or with
