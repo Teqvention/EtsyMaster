@@ -575,7 +575,7 @@ type Parcel = {
   model?: string
   /** When it went into the outbox. */
   since?: number
-  /** A "now" order's overflow: it goes in the next job, without waiting for more. */
+  /** A "now" order's overflow: it goes in the next job, without waiting for the rest of an order (see `URGENT_QUIET`). */
   urgent?: boolean
 }
 type Errand = {
@@ -769,6 +769,15 @@ const SEND_TRIES = 30
 const SEND_AT = 200
 const QUIET_GAP = 2 * 60_000
 const GATHER_MAX = 15 * 60_000
+/**
+ * A "now" order's overflow goes out without waiting for the rest of an
+ * order, but not set by set: the overflows of sets made side by side gather
+ * until none has come for `URGENT_QUIET` (`URGENT_WAIT` at most) and go in
+ * one job. Until 15 Oct each went at once, in a job of its own: "now" sets
+ * made one after another sent jobs of 25, 7, 6 and 1 images.
+ */
+const URGENT_QUIET = 30_000
+const URGENT_WAIT = 2 * 60_000
 
 function toOutbox(parcel: Parcel, urgent = false) {
   if (!outbox.parcels.length) outbox.first = Date.now()
@@ -796,7 +805,8 @@ async function outboxTick() {
       const allowed = Date.now() >= (outbox.notBefore ?? 0) && !pause.on
       const still = Date.now() - outbox.last
       const quiet = still > 5_000 && ((queue.running.size === 0 && queue.waiting.length === 0) || still > QUIET_GAP)
-      const urgent = outbox.parcels.some((p) => p.urgent)
+      const urgentSince = Math.min(...outbox.parcels.filter((p) => p.urgent).map((p) => p.since ?? 0))
+      const urgent = Number.isFinite(urgentSince) && (still > URGENT_QUIET || Date.now() - urgentSince > URGENT_WAIT)
       const enough = outbox.parcels.reduce((n, p) => n + p.outputs.length, 0) >= SEND_AT
       if (allowed && (urgent || quiet || enough || Date.now() - outbox.first > GATHER_MAX)) await sendOut()
     } catch (error) {

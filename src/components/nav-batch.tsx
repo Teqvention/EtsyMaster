@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 import {
   CheckIcon,
+  ChevronRightIcon,
   ClockIcon,
   EraserIcon,
   HourglassIcon,
@@ -49,7 +50,8 @@ import { cn } from "@/lib/utils";
 // Generation page opened, or its list opened and closed once all is back) or
 // Reset fails puts the finished jobs away; the next generation then starts a
 // fresh clock. Clicking it lists every batch job and how many sets are still
-// waiting, which can be stopped there.
+// waiting, which can be stopped there: each job once, however many sets it
+// paints for, with its size, model and how far Google has got.
 
 // What an image costs at 2K, in US dollars (docs/generation-pipeline.md):
 // Nano Banana 2.1, and Nano Banana 2 (the fallback, `model` on the output),
@@ -149,7 +151,11 @@ function BatchWidget(
   const elapsed = Number.isFinite(start) ? (running ? now : end || now) - start : 0;
   const share = total ? back / total : 0;
   const painted = paintedAtVertex(jobs);
-  const runningJobs = new Set(jobs.filter(({ job }) => job.status === "running").map(({ job }) => job.name)).size;
+  // Each job once, however many sets it paints for: "2 jobs · 183 + 25".
+  const runningSizes = byJob(jobs)
+    .filter((g) => g.running)
+    .map((g) => g.size);
+  const runningJobs = runningSizes.length;
   // At the pace of the run so far: a rough guess, and none until a few are back.
   const left =
     running && back >= 3 && elapsed > 60_000 && total > back + failed
@@ -252,7 +258,12 @@ function BatchWidget(
                       {running
                         ? [
                             run.online > 0 && `${formatNumber(run.online)} online`,
-                            runningJobs > 0 && `${runningJobs} ${runningJobs === 1 ? "job" : "jobs"}`,
+                            runningJobs > 0 &&
+                              `${runningJobs} ${runningJobs === 1 ? "job" : "jobs"} · ${
+                                runningJobs <= 3
+                                  ? runningSizes.join(" + ")
+                                  : formatNumber(runningSizes.reduce((n, size) => n + size, 0))
+                              }`,
                           ]
                             .filter(Boolean)
                             .join(" · ") || "Starting"
@@ -266,10 +277,11 @@ function BatchWidget(
               <PopoverContent
                 side="right"
                 align="end"
-                className="w-80 gap-0 p-0"
+                className="w-96 gap-0 p-0"
               >
                 <BatchList
                   jobs={jobs}
+                  online={run.online}
                   waiting={waiting}
                   fails={fails}
                   now={now}
@@ -322,6 +334,71 @@ function paintedAtVertex(jobs: { job: PaintJob }[]) {
   return [...ready.values()].reduce((sum, n) => sum + n, 0);
 }
 
+/** A batch job and the sets it paints for: one job at Vertex, however many sets share it. */
+type JobGroup = {
+  name: string;
+  running: boolean;
+  /** Requests in the whole job. */
+  size: number;
+  /** Painted at Vertex so far (it hands them over when the job ends). */
+  ready: number;
+  /** Back in their sets, and failed. */
+  back: number;
+  failed: number;
+  /** Of the job's images, those still listed under it (a rest sent on to another job isn't). */
+  listed: number;
+  model?: string;
+  harvest: boolean;
+  cancelled: boolean;
+  error: boolean;
+  submittedAt: string;
+  finishedAt?: string;
+  shares: { set: GenerationSet; images: number; back: number }[];
+};
+
+function byJob(jobs: { set: GenerationSet; job: PaintJob }[]): JobGroup[] {
+  const groups = new Map<string, JobGroup>();
+  for (const { set, job } of jobs) {
+    const ids = new Set(job.outputs);
+    const outs = set.outputs.filter((o) => ids.has(o.id));
+    const back = outs.filter((o) => o.status === "done").length;
+    const failed = outs.filter((o) => o.status === "error").length;
+    const group = groups.get(job.name) ?? {
+      name: job.name,
+      running: false,
+      size: 0,
+      ready: 0,
+      back: 0,
+      failed: 0,
+      listed: 0,
+      harvest: false,
+      cancelled: false,
+      error: false,
+      submittedAt: job.submittedAt,
+      shares: [],
+    };
+    group.running ||= job.status === "running";
+    group.size = Math.max(group.size, job.size ?? 0);
+    group.ready = Math.max(group.ready, job.ready ?? 0);
+    group.back += back;
+    group.failed += failed;
+    group.listed += job.outputs.length;
+    group.model ??= job.model;
+    group.harvest ||= !!job.harvest;
+    group.cancelled ||= !!job.cancelled;
+    group.error ||= job.status === "error";
+    if (job.submittedAt < group.submittedAt) group.submittedAt = job.submittedAt;
+    if (job.finishedAt && (!group.finishedAt || job.finishedAt > group.finishedAt)) group.finishedAt = job.finishedAt;
+    group.shares.push({ set, images: job.outputs.length, back });
+    groups.set(job.name, group);
+  }
+  for (const group of groups.values()) group.size = Math.max(group.size, group.listed);
+  // Running first, then the newest.
+  return [...groups.values()].sort(
+    (a, b) => Number(b.running) - Number(a.running) || b.submittedAt.localeCompare(a.submittedAt),
+  );
+}
+
 /** Not yet sent off: waiting its turn, or still reading posters and writing briefs. */
 function isWaiting(set: GenerationSet) {
   if (set.status !== "queued" && set.status !== "running") return false;
@@ -334,11 +411,14 @@ function isWaiting(set: GenerationSet) {
 
 function BatchList({
   jobs,
+  online,
   waiting,
   fails,
   now,
 }: {
   jobs: { set: GenerationSet; job: PaintJob }[];
+  /** Images painting online in the lane right now. */
+  online: number;
   waiting: GenerationSet[];
   /** Failed images in every set, and the sets with nothing else in them. */
   fails: { images: number; sets: number };
@@ -353,11 +433,8 @@ function BatchList({
   const [resetting, setResetting] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const anyRunning = jobs.some(({ job }) => job.status === "running");
-  const sorted = [...jobs].sort(
-    (a, b) =>
-      Number(b.job.status === "running") - Number(a.job.status === "running") ||
-      b.job.submittedAt.localeCompare(a.job.submittedAt),
-  );
+  const groups = byJob(jobs);
+  const running = groups.filter((g) => g.running);
 
   async function stop() {
     setStopping(true);
@@ -443,7 +520,17 @@ function BatchList({
   return (
     <>
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <span className="text-sm font-medium">Batch jobs</span>
+        <span className="min-w-0 text-sm">
+          <span className="font-medium">Batch jobs</span>
+          {groups.length > 0 && (
+            <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+              {running.length > 0
+                ? `${running.length} running · ${formatNumber(running.reduce((n, g) => n + g.size, 0))} images`
+                : `${groups.length} · ${formatNumber(groups.reduce((n, g) => n + g.size, 0))} images`}
+              {online > 0 && ` · ${formatNumber(online)} online`}
+            </span>
+          )}
+        </span>
         <Link
           href="/generation"
           className="text-xs text-muted-foreground hover:text-foreground"
@@ -451,67 +538,17 @@ function BatchList({
           Open Generation
         </Link>
       </div>
-      {sorted.length > 0 && (
-        <ul className="max-h-72 overflow-y-auto py-1">
-          {sorted.map(({ set, job }) => {
-            const ids = new Set(job.outputs);
-            const outs = set.outputs.filter((o) => ids.has(o.id));
-            const back = outs.filter((o) => o.status === "done").length;
-            const failed = outs.filter((o) => o.status === "error").length;
-            const end = job.finishedAt ? Date.parse(job.finishedAt) : now;
-            return (
-              // One job can paint for several sets: it's listed once per set.
-              <li key={`${set.id}:${job.name}`} className="flex items-center hover:bg-muted">
-                <Link
-                  href={`/generation/${set.id}`}
-                  className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 text-xs [&_svg]:size-3.5 [&_svg]:shrink-0"
-                >
-                  {job.status === "running" ? (
-                    <LoaderCircleIcon className="animate-spin text-emerald-500" />
-                  ) : (
-                    <CheckIcon
-                      className={
-                        job.status === "error"
-                          ? "text-destructive"
-                          : "text-emerald-500"
-                      }
-                    />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {set.source.title}
-                  </span>
-                  <span className="shrink-0 text-muted-foreground tabular-nums">
-                    {failed > 0 && (
-                      <span className="text-destructive">
-                        {failed} failed ·{" "}
-                      </span>
-                    )}
-                    {back}/{job.outputs.length} ·{" "}
-                    {duration(end - Date.parse(job.submittedAt))}
-                  </span>
-                </Link>
-                {job.status === "running" ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="mx-1 text-muted-foreground hover:text-destructive"
-                    onClick={() => void cancel(job.name)}
-                    disabled={cancelling !== null}
-                    aria-label={`Cancel the batch job for ${set.source.title}`}
-                    title="Cancel this job: what's painted comes in, the rest can be retried"
-                  >
-                    {cancelling === job.name ? (
-                      <LoaderCircleIcon className="animate-spin" />
-                    ) : (
-                      <XIcon />
-                    )}
-                  </Button>
-                ) : (
-                  <span className="w-3" />
-                )}
-              </li>
-            );
-          })}
+      {groups.length > 0 && (
+        <ul className="max-h-96 overflow-y-auto py-1">
+          {groups.map((group) => (
+            <JobRow
+              key={group.name}
+              group={group}
+              now={now}
+              cancelling={cancelling}
+              onCancel={() => void cancel(group.name)}
+            />
+          ))}
         </ul>
       )}
       {waiting.length > 0 && (
@@ -605,6 +642,122 @@ function BatchList({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * One batch job: how big, which model, how far Google has got and how long
+ * it's taken; opened, the sets it paints for.
+ */
+function JobRow({
+  group,
+  now,
+  cancelling,
+  onCancel,
+}: {
+  group: JobGroup;
+  now: number;
+  cancelling: string | null;
+  onCancel: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const end = group.finishedAt ? Date.parse(group.finishedAt) : now;
+  const took = duration(end - Date.parse(group.submittedAt));
+  const sets = group.shares.length;
+  const moved = group.size - group.listed;
+  const status = group.running
+    ? group.harvest
+      ? `Ending early: ${formatNumber(group.ready)} painted coming in`
+      : group.ready > 0
+        ? `${formatNumber(group.ready)} of ${formatNumber(group.size)} painted at Google`
+        : "Waiting at Google to start"
+    : [
+        group.cancelled ? "Cancelled" : group.error ? "Failed" : `${formatNumber(group.back)} back`,
+        moved > 0 && `${formatNumber(moved)} went on as a rest`,
+        group.failed > 0 && `${formatNumber(group.failed)} failed`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+  return (
+    <li className="border-b border-border/50 last:border-b-0">
+      <div className="flex items-center hover:bg-muted">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 py-1.5 pl-3 text-left text-xs outline-none focus-visible:bg-muted"
+        >
+          <span className="flex items-center gap-2 [&_svg]:size-3.5 [&_svg]:shrink-0">
+            {group.running ? (
+              <LoaderCircleIcon className="animate-spin text-emerald-500" />
+            ) : (
+              <CheckIcon className={group.error || group.cancelled ? "text-destructive" : "text-emerald-500"} />
+            )}
+            <span className="font-medium tabular-nums">
+              {formatNumber(group.size)} {group.size === 1 ? "image" : "images"}
+            </span>
+            <span
+              className={cn(
+                "rounded px-1 py-px text-[10px] font-medium",
+                group.model ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground",
+              )}
+              title={group.model ?? "The usual model"}
+            >
+              {group.model ? "NB 2" : "2.1"}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {sets === 1 ? group.shares[0].set.source.title : `${sets} sets`}
+            </span>
+            <span className="shrink-0 text-muted-foreground tabular-nums">{took}</span>
+            <ChevronRightIcon
+              className={cn("text-muted-foreground transition-transform duration-150", open && "rotate-90")}
+            />
+          </span>
+          {group.running && group.size > 0 && (
+            <span className="ml-5.5 h-1 overflow-hidden rounded-full bg-emerald-500/15">
+              <span
+                className="block h-full rounded-full bg-emerald-500 transition-[width] duration-700"
+                style={{ width: `${Math.min(100, (group.ready / group.size) * 100)}%` }}
+              />
+            </span>
+          )}
+          <span className="ml-5.5 truncate text-[11px] text-muted-foreground tabular-nums">{status}</span>
+        </button>
+        {group.running ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="mx-1 text-muted-foreground hover:text-destructive"
+            onClick={onCancel}
+            disabled={cancelling !== null}
+            aria-label={`Cancel the batch job of ${formatNumber(group.size)} images`}
+            title="Cancel this job: what's painted comes in, the rest can be retried"
+          >
+            {cancelling === group.name ? <LoaderCircleIcon className="animate-spin" /> : <XIcon />}
+          </Button>
+        ) : (
+          <span className="w-3" />
+        )}
+      </div>
+      {open && (
+        <ul className="pb-1">
+          {group.shares.map(({ set, images, back }) => (
+            <li key={set.id}>
+              <Link
+                href={`/generation/${set.id}`}
+                className="flex items-center gap-2 py-1 pr-3 pl-8.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <span className="min-w-0 flex-1 truncate">{set.source.title}</span>
+                <span className="shrink-0 tabular-nums">
+                  {group.running ? formatNumber(images) : `${formatNumber(back)}/${formatNumber(images)}`}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 

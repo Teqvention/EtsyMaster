@@ -52,7 +52,8 @@ Generate ──► Set je Listing: Foto holen → Poster finden → verstehen �
                  │
                  ├── Now ──► Online-Spur (2 gleichzeitig, Now vor Batch)
                  │             · 2.1 zweimal „busy“ → Nano Banana 2 malt das Bild
-                 │             · was die Spur in ~10 min nicht schafft → sofort in einen Batch-Job
+                 │             · was die Spur in ~10 min nicht schafft → Batch-Job; Überläufe mehrerer Sets
+                 │               sammeln sich bis 30 s Ruhe (höchstens 2 min) und gehen in EINEN Job
                  │
                  └── Batch ─► Ausgang sammelt den Auftrag und schickt, sobald er fertig vorbereitet ist,
                                200 Bilder warten, 2 min nichts Neues kam oder spätestens nach 15 min
@@ -96,6 +97,7 @@ befristeten Pause mit „resumes by itself at …“. Eine unbefristete Pause (V
 | Online gleichzeitig | **2** | 5 parallel: 14 von 20 abgelehnt |
 | Modell | **2.1 zuerst, NB 2 übernimmt, wenn ein Job nach ⅓ seines Ziels unter der halben Erwartung liegt** (Robins Entscheidung 13.10.) | 2.1: 49 Bilder 122 min (überlastet seit Start 6.10.); NB 2: 10 Bilder 15 min |
 | Kosten 400 Bilder (2K, Batch) | ≈ 10 $ mit 2.1, ≈ 20 $ mit NB 2; die Seitenleiste zeigt die Schätzung („≈ $…“) und die Restzeit („~… left“) | Google-Preisliste 13.10. |
+| Was läuft gerade? | Die grüne Karte zeigt „2 jobs · 183 + 25“. Ein Klick listet **jeden Job einmal** (egal für wie viele Sets er malt): Größe, Modell (2.1 / NB 2), „148 of 183 painted at Google“ mit Balken, Dauer, nach dem Ende „164 back · 19 went on as a rest“; aufgeklappt die Sets darin | bis 15.10. stand dort eine Zeile je Set, ein Job über 20 Sets sah aus wie 20 kleine |
 
 **Messung 13.10. (neues Projekt `robin-481512`, 185 Bilder, 2K, Klick „Send all“ um 12:40:49 UTC):**
 
