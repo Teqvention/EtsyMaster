@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 
 import { busy as slowDown, calm, pace } from "@/lib/google/pace"
 import { deniedByGoogle, heldBackByGoogle, refused, rejectedByGoogle, wrong } from "@/lib/google/pause"
+import { uplink } from "@/lib/storage/uplink"
 
 import { auth, FALLBACK_MODEL, imageOf, modelJpeg, PAINT_MODEL, paintConfig, type Part, StayedBusyError } from "./gemini"
 
@@ -9,10 +10,10 @@ export { StayedBusyError }
 
 // Nano Banana in Vertex batch: half the price, no shared quota to wait for,
 // but back in minutes to hours. Vertex only reads a job from Cloud Storage,
-// so each job's requests (and the images they show, each stored once) go to
-// GCS_BATCH_BUCKET under batch/<name>/, and its answers come back there. The
-// bucket only passes things through: a lifecycle rule clears it after a few
-// days, and the images we keep go to our own storage.
+// so each job's requests go to GCS_BATCH_BUCKET under batch/<name>/, and its
+// answers come back there; the images they show go under batch/img/, each
+// once (see `paintLines`). The bucket only passes things through: the
+// images we keep go to our own storage.
 // Batch jobs run in the global location; us-central1 doesn't always know the model.
 
 const BUCKET = () => {
@@ -56,13 +57,17 @@ async function check(response: Response, where: string) {
 }
 
 async function upload(object: string, body: Buffer | string, type: string) {
+  const bytes = typeof body === "string" ? Buffer.byteLength(body) : body.byteLength
   // A passing failure (5xx, a dropped connection) is tried again a couple of times.
   for (let attempt = 1; ; attempt++) {
     let response: Response
     try {
-      response = await fetch(
-        `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET()}/o?uploadType=media&name=${encodeURIComponent(object)}`,
-        { method: "POST", headers: await headers({ "Content-Type": type }), body: body as BodyInit, signal: TRANSFER() }
+      // Sharing the line with the database's queries (storage/uplink.ts).
+      response = await uplink(bytes, async () =>
+        fetch(
+          `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET()}/o?uploadType=media&name=${encodeURIComponent(object)}`,
+          { method: "POST", headers: await headers({ "Content-Type": type }), body: body as BodyInit, signal: TRANSFER() }
+        )
       )
     } catch (error) {
       if (attempt >= 3) throw error
@@ -92,24 +97,35 @@ async function batchConfig(images: Buffer[], aspect?: number) {
 export type PaintRequest = { key: string; prompt: string; images: Buffer[]; aspect?: number }
 
 /**
- * Each request as a line of a job's input, its images stored once under
- * `folder` (they stay there for whichever job sends the line, even again).
+ * Images uploaded lately, by the hash of what was asked for: each goes up
+ * once however many requests, sets and orders show it. 13 Oct every set of
+ * a 24-set order sent its style's board and references up again, some 500
+ * MB, and the line was full for minutes (see storage/uplink.ts). One older
+ * than `REUSE` goes up again (rewritten, it counts as new), should the
+ * bucket be given a rule that clears it after a few days.
  */
-export async function paintLines(folder: string, requests: PaintRequest[]) {
+type Uploaded = Map<string, { uri: Promise<string>; at: number }>
+const uploads: Uploaded = ((globalThis as typeof globalThis & { __batchImages?: Uploaded }).__batchImages ??= new Map())
+const REUSE = 24 * 60 * 60_000
+
+/**
+ * Each request as a line of a job's input, its images stored once under
+ * batch/img/ (they stay there for whichever job sends the line, even again).
+ */
+export async function paintLines(requests: PaintRequest[]) {
   const bucket = BUCKET()
-  const uploaded = new Map<string, Promise<string>>()
-  // Each image once, however many requests show it (a poster's reference, a style's board).
   const fileOf = (image: Buffer) => {
     const hash = createHash("sha1").update(image).digest("hex")
-    let uri = uploaded.get(hash)
-    if (!uri) {
-      const object = `${folder}/img-${hash}.jpg`
-      uri = modelJpeg(image).then(async (jpeg) => {
-        await upload(object, jpeg, "image/jpeg")
-        return `gs://${bucket}/${object}`
-      })
-      uploaded.set(hash, uri)
-    }
+    const held = uploads.get(hash)
+    if (held && Date.now() - held.at < REUSE) return held.uri
+    const object = `batch/img/${hash}.jpg`
+    const uri = modelJpeg(image).then(async (jpeg) => {
+      await upload(object, jpeg, "image/jpeg")
+      return `gs://${bucket}/${object}`
+    })
+    uploads.set(hash, { uri, at: Date.now() })
+    // One that didn't get up is tried again by the next request that shows it.
+    uri.catch(() => uploads.get(hash)?.uri === uri && uploads.delete(hash))
     return uri
   }
 

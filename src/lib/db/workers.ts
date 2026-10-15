@@ -92,16 +92,23 @@ async function elect() {
   }
 }
 
+/** How long the lead's connection may take to answer before it counts as gone. */
+const LEAD_WAIT = 15_000
+
 /**
  * Whether this server leads now: checked with the database at most every
  * few seconds, so a laptop waking from sleep finds out it lost the lock
- * before doing anything.
+ * before doing anything. A connection that doesn't answer counts as lost:
+ * one whose socket went can leave a query waiting forever (see `mend` in
+ * sql.ts), and with it everything that asks whether this server leads.
  */
 export async function isLeader() {
   if (!state.lead) return false
   if (Date.now() - state.leadCheckedAt < 3_000) return true
   try {
-    await state.lead`select 1`
+    let timer: NodeJS.Timeout | undefined
+    const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer")), LEAD_WAIT)))
+    await Promise.race([state.lead`select 1`, late]).finally(() => clearTimeout(timer))
     state.leadCheckedAt = Date.now()
     return true
   } catch {

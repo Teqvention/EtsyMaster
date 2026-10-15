@@ -19,6 +19,8 @@ type Db = {
   listeners: Set<(payload: string) => void>
   /** Called whenever the notifications (re)start: what came meanwhile is lost, so caches start over. */
   resets: Set<() => void>
+  /** Asks the pools whether they still answer, and makes a broken one afresh (see `PROBE_EVERY`). */
+  mend?: Mend
 }
 
 const global = globalThis as typeof globalThis & { __db?: Db }
@@ -61,9 +63,22 @@ const db = (global.__db ??= { sql: connect(12), listeners: new Set(), resets: ne
 db.lockPool ??= connect(30, 600)
 db.listener ??= connect(1, 0, false)
 
-export const sql = db.sql
+/**
+ * The pool `pick` gives, whichever it is when called: one made afresh (see
+ * `mend`) takes over for every caller at once, though each module keeps
+ * what it imported. postgres.js's helpers (begin, unsafe, end…) are plain
+ * closures, so they're handed out as they are.
+ */
+function current(pick: () => postgres.Sql): postgres.Sql {
+  return new Proxy((() => {}) as unknown as postgres.Sql, {
+    apply: (_, self, args) => Reflect.apply(pick() as unknown as (...a: unknown[]) => unknown, self, args),
+    get: (_, key) => Reflect.get(pick(), key),
+  })
+}
+
+export const sql = current(() => db.sql)
 /** Where locks hold their connection: never `sql`, which their work needs. */
-export const locks = db.lockPool
+export const locks = current(() => db.lockPool!)
 
 /** Connected, the tables there and change notifications coming; once per server. */
 export function ready() {
@@ -211,3 +226,90 @@ export function holdAlive(connection: postgres.ReservedSql) {
   beat.unref?.()
   return beat
 }
+
+// --- Mending ---
+
+/**
+ * A pool can break for good. 13 Oct, after the network dropped, postgres.js
+ * (3.4.9) threw "Cannot read properties of null (reading 'write')" from
+ * connections whose socket had gone, and every query handed to them waited
+ * forever: the generation queue stood still for half an hour, until the
+ * server was restarted by hand. So both pools are asked a trivial question
+ * every `PROBE_EVERY`. When one has gone `PROBE_FAILS` rounds without an
+ * answer within `PROBE_WAIT` while a connection opened just to ask answers
+ * at once, the database is there and the pool isn't: it's made afresh.
+ * Ending the old one fails what still waits on it (CONNECTION_DESTROYED),
+ * so its callers go on: their sets fail for a passing reason and heal, and
+ * locks it held are let go of (another server, or this one, takes them again).
+ */
+const PROBE_EVERY = 20_000
+const PROBE_WAIT = 15_000
+const PROBE_FAILS = 3
+
+type Mend = {
+  timer?: ReturnType<typeof setInterval>
+  busy: boolean
+  /** Rounds in a row each pool didn't answer. */
+  fails: { sql: number; locks: number }
+  /** What was made afresh lately, newest last. */
+  log: { at: string; pool: string }[]
+  /** One round; called through here, so after a dev reload the newest code runs. */
+  probe: () => Promise<void>
+}
+
+/** Whether `pool` answers a trivial question within `PROBE_WAIT`. */
+async function answers(pool: postgres.Sql) {
+  let timer: NodeJS.Timeout | undefined
+  const late = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), PROBE_WAIT)))
+  const asked = pool`select 1`.then(
+    () => true,
+    () => false
+  )
+  return Promise.race([asked, late]).finally(() => clearTimeout(timer))
+}
+
+async function probe() {
+  const mend = db.mend!
+  if (mend.busy || !process.env.DATABASE_URL) return
+  mend.busy = true
+  try {
+    const [main, held] = await Promise.all([answers(db.sql), answers(db.lockPool!)])
+    mend.fails = { sql: main ? 0 : mend.fails.sql + 1, locks: held ? 0 : mend.fails.locks + 1 }
+    const broken = { sql: mend.fails.sql >= PROBE_FAILS, locks: mend.fails.locks >= PROBE_FAILS }
+    if (!broken.sql && !broken.locks) return
+    // The database out of reach altogether (the network, say): a new pool wouldn't change that.
+    const fresh = connect(1, 5)
+    const there = await answers(fresh)
+    void fresh.end({ timeout: 1 }).catch(() => {})
+    if (!there) return
+    const old: postgres.Sql[] = []
+    if (broken.sql) {
+      old.push(db.sql)
+      db.sql = connect(12)
+      mend.fails.sql = 0
+    }
+    if (broken.locks) {
+      old.push(db.lockPool!)
+      db.lockPool = connect(30, 600)
+      mend.fails.locks = 0
+    }
+    const pool = broken.sql && broken.locks ? "both pools" : broken.sql ? "the query pool" : "the lock pool"
+    console.warn(`Database: ${pool} stopped answering while the database answers: made afresh`)
+    mend.log = [...mend.log, { at: new Date().toISOString(), pool }].slice(-20)
+    for (const pool of old) void pool.end({ timeout: 5 }).catch(() => {})
+  } catch (error) {
+    console.error("Database check:", error)
+  } finally {
+    mend.busy = false
+  }
+}
+
+db.mend ??= { busy: false, fails: { sql: 0, locks: 0 }, log: [], probe }
+db.mend.probe = probe
+if (process.env.NEXT_PHASE !== "phase-production-build") {
+  db.mend.timer ??= setInterval(() => void db.mend!.probe(), PROBE_EVERY)
+  db.mend.timer.unref?.()
+}
+
+/** What the pool check made afresh lately, for a look from outside. */
+export const mended = () => db.mend!.log

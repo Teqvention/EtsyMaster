@@ -51,6 +51,14 @@ import { cn } from "@/lib/utils";
 // fresh clock. Clicking it lists every batch job and how many sets are still
 // waiting, which can be stopped there.
 
+// What an image costs at 2K, in US dollars (docs/generation-pipeline.md):
+// Nano Banana 2.1, and Nano Banana 2 (the fallback, `model` on the output),
+// online or in a batch job (half price). An estimate, for a feel of the run.
+const PRICE = {
+  usual: { online: 0.05, batch: 0.025 },
+  fallback: { online: 0.1, batch: 0.05 },
+};
+
 const SEEN_KEY = "nav-batch:seen";
 const seenListeners = new Set<() => void>();
 
@@ -142,6 +150,11 @@ function BatchWidget(
   const share = total ? back / total : 0;
   const painted = paintedAtVertex(jobs);
   const runningJobs = new Set(jobs.filter(({ job }) => job.status === "running").map(({ job }) => job.name)).size;
+  // At the pace of the run so far: a rough guess, and none until a few are back.
+  const left =
+    running && back >= 3 && elapsed > 60_000 && total > back + failed
+      ? ((total - back - failed) * elapsed) / back
+      : null;
 
   return (
     <SidebarGroup {...props}>
@@ -186,9 +199,13 @@ function BatchWidget(
                         ? "Waiting"
                         : "Generated"}
                   </span>
-                  <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground tabular-nums [&_svg]:size-3">
+                  <span
+                    className="ml-auto flex items-center gap-1 text-xs text-muted-foreground tabular-nums [&_svg]:size-3"
+                    title={left !== null ? `About ${duration(left)} to go at the pace so far` : undefined}
+                  >
                     <ClockIcon />
                     {duration(elapsed)}
+                    {left !== null && <span className="text-muted-foreground/70">· ~{duration(left)} left</span>}
                   </span>
                 </div>
 
@@ -220,6 +237,11 @@ function BatchWidget(
                       </span>
                     )}
                   </span>
+                  {run.cost > 0 && (
+                    <span title="What the images back so far cost, estimated at Google's 2K prices">
+                      · ≈ ${run.cost.toFixed(2)}
+                    </span>
+                  )}
                   {failed > 0 && (
                     <span className="ml-auto text-destructive">
                       {failed} failed
@@ -267,14 +289,19 @@ function BatchWidget(
  * no job; bound for a batch job they wait as `sending`, then name it.
  */
 function tally(sets: GenerationSet[], seen: string | null) {
-  const run = { total: 0, back: 0, failed: 0, online: 0, busy: 0, start: Infinity, end: 0 };
+  const run = { total: 0, back: 0, failed: 0, online: 0, busy: 0, start: Infinity, end: 0, cost: 0 };
   for (const set of sets) {
+    // Painted in a batch job: the job lists it.
+    const batched = new Set((set.jobs ?? []).flatMap((j) => j.outputs));
     for (const o of set.outputs) {
       const busy = o.status === "pending" || o.status === "running";
       if (!busy && !(seen !== null && o.createdAt > seen)) continue;
       run.total++;
       run.start = Math.min(run.start, Date.parse(o.createdAt));
-      if (o.status === "done") run.back++;
+      if (o.status === "done") {
+        run.back++;
+        run.cost += PRICE[o.model ? "fallback" : "usual"][batched.has(o.id) ? "batch" : "online"];
+      }
       else if (o.status === "error") run.failed++;
       if (busy) run.busy++;
       if (o.status === "running" && !o.job) run.online++;

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto"
 
 import { encodeKey, s3Error, s3Fetch, type S3Credentials } from "./s3"
+import { uplink } from "./uplink"
 
 // The bucket: public file hosting for print files (the place Gelato fetches
 // them from when it makes a product), and private storage for the app's own
@@ -137,7 +138,8 @@ export async function putObject(key: string, data: Uint8Array, contentType: stri
     }
     let res: Response
     try {
-      res = await s3Fetch("PUT", objectUrl(config, key), config.credentials, { body: data, headers })
+      // Sharing the line with the database's queries (see uplink.ts).
+      res = await uplink(data.byteLength, () => s3Fetch("PUT", objectUrl(config, key), config.credentials, { body: data, headers }))
     } catch (error) {
       if (attempt < 3) {
         await sleep(1000 * 2 ** attempt)

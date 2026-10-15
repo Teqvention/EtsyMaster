@@ -2,7 +2,7 @@
 import sharp from "sharp"
 
 import { watchDoc } from "@/lib/db/documents"
-import { claim, type Claim, exclusive } from "@/lib/db/sql"
+import { claim, type Claim, exclusive, mended } from "@/lib/db/sql"
 import { paceState } from "@/lib/google/pace"
 import { googlePaused, GooglePausedError, heldBackByGoogle, PAUSE_KEY, wrong } from "@/lib/google/pause"
 import { BLANK_PROMPT, blankAgainPrompt, FALLBACK_MODEL, paint, PAINT_MODEL, StayedBusyError } from "@/lib/mockups/gemini"
@@ -28,6 +28,7 @@ import {
 import { cityRequest, cityWork, isCitySet } from "@/lib/citys/generate"
 import { autoRequest, expandAuto, planAuto, prepareAuto } from "@/lib/styles/auto"
 import { reviewAuto } from "@/lib/styles/auto-check"
+import { uplinkState } from "@/lib/storage/uplink"
 import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
@@ -514,7 +515,7 @@ async function submit(id: string, outputs: Output[], styleOf: (o: Output) => Pro
     const requests = await Promise.all(
       outputs.map(async (o) => ({ key: o.id, ...(await request(id, o.id, styleOf(o))) }))
     )
-    const lines = await paintLines(`batch/${id}-${Date.now().toString(36)}`, requests)
+    const lines = await paintLines(requests)
     // "now" images the lane takes on are just running (taken on at once, so sets
     // handing images over side by side don't overfill it); the others wait for a batch job.
     const online = now ? Math.min(ids.length, nowRoom()) : 0
@@ -667,9 +668,13 @@ function nowRoom() {
   return Math.max(0, soon - lane.activeNow - lane.errands.filter((e) => e.now).length)
 }
 
-/** Batch-bound images: as many as the lane has room for go online, the rest to the outbox. */
-function send(parcel: Parcel, urgent = false) {
-  const room = Math.max(0, LANE_PARALLEL - lane.active - lane.errands.length)
+/**
+ * Batch-bound images: as many as the lane has room for go online, the rest
+ * to the outbox; with `online`, all of them wait in the lane's line (after
+ * any "now" images), going to a batch job only if Vertex stays busy.
+ */
+function send(parcel: Parcel, urgent = false, online = false) {
+  const room = online ? parcel.outputs.length : Math.max(0, LANE_PARALLEL - lane.active - lane.errands.length)
   parcel.outputs.slice(0, room).forEach((output, i) => lane.errands.push(errand(parcel.set, output, parcel.lines[i], false, parcel.model)))
   if (parcel.outputs.length > room) {
     toOutbox({ ...parcel, outputs: parcel.outputs.slice(room), lines: parcel.lines.slice(room) }, urgent)
@@ -748,15 +753,22 @@ if (outbox.notBefore === Number.MAX_SAFE_INTEGER) outbox.notBefore = 0
 const SEND_TRIES = 30
 
 /**
- * How long the outbox waits for the rest of an order before its images go
- * out: all of them in few jobs is what made big orders fast (one job of 120
- * back in 11 minutes, 7 Sep), and a big order's first sets sent off early
- * would take the few jobs that may run, leaving the rest waiting for one to
- * end (overnight, maybe until the laptop wakes). So it sends once no set is
- * left to prepare, or once what waits would fill every job there may be; and
- * after `GATHER_MAX` in any case, should a set never get through.
+ * When what waits in the outbox goes out: few big jobs are what make an
+ * order fast (a job of 183 had painted 83 % after 12.5 minutes, 13 Oct), so
+ * it gathers an order's images, and sends
+ * - once no set is left to prepare, or none has added images for
+ *   `QUIET_GAP` (sets of "now" images being made meanwhile don't hold a
+ *   batch order up),
+ * - once `SEND_AT` images wait: a job's worth, painting while the rest of
+ *   a big order is still being prepared,
+ * - once the first of them has waited `GATHER_MAX`, whatever the sets still
+ *   being prepared are doing. Until 13 Oct it waited for every set, up to
+ *   an hour and a half: one set hung on a lost database connection kept a
+ *   24-set order's 267 images waiting for 2 h 40 min.
  */
-const GATHER_MAX = 90 * 60_000
+const SEND_AT = 200
+const QUIET_GAP = 2 * 60_000
+const GATHER_MAX = 15 * 60_000
 
 function toOutbox(parcel: Parcel, urgent = false) {
   if (!outbox.parcels.length) outbox.first = Date.now()
@@ -782,10 +794,11 @@ async function outboxTick() {
     outbox.sending = true
     try {
       const allowed = Date.now() >= (outbox.notBefore ?? 0) && !pause.on
-      const quiet = Date.now() - outbox.last > 5_000 && queue.running.size === 0 && queue.waiting.length === 0
+      const still = Date.now() - outbox.last
+      const quiet = still > 5_000 && ((queue.running.size === 0 && queue.waiting.length === 0) || still > QUIET_GAP)
       const urgent = outbox.parcels.some((p) => p.urgent)
-      const full = outbox.parcels.reduce((n, p) => n + p.outputs.length, 0) >= (MAX_RUNNING_JOBS - 1) * HUGE_JOB
-      if (allowed && (urgent || quiet || full || Date.now() - outbox.first > GATHER_MAX)) await sendOut()
+      const enough = outbox.parcels.reduce((n, p) => n + p.outputs.length, 0) >= SEND_AT
+      if (allowed && (urgent || quiet || enough || Date.now() - outbox.first > GATHER_MAX)) await sendOut()
     } catch (error) {
       console.error("Batch outbox:", error)
     } finally {
@@ -1059,7 +1072,16 @@ const BATCH_POLL = 30_000
  * early, its images come in and the rest goes out again, when
  * - it has painted at least `HARVEST_SHARE` and then nothing for `STALL`
  *   (a few slow requests holding up all the others),
- * - it has painted nothing new for `LONG_STALL`, or is past its goal,
+ * - it holds `TAIL_JOB` images or more and, after `TAIL_AFTER`, has painted
+ *   `TAIL_SHARE` of them, or `KNEE_SHARE` and next to nothing for
+ *   `KNEE_WINDOW` (`KNEE_GAIN` of it): the last few trickle in a minute
+ *   apart (13 Oct: 81 % of 183 in 9.4 min, 83 % at 12.5, then one a
+ *   minute), and nothing comes over before the job ends; a rest of up to
+ *   `REST_ONLINE` is then painted online, in minutes,
+ * - it has painted nothing new for `LONG_STALL`, or is past its goal (one
+ *   of the fallback model's only while it stalls: its rest would only go
+ *   to the fallback again, starting over; 13 Oct its jobs of 121 and 39
+ *   were ended at the hour, again and again, until 22:31),
  * - it has painted nothing for `STUCK` while a job sent after it paints, or
  *   for `STUCK_ALONE` (some sit for hours while others paint),
  * - it runs on the usual model and has fallen well behind its goal: after a
@@ -1076,6 +1098,19 @@ const BIG_JOB = 250
 const HARVEST_AFTER = 10 * 60_000
 const HARVEST_SHARE = 0.5
 const STALL = { small: 5 * 60_000, big: 20 * 60_000 }
+const TAIL_JOB = 40
+const TAIL_SHARE = 0.8
+const TAIL_AFTER = 10 * 60_000
+const KNEE_SHARE = 0.7
+const KNEE_WINDOW = 3 * 60_000
+const KNEE_GAIN = 0.03
+/**
+ * A rest this small, of a job ended early and handed to the fallback model,
+ * is painted online (`send`): the lane paints it two at a time, some 14 s
+ * an image (12 Oct), against half an hour to an hour for a batch job of
+ * the fallback's (13 Oct).
+ */
+const REST_ONLINE = 60
 const LONG_STALL = { small: 45 * 60_000, big: 2 * HOUR }
 const STUCK = { small: 20 * 60_000, big: HOUR }
 const STUCK_ALONE = { small: 45 * 60_000, big: 2 * HOUR }
@@ -1100,7 +1135,10 @@ type Poller = {
   /** What the last check found wrong and put right, newest last. */
   problems: { at: string; problem: string }[]
   checkedAt: number
+  /** How far each running job had got, lately (see `KNEE_WINDOW`). */
+  trail: Map<string, Mark[]>
 }
+type Mark = { at: number; ready: number }
 const batches = ((global as typeof global & { __batchPoller?: Poller }).__batchPoller ??= {
   timer: null,
   ticking: false,
@@ -1113,10 +1151,12 @@ const batches = ((global as typeof global & { __batchPoller?: Poller }).__batchP
   doing: "",
   problems: [],
   checkedAt: 0,
+  trail: new Map(),
 })
 // Created before these were fields: a dev reload keeps the old object.
 batches.pass ??= 0
 batches.problems ??= []
+batches.trail ??= new Map()
 
 /** Keeps asking after batch jobs (on the leader; see instrumentation-node.ts), and checks on that. */
 export function startBatches() {
@@ -1363,6 +1403,8 @@ export async function batchHealth() {
       takesNow: nowRoom(),
     },
     waitingToGoOut: outbox.parcels.reduce((n, p) => n + p.outputs.length, 0),
+    uploads: uplinkState(),
+    databaseMended: mended(),
     healing: { lastPassSecondsAgo: ago(healer.at), healed: healer.log },
     pace: await paceState().catch((error) => ({ error: message(error) })),
     problems: batches.problems,
@@ -1393,12 +1435,17 @@ async function follow(name: string, shares: Share[], moving: number, mine = true
   const stalled = now - Date.parse(movedAt)
   const share = size ? state.ready / size : 0
   const behind = mine && !job.model && age >= goal / 3 && share < (0.5 * Math.min(age, goal)) / goal
+  const overdue = age >= goal && (!job.model || stalled >= STALL[kind])
+  const gain = gained(name, state.ready, now)
+  const slowed = gain !== null && gain < KNEE_GAIN * size
+  const tail = size >= TAIL_JOB && age >= TAIL_AFTER && (share >= TAIL_SHARE || (share >= KNEE_SHARE && slowed))
   const due =
     !job.harvest &&
     state.ready < state.total &&
     (behind ||
       (state.ready > 0
-        ? age >= goal ||
+        ? overdue ||
+          tail ||
           stalled >= LONG_STALL[kind] ||
           (age >= HARVEST_AFTER && share >= HARVEST_SHARE && stalled >= STALL[kind])
         : age >= STUCK_ALONE[kind] || (age >= STUCK[kind] && moving > Date.parse(job.submittedAt))))
@@ -1419,6 +1466,20 @@ async function follow(name: string, shares: Share[], moving: number, mine = true
     await cancelPaintBatch(name)
     kickBatches(15_000)
   }
+}
+
+/**
+ * How many images the job `name` has painted over the last `KNEE_WINDOW`,
+ * now it has painted `ready`: null until it's been followed that long (kept
+ * here only, so after a restart it takes a window to know again).
+ */
+function gained(name: string, ready: number, now: number) {
+  const trail = (batches.trail.get(name) ?? []).filter((t: Mark) => now - t.at <= 2 * KNEE_WINDOW)
+  batches.trail.set(name, [...trail, { at: now, ready }])
+  // Jobs that are in by now are forgotten.
+  for (const [other, t] of batches.trail) if (now - t[t.length - 1].at > 2 * KNEE_WINDOW) batches.trail.delete(other)
+  const then = trail.findLast((t: Mark) => now - t.at >= KNEE_WINDOW)
+  return then ? ready - then.ready : null
 }
 
 /**
@@ -1581,7 +1642,9 @@ async function collect(name: string, shares: Share[], { state, error, output, in
     if (after?.status === "queued") enqueue(set)
     // Ended for falling behind: the fallback paints the rest; a fallback job's rest stays with the fallback.
     const model = shares.some(({ job: j }) => j.rescue || j.model === FALLBACK_MODEL) ? FALLBACK_MODEL : undefined
-    if (resend.length) send({ set, outputs: resend, lines: resend.map((o) => again.get(o)!), ...(model && { model }) })
+    if (resend.length) {
+      send({ set, outputs: resend, lines: resend.map((o) => again.get(o)!), ...(model && { model }) }, false, !!model && again.size <= REST_ONLINE)
+    }
   }
   // How long a job of this size took, to tune `MAX_JOB` by.
   const minutes = Math.round((Date.now() - Date.parse(shares[0].job.submittedAt)) / 60_000)
@@ -1812,8 +1875,13 @@ const HUNG_PASS = 10 * 60_000
  * A run of a set that has gone this long without the set changing has hung
  * (a call on a dropped connection that never answers): it's let go of, so
  * its lost images are painted again and new batches of the set can start.
+ * At 45 minutes, 13 Oct, hung runs held a big order up for hours. A run
+ * let go of that was only slow (a Gemini call Google keeps turning away
+ * waits up to half an hour) frees its place in the queue and finishes
+ * later; the set isn't run twice meanwhile, its lock keeps a new run
+ * waiting (see `run`).
  */
-const HUNG_RUN = 45 * 60_000
+const HUNG_RUN = 10 * 60_000
 /**
  * An image of this server's still marked as painting, with nothing here
  * painting it and its set unchanged this long, was lost. Not sooner: a

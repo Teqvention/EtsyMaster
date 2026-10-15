@@ -1,6 +1,6 @@
 # Bild-Pipeline: Now, Batch, über Nacht — ohne Sperre
 
-**Stand:** 12.10.2026. Alle Zahlen sind gemessen (Messläufe in dieser App, Vertex-Jobhistorie des Projekts,
+**Stand:** 15.10.2026. Alle Zahlen sind gemessen (Messläufe in dieser App, Vertex-Jobhistorie des Projekts,
 Google Cloud Monitoring), sonst steht es dabei. Ergänzt das Wissen aus dem alten Projekt
 (`google-bilder-batch-sync-wissen.md`).
 
@@ -54,13 +54,14 @@ Generate ──► Set je Listing: Foto holen → Poster finden → verstehen �
                  │             · 2.1 zweimal „busy“ → Nano Banana 2 malt das Bild
                  │             · was die Spur in ~10 min nicht schafft → sofort in einen Batch-Job
                  │
-                 └── Batch ─► Ausgang sammelt, bis der Auftrag fertig vorbereitet ist
+                 └── Batch ─► Ausgang sammelt den Auftrag und schickt, sobald er fertig vorbereitet ist,
+                               200 Bilder warten, 2 min nichts Neues kam oder spätestens nach 15 min
                                → EIN Job je Auftrag (bis 250 Bilder), größer: gleich große Teile
                                → höchstens 4 Jobs gleichzeitig (1 Platz bleibt für Now-Überlauf frei)
                                → Jobs starten mindestens 30 s nacheinander
                  ▼
           Abfrage alle 30 s → Ergebnis einsammeln → Bild speichern → Set fertig
-          Selbstheilung jede Minute: Fehler mit vorübergehender Ursache bis zu 4× neu (1, 3, 10, 20 min Abstand)
+          Selbstheilung jede Minute: Fehler mit vorübergehender Ursache neu (1, 3, 10, 20, 30 min, dann stündlich)
 ```
 
 **Ziele je Job:** kleine Aufträge (bis 250 Bilder) 1 Stunde, große 8 Stunden (über Nacht). Ein Job wird nur
@@ -76,14 +77,61 @@ seinem Ziel liegt. Ein 2.1-Job gibt seinen Rest dann an Nano Banana 2. Bis 12.10
 | Gemeinsame Pause bei „busy“ (429) | 15 s, verdoppelt bis 60 s | kein Ablehnungs-Sturm (10.10.: 30+ Anfragen/s) |
 | Online gleichzeitig | 2 je Server | mehr bringt bei Googles geteiltem Topf nichts |
 | Batch-Jobs gleichzeitig | ≤ 4 | 7 gleichzeitig stauten sich (05.09.), 44 in 5 min gingen der Sperre voraus (10.10.) |
-| **Abgelehnte Anfragen (400) werden nie wiederholt** | 5 in 10 min → alles pausiert | keine Schleife aus „falschen Anfragen“ |
-| Verweigert (401/403: Sperre, Rechnung, Anmeldung) | 3 in 10 min → alles pausiert | weiterklopfen macht es nur schlimmer |
-| Safety-Filter hält Bilder zurück | 5 in 30 min (Batch: 10 % eines Jobs) → alles pausiert | erst Prompts ansehen, dann weiter |
+| **Abgelehnte Anfragen (400) werden nie wiederholt** | 5 in 10 min → Pause 15 min, beim 2. Mal 1 h, beim 3. Mal (binnen 6 h) bis du klickst | keine Schleife aus „falschen Anfragen“ |
+| Verweigert (401/403: Sperre, Rechnung, Anmeldung, fehlende Bucket-Rechte) | 3 in 10 min → Pause, bis du klickst | weiterklopfen macht es nur schlimmer; Warten repariert keine Rechte |
+| Safety-Filter hält Bilder zurück | 5 in 30 min (Batch: 10 % eines Jobs) → Pause 30 min, beim 2. Mal 2 h, beim 3. Mal (binnen 6 h) bis du klickst | die blockierten Bilder bleiben aussortiert, der Rest läuft weiter |
 | Batch-Job nie doppelt anlegen | vor jedem neuen Versuch bei Google nachsehen | ein doppelter Auftrag ist doppelt bezahlt |
-| Selbstheilung begrenzt | höchstens 4× je Set, nur für Sets der letzten 6 h | kein Endlos-Wiederholen |
+| Selbstheilung mit wachsendem Abstand | nach 1, 3, 10, 20, 30 min, dann stündlich; bis zu 40× je Set, 3 Tage lang | ein Auftrag über Nacht kommt durch, egal wie oft Google „busy“ war; höchstens 1 Versuch/h je Set |
 
-Pausiert die App von selbst, steht der Grund in der Seitenleiste („Google paused · Paused by itself …“).
-Weiter geht es erst, wenn du auf „Resume“ klickst.
+Pausiert die App von selbst, steht der Grund in der Seitenleiste („Google paused · Paused by itself …“), bei einer
+befristeten Pause mit „resumes by itself at …“. Eine unbefristete Pause (Verweigerung oder zu oft) endet erst mit
+„Resume“.
+
+### Sweet Spot (13.10.2026)
+
+| Frage | Antwort | Beleg |
+|---|---|---|
+| Bilder je Batch-Job | **bis 250**; 400 Bilder = 2 Jobs à 200, beide sofort | NB 2: 161 Bilder 10 min, 202 in 8 min, 226 in 22 min; Dauer hängt kaum von der Größe ab; Google rät zu wenigen großen Jobs |
+| Jobs gleichzeitig | **≤ 3 für Batch, 1 Platz frei für „Now“, nie mehr als 4** | 7 gleichzeitig stauten sich (05.09.) |
+| Online gleichzeitig | **2** | 5 parallel: 14 von 20 abgelehnt |
+| Modell | **2.1 zuerst, NB 2 übernimmt, wenn ein Job nach ⅓ seines Ziels unter der halben Erwartung liegt** (Robins Entscheidung 13.10.) | 2.1: 49 Bilder 122 min (überlastet seit Start 6.10.); NB 2: 10 Bilder 15 min |
+| Kosten 400 Bilder (2K, Batch) | ≈ 10 $ mit 2.1, ≈ 20 $ mit NB 2; die Seitenleiste zeigt die Schätzung („≈ $…“) und die Restzeit („~… left“) | Google-Preisliste 13.10. |
+
+**Messung 13.10. (neues Projekt `robin-481512`, 185 Bilder, 2K, Klick „Send all“ um 12:40:49 UTC):**
+
+| Zeit nach Klick | Was |
+|---|---|
+| 0:24 | **ein** Job mit 183 Bildern bei Google (2 gingen online), Modell 2.1 |
+| 4:38 | Google beginnt zu malen (vorher Warteschlange) |
+| 8:20 | 78 gemalt · 9:20 → 148 · 12:30 → 152 (**83 %**) |
+| danach | nur noch ~1 Bild/min: die Nachzügler halten alles auf, und Vertex gibt Bilder erst am Job-Ende heraus |
+| 31:00 | Job beendet (164 von 183); so spät nur, weil der Server 3000 mit altem Code den Job betreute, siehe unten |
+| 33–36 | Abbrechen bei Vertex (~3 min), dann alle 164 in ~1,5 min eingesammelt, 0 Fehler |
+| 36:36 | Rest (19) als NB 2-Batch-Job hinterher |
+
+**Nachzügler-Regel (seit 15.10.):** Ein Job ab 40 Bildern wird nach 10 min beendet und eingesammelt, sobald er
+80 % gemalt hat, oder 70 % und in den letzten 3 min weniger als 3 % dazukamen (der „Knick“: danach tröpfelt es
+nur noch). Bis 60 Bilder Rest malt NB 2 **online** (zwei gleichzeitig, ~14 s je Bild), statt in einem neuen
+Batch-Job eine halbe bis ganze Stunde zu warten. Für 60 bis 200 Bilder heißt das bei normaler Google-Last:
+Job nach wenigen Sekunden bei Google, ~4–5 min Warteschlange dort, ~80 % gemalt nach ~10 min, Abbrechen ~3 min,
+Einsammeln 1–3 min, also **~80 % sichtbar nach ~14–16 min**, der Rest online ~5–10 min später. Schneller geht es
+nicht, solange Vertex Bilder erst am Job-Ende herausgibt. An einem überlasteten Abend (13.10.) dauert es
+Stunden; das bestimmt Google, nicht die App.
+
+**Messung 13.10. Bauhaus-Auftrag (24 City-Sets, 311 Bilder, ~14:38 UTC):** alle 311 fertig, 0 Fehler
+(153× 2.1, 158× NB 2), aber erst am 14.10. um 10:47. Die Zeit ging fast ganz auf unserer Seite verloren:
+
+| Was | Folge | Seit 15.10. |
+|---|---|---|
+| Uploads füllten die Leitung des Laptops (~500 MB: jedes Set lud Board und Referenzen neu hoch), Ping 2 s | DB nicht erreichbar 14:43–14:47 und 15:17–15:47 | jedes Referenzbild geht **einmal** hoch (`batch/img/<hash>.jpg`, für alle Sets und Aufträge); große Uploads höchstens 2 gleichzeitig und nur ~70 % der Zeit (`storage/uplink.ts`) |
+| postgres.js-Fehler „reading 'write'“: Abfragen auf kaputten Verbindungen warteten für immer | Warteschlange stand still, bis der Server von Hand neu startete | **DB-Wächter** (`db/sql.ts`): fragt beide Pools alle 20 s; antwortet einer 3× nicht, eine frische Verbindung aber schon, wird er ersetzt, wartende Abfragen scheitern und heilen sich selbst |
+| hängende Set-Läufe (erst nach 45 min freigegeben) hielten den Ausgang auf, der auf **alle** Sets wartete (bis 90 min) | erster Job erst nach 2 h 40 min | Läufe nach **10 min** Stillstand frei; der Ausgang schickt bei 200 Bildern, nach 2 min ohne Neues oder spätestens nach 15 min |
+| NB 2-Jobs wurden nach 60 min beendet, obwohl sie noch lieferten; ihr Rest fing neu an | Rest-Runden bis 22:31 | NB 2-Jobs laufen weiter, solange sie liefern; der Nachzügler-Rest geht online |
+| Server nachts weggefallen (Speicherdruck) | letzte 28 Bilder warteten bis zum Morgen | **`scripts/dev-leader.sh`** startet den Server sofort neu (mit frischem Turbopack-Cache) und hält den Mac am Ladekabel wach |
+
+Nur **ein** Server steuert Google: seit 14.10. **3000** (`test`), gestartet mit `scripts/dev-leader.sh`; jeder
+andere Server läuft mit `FOLLOWER=1`. Citys-„Now“-Bilder laufen seit 13.10. ebenfalls durch die gedrosselte
+Online-Spur (mit Ausweichmodell und Überlauf in einen Batch-Job) statt jedes für sich.
 
 ## 5 · Tausende Bilder über Nacht
 
@@ -91,7 +139,8 @@ Weiter geht es erst, wenn du auf „Resume“ klickst.
 2. **Abends** den großen Auftrag als **Batch** starten. Die App bereitet alles vor (100 Sets ≈ 20 min, 300 Sets
    ≈ 1 h) und schickt es dann in wenigen großen Jobs zu Google (z. B. 3000 Bilder = 3 Jobs à 1000).
 3. Wenn in der Seitenleiste nichts mehr „wartet“ und nur noch Jobs laufen, **darf der Laptop schlafen**. Die Jobs
-   laufen bei Google weiter.
+   laufen bei Google weiter. Besser: am Ladekabel lassen, dann hält `scripts/dev-leader.sh` ihn wach, und alles
+   kommt herein, sobald es fertig ist.
 4. **Morgens** den Laptop öffnen und die App laufen lassen: Sie sammelt alles ein (hängengebliebene Abfragen nach
    dem Schlaf startet die Selbstheilung neu), schickt Reste nach und zeigt am Ende, was fehlt.
 5. Kosten (2K, Batch): 1000 Bilder ≈ 25 $ mit 2.1, ≈ 50 $ mit Nano Banana 2; 3000 Bilder ≈ 75–150 $.
@@ -123,6 +172,9 @@ deutlich hinter seinem 8-Stunden-Ziel liegt.
 | `src/lib/generation/run.ts` | Warteschlange, Online-Spur, Batch-Ausgang, Job-Regeln, Ausweichmodell, Selbstheilung |
 | `src/lib/google/pace.ts` | gemeinsames Tempo aller Server (Tabelle `google_pace`) |
 | `src/lib/google/pause.ts` | Pause-Schalter, selbstständige Pause bei Verweigerung, Ablehnung, Safety-Häufung |
-| `src/lib/mockups/vertex-batch.ts` | Batch-Jobs, ein Online-Versuch je Bild (`paintLineOnce`) |
+| `src/lib/mockups/vertex-batch.ts` | Batch-Jobs, Referenzbilder je einmal hochgeladen, ein Online-Versuch je Bild (`paintLineOnce`) |
+| `src/lib/db/sql.ts` | DB-Pools und der Wächter, der einen kaputten Pool ersetzt (`mend`) |
+| `src/lib/storage/uplink.ts` | Upload-Drossel: höchstens 2 große Uploads, ~70 % der Leitung |
+| `scripts/dev-leader.sh` | hält den führenden Dev-Server am Laufen und den Mac am Ladekabel wach |
 | `src/lib/mockups/gemini.ts` | Anmeldung, Gemini-Aufrufe mit Geduld, Modelle (`PAINT_MODEL`, `FALLBACK_MODEL`) |
-| `GET /api/generations/batch` | Zustand: Online-Spur, Ausgang, Tempo-Töpfe, Selbstheilung, Probleme |
+| `GET /api/generations/batch` | Zustand: Online-Spur, Ausgang, Uploads, ersetzte DB-Pools, Tempo-Töpfe, Selbstheilung, Probleme |
