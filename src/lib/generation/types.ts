@@ -69,6 +69,8 @@ export type ExtractedPoster = Asset & {
   /** Short name, e.g. "Lemon slice" — tells the posters of a set apart. */
   label?: string
   analysis?: PosterAnalysis
+  /** How it was cut out (see `CUT_VERSION` in poster.ts): an older cut is cut again. */
+  cut?: number
 }
 
 /** `variant` redraws the reference; `idea` keeps its concept and style but invents a new scene. */

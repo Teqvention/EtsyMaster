@@ -52,7 +52,7 @@ export const ART_LEVELS: Record<Level, string> = {
 const REAL_RULES = `Rules for a real photo:
 - It is the real place. Every building, bridge, tower, church, coastline, hill and street in view stays where it is, with its real shape, height and proportions. Never invent, move or merge landmarks; never change the skyline; never add landmarks of other places.
 - Buildings are real buildings, each with its own shape, colour, windows, balconies and roof, as in the photos of the place: never generic filler houses, a slope of near-identical boxes, or invented hotels and towers.
-- It looks like a real photograph by a professional: true perspective, real lens behaviour, natural colour, fine detail up close (brickwork, leaves, water) that softens with distance and haze, far hills and houses soft. No AI look: no oversaturation, no plastic or waxy surfaces, no glassy-smooth skies or walls, no uniform crisp detail everywhere, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections; a fine, natural grain as from a real camera.
+- It looks like a real photograph by a professional: true perspective, real lens behaviour, natural colour, fine detail up close (brickwork, leaves, water) that softens with distance and haze, far hills and houses soft. No AI look: no oversaturation, no plastic or waxy surfaces, no uniform crisp detail everywhere, no HDR halos, no over-sharpening, no warped buildings, no impossible reflections.
 - ${SKY_RULES}
 - No text, logos, watermarks, borders or frames. Real signs stay as they are but never readable brand names or logos; never new lettering.
 - People and cars small and incidental, fewer rather than more, never posed, no faces in focus; never crowds, packed beaches or rows of umbrellas and sunbeds.
@@ -61,7 +61,6 @@ const REAL_RULES = `Rules for a real photo:
 /** What every picture in an art style must be, after a reference or a style. */
 const ART_RULES = `Rules for an illustrated poster:
 - Keep the art style exactly: medium, line weight and character, hatching, how colour is laid in (washes, crayon, flat fills, paper showing through), palette and how saturated it is, texture, level of detail, how people, cars and trees are drawn. It must be impossible to tell the new picture from the style's own pictures except by what it shows: the same hand, the same pens, the same paper.
-- The style's real materials: its paper or canvas texture, uneven pigment, dry or broken edges — never smooth digital fills or flawless gradients.
 - Never cleaner, finer, more detailed or more polished than the style's own pictures. A loose, wobbly, naive hand stays loose, wobbly and naive; thick uneven lines stay thick and uneven; crayon texture stays crayon; few details stay few. Image models tidy everything up: don't.
 - Match the line weight at the poster's scale: as thick, as dark and as few lines as in the style's own pictures; a busy scene is simplified to their level of detail, never drawn with finer pens.
 - Draw everything new: never trace or copy a source drawing.

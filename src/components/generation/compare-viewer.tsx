@@ -282,7 +282,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
               variant="secondary"
               size="icon"
               aria-label="Previous"
-              className="absolute top-1/2 left-2 -translate-y-1/2 rounded-full bg-background/90 shadow-sm active:scale-95"
+              className="absolute inset-y-0 left-2 my-auto rounded-full bg-background/90 shadow-sm active:scale-95"
               onClick={() => go(prev.item)}
             >
               <ChevronLeftIcon />
@@ -293,7 +293,7 @@ function Viewer({ viewing, onChange }: { viewing: NonNullable<Viewing>; onChange
               variant="secondary"
               size="icon"
               aria-label="Next"
-              className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full bg-background/90 shadow-sm active:scale-95"
+              className="absolute inset-y-0 right-2 my-auto rounded-full bg-background/90 shadow-sm active:scale-95"
               onClick={() => go(next.item)}
             >
               <ChevronRightIcon />

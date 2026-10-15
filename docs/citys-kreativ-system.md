@@ -360,5 +360,5 @@ relevanter Ort; die Lücke war die Faltung.
   allen drei Bildern. Robin: lieber Montmartre, Arc de Triomphe oder ein süßes Café. Geprüft für jedes Set (Fotos und
   Styles) über die `landmarks` jedes Bildes und den Namen in den anderen Briefs (`setRepeats` in prompts.ts); bei einer
   Wiederholung wird einmal neu geplant.
-- **Textur:** gemalte Poster bekommen die Textur ihres Originals (Korn, bei Kunst leicht fleckige Farbe, weichere
-  Kanten), siehe `docs/styles-autonom.md` Abschnitt 8.
+- **Textur:** am 14.10. wieder entfernt, auch das „feine Kamerakorn“ im Foto-Prompt (Robin: echte Fotos sahen
+  dadurch schlechter aus). Siehe `docs/styles-autonom.md` Abschnitt 8.

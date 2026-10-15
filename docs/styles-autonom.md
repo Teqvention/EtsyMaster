@@ -1,6 +1,6 @@
 # Styles: Autonomous scale und Stil-Treue bei Variants und New ideas
 
-**Stand:** 13.10.2026. Wie aus einem Style beliebig viele neue, einzigartige Poster werden, die genau seinen Look und
+**Stand:** 14.10.2026. Wie aus einem Style beliebig viele neue, einzigartige Poster werden, die genau seinen Look und
 sein Gefühl treffen, und wie Variants und New ideas näher am echten Stil bleiben. Code: `src/lib/styles/study.ts`
 (die Studie des Boards), `src/lib/styles/auto.ts` (Planer, Maler-Prompt, Style-Set), `src/lib/styles/auto-check.ts`
 (Prüfung und Neumalen), `src/lib/generation/prompts.ts` (Variants und New ideas). Oberfläche: Style-Seite →
@@ -189,7 +189,12 @@ Tiger 5), freigegeben waren 200.
 - Review wie gewohnt; „Art direction“ zeigt Brief und Prüfnoten. Gute Bilder können per „Add to style“ wieder aufs
   Board, dann kennt die nächste Studie sie mit.
 
-## 8 · Textur: weniger KI-glatt (13.10.)
+## 8 · Textur: weniger KI-glatt (13.10., am 14.10. wieder entfernt)
+
+**Entfernt am 14.10.** Robin: „bitte schalte diese grain funktion grundlegend aus … viele meiner echten Fotos sehen
+dadurch nicht mehr gut aus. Sowas ist keine Lösung!“ Der Textur-Schritt (`texture.ts`) und die Prompt-Zeilen zu
+Korn und echtem Material (Variants, Ideas, Autonomous scale, Citys-Kunst, Citys-Fotos) sind raus. Nachbearbeitung der
+fertigen Bilder ist kein Weg zu weniger KI-Look; was folgt, ist nur noch die Geschichte.
 
 Robin: „alles so glatt“ — die Bilder sehen neben den Originalen zu stark nach KI aus. Gemessen (100-%-Ausschnitte, in
 den Flächen bei 1024 px Höhe): unsere Bilder hatten die Hälfte bis ein Drittel des feinen Korns der Originale,
@@ -210,3 +215,77 @@ entsprechend wenig dazu.
 Dazu in allen Maler-Prompts (Variants, Ideas, Autonomous scale, Citys-Kunst): echtes Material — Papierkorn oder
 Leinwand, leicht ungleichmäßige Farbe im Strich, trockene Kanten; Citys-Fotos: kein glasglatter Himmel, feines
 natürliches Korn wie aus einer echten Kamera.
+
+## 9 · Feinschliff 14.10.: Rahmen, Format, Grundfarbe, Stilsprache
+
+Robins Review vom 14.10. (Brush Your Teeth, Shower, Wild West, Play It Cool, Cheers, Bauhaus) und was daraus wurde.
+Getestet mit 38 Bildern auf genau diesen Postern.
+
+**Rahmen und Spiegelung kommen nicht mehr mit.** Ursache war fast immer der Ausschnitt: Die Box um den Print rastete
+an der stärksten Kante ein, und das war oft die Außenkante der Rahmenleiste. Fast jede Referenz hatte einen Streifen
+Holz, eine dunkle Linie oder Wand am Rand, und Nano Banana malte ihn als Rahmen. Dazu nannte die Regel „no frame, mat,
+wall…“ genau die Dinge, die dann kamen. Jetzt (`withoutFrame` in `generation/poster.ts`, nach jedem Ausschneiden):
+1. Gemini schaut den Ausschnitt allein an und sagt, wo das Kunstwerk beginnt. Jede Seite wird an die Farbkante
+   gerückt, wo es auf den Rahmen trifft (±1,2 %). Was tiefer als 3,5 % reicht, ist kein Rahmen: Gemini hielt bei
+   Bauhaus den bedruckten Rand und den Titel dafür.
+2. Eine Rahmenlinie, die Gemini übersieht oder zu kurz schneidet (schräge Leiste), wird in den Pixeln gefunden: ein
+   starker Farbsprung nahe am Rand, durchgehend über mindestens 35 % der Seite. Schrift am Rand springt genauso stark,
+   reißt aber zwischen den Buchstaben ab und bleibt.
+3. Der Ausschnitt rastet auf das nächste Druckformat ein (bis 12 % Abweichung; vorher 3 %). Ein schräg fotografierter
+   2:3-Print maß 1:1,67, seine Kreise waren Eier.
+Den Grund zusätzlich zu glätten (`evenGround`) war ein Tag lang drin und ist wieder raus, siehe Abschnitt 10.
+Bestehende Sets werden beim nächsten Generieren einmal neu geschnitten (`CUT_VERSION` 3). Die Regel sagt jetzt positiv,
+was die Leinwand ist: „The canvas is the print file itself … its own ground running to all four edges“, und Bild 1 ist
+„a photo of a printed poster … paint from the print itself, evenly lit“.
+
+**Immer ein Druckformat.** Gemalt wird höchstens 2:3 hoch oder 3:2 quer (`printAspect`), nie 9:16. 151 ältere Bilder in
+9 Sets (fast alle Bauhaus-Sets, das Frosch-Set of 3) sind noch länger gemalt.
+
+**Die Grundfarbe bleibt.** Wo eine Farbe den Grund bildet, bekommt der Maler sie mit Namen und Hex
+(`groundOf`: „The ground is the reference's warm beige (#eee3cd)“). Helles Papier wird gleichmäßig auf
+Papierhelligkeit gehoben, weil ein Print im Zimmer dunkler fotografiert wird; Greige bleibt Greige, statt Pfirsich zu
+werden. Vorher wurde Beige mal Weiß, mal Grau.
+
+**Die Stilsprache bleibt bei Variants.** Beim Shower-Poster ging der Vibe verloren: ein eckiger Brausekopf statt der
+kleinen Kuppel, ein dichter Sprühnebel statt weniger großer Tropfen, größerer Text auf der anderen Seite. Cups und das
+Streifenherz behielten ihn: dieselben Zeichen in derselben Größe, nur die Anordnung neu. Jetzt:
+- Minimal: Hauptmotiv in Form und Größe, Text an seinem Platz, Änderungen nur an Details.
+- Für jede Stufe (`KEEP_FEELING`): Elemente etwa so groß auf der Fläche, gleich viel Leerraum. Eine Umrisszeichnung
+  bleibt Umrisszeichnung, flache Farbe bleibt flach, ein Poster ohne Schrift bekommt keine (Cheers: „Paws for a
+  Toast“ hatte Titel und gefülltes Fell).
+- Maler (`SAME_HAND`): im Maßstab der Referenz, gleiche Linienstärke, Zeichen und Schrift.
+
+**New ideas: neue Kontexte statt getauschter Motive.** Wild West mit einem Lama statt des Pferdes ist das Poster der
+Konkurrenz noch einmal. Jede Idee ist der nächste Print der Serie: Bei einem Poster mit einem Motiv ist ein neues
+Hauptmotiv ein neues Poster (Dusche → Badewanne, Kaffeebecher, Toilette, Kühlschrank, Bett; Robin fand diese gut). Ein
+Blatt mit vielen kleinen Motiven bekommt ein neues Thema für alle Motive (Wild West → Deep Sea, Garden Party, Dino
+Land). Low: ein neuer Kontext mit lauter neuen Objekten, aufgebaut wie die Referenz.
+
+**Briefs in gesperrter Schrift.** Einmal in 2.426 Briefs antwortete Gemini Buchstabe für Buchstabe („T H I S  T O I L
+E T“); so eine Antwort wird einmal neu angefragt.
+
+**Viewer-Pfeile.** Der Drück-Effekt der Buttons (`translate-y-px`) überschrieb die Zentrierung (`-translate-y-1/2`).
+Beim Drücken sprang der Pfeil 18 px nach unten, der Zeiger lag beim Loslassen nicht mehr darauf, und der Klick ging
+verloren. Das passierte in der Mitte und der oberen Hälfte, bei beiden Pfeilen. Jetzt zentriert ohne Transform
+(`inset-y-0 my-auto`), auch in der Style-Lightbox und im Mockup-Viewer.
+
+## 10 · Korrektur 15.10.: zurück auf Testrunde 1
+
+Robin verglich die Shower-Varianten der beiden Testläufe vom 14.10. (12:13 und 12:37 UTC). Zu Runde 1: „gefällt mir vom
+Künstlerischen sehr sehr gut und auch die Ideas sitzen jetzt perfekt“. Zwischen den Läufen kamen zwei Dinge dazu, beide
+sind wieder raus:
+
+- **Die Regel „unter Medium bleiben die Zeichen“:** Tropfen, Punkte und Striche so groß und so dicht wie im Original,
+  die Schrift an ihrem Platz. Damit wurden die Varianten zaghaft: dieselben Tropfen, nur mit Schwamm und Bläschen oder
+  ausgedünnt. Ohne die Regel ändern Variants Perspektive, Zoom, Dichte und Textposition, in derselben Hand: ein schräger
+  Brausekopf mit dichtem Sprühnebel, eine riesige Kuppel mit dem Text zwischen den Tropfen. Die Regeln gegen die alten
+  Ausreißer (`KEEP_FEELING`, die Stufen aus Abschnitt 9) waren in Runde 1 schon drin und bleiben.
+- **Das Glätten des Grundes (`evenGround`):** Das Shower-Foto zeigt grau-beiges Papier (188,181,164). Mit den
+  Spiegelstreifen erkannte Nano Banana ein Foto und malte Creme (234,223,205). Geglättet sah die Referenz aus wie graues
+  Papier, und Minimal übernahm das Grau fast genau (190,181,164), dazu feine Streifen. Eine geglättete Referenz lässt
+  sich nicht zurückrechnen: Poster mit `cut` 2 werden beim nächsten Generieren aus dem Listing-Foto neu ausgeschnitten,
+  wenn das Foto noch gleich viele Prints ergibt (sonst bleibt der Schnitt, und es steht im Log).
+
+Die Grundfarbe für den Maler (`groundOf`) und alles zu Rahmen und Druckformat bleiben. Offen: In Runde 1 übernahm eine
+Brush-Idee („Soak It Up“) die Spiegelstreifen der Referenz; das war der Anlass fürs Glätten. Robin entschied trotzdem für
+Runde 1: „hier sieht man ja auch keine Spiegelungen“.

@@ -58,7 +58,8 @@ import type { GenerationKind, GenerationSet, Output } from "@/lib/generation/typ
 import { describeFolder } from "@/lib/saved/folders"
 import { cn } from "@/lib/utils"
 
-// Everything generated, newest first, one row per listing photo: the photo,
+// Everything generated, the set last asked for images first (more images on
+// an older set bring it back to the top), one row per listing photo: the photo,
 // the poster(s) taken out of it, then what was drawn from them. Rows show
 // the first few results to approve or reject in one click; the set's own
 // page has all of them, grouped. "Review" steps through every undecided
@@ -75,6 +76,10 @@ const KINDS: { value: KindFilter; label: string }[] = [
 const ALL_FOLDERS = "__all__"
 /** Results shown in a row; more open the set's page. */
 const INLINE = 6
+
+/** When the set was last asked for images: made, or more of them (ISO 8601). */
+const lastMade = (s: GenerationSet) =>
+  [s.createdAt, ...s.batches.map((b) => b.createdAt), ...s.outputs.map((o) => o.createdAt)].reduce((a, b) => (b > a ? b : a))
 
 export function GenerationView() {
   const all = useGenerations()
@@ -97,7 +102,10 @@ export function GenerationView() {
     [sets, filter.kind, filter.folder]
   )
   // Sets marked done drop out of Everything and To review until more images are made.
-  const openSets = React.useMemo(() => inScope.filter((s) => !s.doneAt), [inScope])
+  const openSets = React.useMemo(
+    () => inScope.filter((s) => !s.doneAt).toSorted((a, b) => lastMade(b).localeCompare(lastMade(a))),
+    [inScope]
+  )
   const done = React.useMemo(
     () => inScope.filter((s) => s.doneAt).sort((a, b) => b.doneAt!.localeCompare(a.doneAt!)),
     [inScope]

@@ -502,7 +502,6 @@ export function autoPrompt({
       "- Animals and figures exactly as image 1 paints them: fur as a few broad strokes or patches of colour, stripes and spots as rough dabs, faces simplified to a few marks — never a finely furred, realistic or cleanly illustrated animal.",
       "- The subject sits in the paint the way image 1's does: where image 1 lets it melt into soft, hazy colour or half hides it, do the same — never a crisp, sharply drawn subject in front of a painterly background.",
       "- Expressions and gazes as the description says them; never a stiff, serious stare out of the picture unless it asks for one.",
-      "- Real materials: image 1's own surface — paper grain or canvas weave, slightly uneven colour within each stroke, dry or broken brush edges. Never smooth digital fills, flawless gradients or razor-clean edges.",
       "- The same palette as image 1 — its hues, their saturation and contrast, nothing brighter, more neon, darker or more muted — and the same kind of light.",
       "- The same flatness or depth of space as image 1.",
     ].join("\n"),

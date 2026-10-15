@@ -10,18 +10,27 @@ import type { Creativity, OutputMode, PosterAnalysis } from "./types"
 
 // Ideas, themes and styles are free to use; drawings, characters and words
 // are someone's work. Every prompt carries these rules.
+// What the canvas is gets said, not what it isn't: a list of what to leave
+// out ("no frame, mat, wall…") named the very things Nano Banana then
+// painted around the poster (Robin, 14 Oct).
 const RULES = `Rules:
 - Original work: draw every element new. Never trace or reproduce the reference's exact composition, characters, mascots, linework or wording, and never include logos, brands, trademarks, signatures, watermarks, artist names or copyrighted characters.
 - Any text must be new wording, spelled correctly, cleanly lettered and legible at print size; leave text out unless the brief asks for it.
-- Output only the flat artwork, front-on, filling the canvas edge to edge: no frame, mat, wall, room, mockup, hands, drop shadow or border that isn't part of the art.
-- Print quality: sharp, rich in detail where it matters, clean edges, no artefacts, no muddy colours, coherent anatomy and perspective. It must look like a best-selling poster a buyer would hang at home.`
+- The canvas is the print file itself: the artwork alone, flat and front-on, its own ground running to all four edges.
+- Print quality: crisp at print size, no artefacts, coherent anatomy and perspective, and exactly as simple or as detailed as the reference. It must look like a best-selling poster a buyer would hang at home.`
 
 // Variants keep the reference's art style, palette and rendering at every
 // level; only composition and layout move, further at each step.
+// The shower poster's variants lost its vibe (Robin, 14 Oct): a blocky square
+// head for the small dome ("the shape of a small object" read as the main
+// one), a dense spray for its few big drops, bigger text moved to the other
+// side. The cups and the striped heart kept it: the same marks at the same
+// size, the arrangement changed. So the low levels change details and
+// arrangement, never the main subject's shape, the marks or the text's place.
 const VARIANT_LEVELS: Record<Creativity, string> = {
-  minimal: "minimal — very close to the reference: the same subject, elements, layout and framing, freshly redrawn, but never a copy — make two or three subtle yet visible changes to small things (the shape or position of a small object, a pattern, a background detail, a slightly shifted crop, a swapped minor prop), so it reads as the same poster's sibling, not its duplicate. Characters keep their exact expression, gaze, pose and energy.",
-  subtle: "subtle — close to the reference: the same subject, elements and overall layout, with a few small changes to the arrangement (order, count or spacing of elements, a slightly different crop or angle) and one or two new details; side by side it is clearly a different print of the same poster.",
-  low: "low — still close to the reference: the same subject, elements and kind of layout, gently recomposed — one noticeable change to the arrangement, balance or framing (e.g. the main subject moved or turned, elements regrouped, a tighter or wider crop) while everything else stays near the original.",
+  minimal: "minimal — the reference's sibling: the same subject, elements, layout and framing, the main subject in its shape and size, the text where it is — freshly redrawn, never a copy: two or three small but visible changes to details (a pattern, a small object added, moved or swapped, a background detail), so it reads as the same series' sibling print, not its duplicate. Characters keep their exact expression, gaze, pose and energy.",
+  subtle: "subtle — close to the reference: the same subject and overall layout, the text where it is, with a few small changes to the arrangement (order, count or spacing of elements) and one or two new details; side by side it is clearly a different print of the same series.",
+  low: "low — the same subject and kind of layout, gently recomposed: one noticeable change to the arrangement or framing (the main subject moved, turned or doubled, elements regrouped, a tighter or wider view) with the reference's balance, scale and empty space.",
   medium: "medium — the same subject in a new composition and layout: a different viewpoint, scale, framing or grouping, with new supporting elements that fit the theme.",
   high: "high — the most inventive composition and layout: a bold, surprising arrangement or framing that reinterprets the subject playfully, while the art style and palette stay exactly the reference's.",
 }
@@ -34,11 +43,17 @@ const STYLED_LEVELS: Record<Creativity, string> = {
   high: "high — the reference's theme only, reimagined as a piece the style's artist would make from it; a bold, personal interpretation of the style.",
 }
 
+// Every idea is a new print of the series, never the reference with one
+// motif swapped: a Wild West doodle sheet with a llama for its horse is
+// the competitor's poster again (Robin, 14 Oct: "ganz neue Kontexte und
+// Objekte"). One new subject is a new poster when the reference shows one
+// (the shower became a bathtub, a coffee mug); a sheet of many small motifs
+// needs a new theme for all of them.
 const IDEA_LEVELS: Record<Creativity, string> = {
-  minimal: "minimal — change one small thing about the scene (a prop, a detail or the wording) and keep everything else as it is, the characters' expressions included.",
-  subtle: "subtle — change one thing about the scene (a character, a prop or the place) in a small way and keep everything else close.",
-  low: "low — change one thing about the scene (a different character, OR a different place, OR a different prop/activity) and keep everything else close.",
-  medium: "medium — change two or three things (e.g. new character in a new place) and compose a new scene — new viewpoint or framing welcome; the same joke and the same feeling.",
+  minimal: "minimal — the closest new print of the series: the reference's composition and look with new wording or a new main subject in place of its own (one shower → a bathtub); a poster made of many small motifs gets a new theme for all of them. The characters' expressions stay.",
+  subtle: "subtle — a new subject or object on the reference's concept, in its kind of composition (a shower → a steaming coffee mug, \"this coffee is for surviving\"); a poster of many small motifs: a new theme, its motifs arranged the reference's way.",
+  low: "low — a new context for the concept: another room, activity or theme with all-new objects, composed the reference's way (the same scale, empty space and text placement).",
+  medium: "medium — a new scene on the hook: a new subject in a new place or situation, composed anew — new viewpoint or framing welcome; the same joke and the same feeling.",
   high: "high — a bold new scenario on the same hook: a surprising idea, scene, perspective or composition. The look and the feeling stay exactly the reference's — the creativity goes into the idea, never into a new style or mood.",
 }
 
@@ -47,7 +62,7 @@ const IDEA_LEVELS: Record<Creativity, string> = {
 // another artist (Robin, 13 Oct: a lion in a dark library after a tiger in
 // a sunny bar; a blissful cat turned grumpy at the lowest level).
 const KEEP_FEELING = (analysis?: PosterAnalysis) =>
-  `Keep the reference's feeling in every brief${analysis?.mood ? ` (${analysis.mood})` : ""}: the characters' expressions, body language and energy, the warmth of the light, the humour, and its dreaminess where it has any. Never a quieter, sadder, darker, moodier, more dramatic, more realistic or more serious picture. At minimal and subtle keep the reference's expressions and gazes; from low upwards play with them like an artist — sweet, sleepy, dreamy, eyes closed in bliss, smug and half-lidded, looking away — never the default of a character staring straight and seriously out of the picture. Keep its simplicity too: about as many elements as the reference, anything new simplified the way the reference simplifies (a library is a few shelves of colour blocks, not a hundred books). Describe things plainly — never words that ask for more detail or finish than the reference has (cluttered, intricate, detailed, ornate, glossy, realistic).`
+  `Keep the reference's feeling in every brief${analysis?.mood ? ` (${analysis.mood})` : ""}: the characters' expressions, body language and energy, the warmth of the light, the humour, and its dreaminess where it has any. Never a quieter, sadder, darker, moodier, more dramatic, more realistic or more serious picture. At minimal and subtle keep the reference's expressions and gazes; from low upwards play with them like an artist — sweet, sleepy, dreamy, eyes closed in bliss, smug and half-lidded, looking away — never the default of a character staring straight and seriously out of the picture. Keep its simplicity too: about as many elements as the reference, anything new simplified the way the reference simplifies (a library is a few shelves of colour blocks, not a hundred books). Keep its grammar, which is most of its vibe: its elements about as large on the canvas, as much empty space, its marks (drops, dots, stripes, strokes) the same size and kind, its lettering as large and in the same hand — below medium creativity where the reference has it. An outline drawing stays an outline drawing, flat colour stays flat colour, and a poster without lettering gets none. Describe things plainly — never words that ask for more detail or finish than the reference has (cluttered, intricate, detailed, ornate, glossy, realistic).`
 
 export type BriefRequest = {
   mode: OutputMode
@@ -90,11 +105,14 @@ export async function planBriefs(reference: Buffer, request: BriefRequest, extra
   for (let at = 0; at < request.levels.length; at += CHUNK) {
     const levels = request.levels.slice(at, at + CHUNK)
     const avoid = [...request.avoid, ...briefs.map((b) => `${b.title}: ${b.brief}`)]
-    const answer = await askJson<{ briefs: Brief[] }>(
-      briefPrompt({ ...request, levels, avoid }),
-      [reference, ...extra],
-      { schema: BRIEFS_SCHEMA, temperature: 1 }
-    )
+    const ask = () =>
+      askJson<{ briefs: Brief[] }>(briefPrompt({ ...request, levels, avoid }), [reference, ...extra], {
+        schema: BRIEFS_SCHEMA,
+        temperature: 1,
+      })
+    let answer = await ask()
+    // Once in a while Gemini answers letter by letter ("T H I S  T O I L E T…", 14 Oct): asked again.
+    if (answer.briefs?.some((b) => spaced(b.brief))) answer = await ask()
     const got = answer.briefs ?? []
     // A short answer is padded with plain briefs rather than failing the batch.
     for (let i = 0; i < levels.length; i++) {
@@ -111,7 +129,7 @@ function briefPrompt({ mode, levels, analysis, title, style, feedback, avoid, ba
     `You are the art director of a successful Etsy wall-art shop. The image is a best-selling poster from another shop (listing: "${title}"). We make new, original posters inspired by what makes it sell.`,
     analysis && `What the reference is:\n${describe(analysis)}`,
     mode === "idea"
-      ? `Task: write ${levels.length} NEW IDEAS. Each keeps the reference's art style, palette, rendering and — most important — its selling hook (${analysis?.hook ?? "the reason people buy it"}), but tells a new picture: a different character, place, prop or activity, as the creativity level allows. Think like a buyer: each idea must be instantly charming, funny or beautiful, and work as a standalone best seller. Vary them widely — different animals/characters, places (pool, beach, luxury car, bathtub, rooftop, diner…), props and activities; never repeat a combination.`
+      ? `Task: write ${levels.length} NEW IDEAS. Each keeps the reference's art style, palette, rendering and — most important — its selling hook (${analysis?.hook ?? "the reason people buy it"}), but tells a new picture: new subjects, objects and contexts, as the creativity level allows — the next poster the same artist would make for the series, never the reference with one motif swapped. Think like a buyer: each idea must be instantly charming, funny or beautiful, and work as a standalone best seller. Vary them widely — different subjects, rooms, activities and themes; never repeat a combination.`
       : style
         ? `Task: write ${levels.length} briefs that redraw the reference's picture in the style below, each at its creativity level. Describe concretely how the style's medium, palette, lighting and texture apply to this picture.`
         : `Task: write ${levels.length} briefs for new posters that redraw the reference at the given creativity levels. Every brief keeps the reference's art style, medium, rendering, texture, palette and lighting exactly — only the composition and layout change, as far as its level allows. Each must differ from every other brief.`,
@@ -135,6 +153,12 @@ function briefPrompt({ mode, levels, analysis, title, style, feedback, avoid, ba
   ]
     .filter(Boolean)
     .join("\n\n")
+}
+
+/** Text written letter by letter, the words lost between the spaces. */
+function spaced(text = "") {
+  const words = text.split(/\s+/)
+  return words.filter((w) => /^\p{L}$/u.test(w)).length > words.length / 2
 }
 
 function fallback(request: BriefRequest, level: Creativity) {
@@ -194,7 +218,8 @@ const SAME_HAND = `Paint it by the reference's own hand:
 - No more objects than the art direction names: a new setting stays as sparse and as softly painted as the reference's.
 - The same palette, saturation, contrast and kind of light: nothing darker, more muted or moodier.
 - The same feeling: the characters' expressions, body language and energy, the warmth and the humour of the reference.
-- Real materials: the reference's own surface — paper grain or canvas weave, slightly uneven colour within each stroke, dry or broken brush edges. Never smooth digital fills, flawless gradients or razor-clean edges.`
+- Drawn at the reference's scale: lines as thick, marks (drops, dots, stripes) the same size, shape and spacing, lettering the same size, weight and hand, as much empty space — unless the art direction asks for a closer or wider view.
+- The reference's own surface: its paper or canvas as the print shows it, colour as even or as uneven as the reference's, edges as crisp or as soft as its own.`
 
 /** What Nano Banana is told for one output; images go in the order the text names them. */
 export function paintPrompt({
@@ -205,6 +230,7 @@ export function paintPrompt({
   feedback,
   previous,
   inspiration = 0,
+  ground,
 }: {
   mode: OutputMode
   brief: string
@@ -216,9 +242,11 @@ export function paintPrompt({
   previous: boolean
   /** How many approved posters of ours follow the reference (and moodboard), as inspiration. */
   inspiration?: number
+  /** The reference's ground in words (poster.ts `groundOf`), kept unless a style replaces the look. */
+  ground?: string | null
 }) {
   const images = [
-    "Image 1 is a best-selling poster from another shop — the reference.",
+    "Image 1 is a photo of a best-selling printed poster from another shop — the reference. Paint from the print itself: its artwork as it was printed, evenly lit.",
     moodboard > 0 && `Images 2–${moodboard + 1} are a moodboard: they define the visual style to paint in (medium, palette, texture, lighting). Take only their style, never their subjects.`,
     inspiration > 0 &&
       `The next ${inspiration === 1 ? "image is one" : `${inspiration} images are`} of our own approved posters: match their art style, finish and quality bar, but paint the new idea below — never copy their scenes.`,
@@ -236,6 +264,7 @@ export function paintPrompt({
         : "Paint a NEW, ORIGINAL poster after the reference, as the art direction below says. Match the reference's art style, medium, rendering, texture, palette and lighting exactly; change only the composition and layout.",
     `Art direction: ${plainBrief(brief)}`,
     style ? `Style: ${styleText(style)}` : SAME_HAND,
+    !style && ground && `The ground is the reference's ${ground}, the same colour as in the print.`,
     feedback && `Notes from the shop owner (most important): ${feedback}`,
     RULES,
   ]

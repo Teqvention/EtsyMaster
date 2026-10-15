@@ -31,8 +31,7 @@ import { reviewAuto } from "@/lib/styles/auto-check"
 import { getStyle, styleImages } from "@/lib/styles/storage"
 import type { StyleGuide } from "@/lib/styles/types"
 
-import { analysePoster, ANALYSIS_VERSION, extractPosters } from "./poster"
-import { textured } from "./texture"
+import { analysePoster, ANALYSIS_VERSION, CUT_VERSION, extractPosters, groundOf, printAspect, withoutFrame } from "./poster"
 import { paintPrompt, planBriefs } from "./prompts"
 import {
   deleteSet,
@@ -386,6 +385,7 @@ async function poster(id: string) {
           width: print.width,
           height: print.height,
           label: print.label || undefined,
+          cut: CUT_VERSION,
         })
       }
       for (const old of set.posters) await removeFile(id, old.file)
@@ -394,6 +394,40 @@ async function poster(id: string) {
       await fail(id, "extraction", error)
       return blockOutputs(id, "Needs the extracted poster")
     }
+  }
+
+  // A poster cut out before frames were cut away is cut again (poster.ts `withoutFrame`).
+  // One whose ground was evened (cut 2) can't be given its own back: it's cut
+  // out of the photo again, as long as the photo still gives as many prints.
+  set = await getSet(id)
+  if (!set.style && set.layout !== "flat") {
+    const count = set.posters.length
+    const again = set.posters.some((p) => p.cut === 2)
+      ? await extractPosters(photo, set.source.title)
+          .then(({ prints }) => (prints.length === count ? prints : null))
+          .catch(() => null)
+      : null
+    await Promise.all(
+      set.posters
+        .filter((p) => p.file && (p.cut ?? 0) < CUT_VERSION)
+        .map(async (p) => {
+          try {
+            if (p.cut === 2 && !again) throw new Error(`the photo no longer gives ${count} print(s)`)
+            const cut = p.cut === 2 ? again![p.index] : await withoutFrame(await readSetFile(id, p.file!))
+            const file = `poster-${p.index + 1}-${Date.now().toString(36)}.jpg`
+            await saveFile(id, file, cut.image)
+            await updateSet(id, (s) => ({
+              ...s,
+              posters: s.posters.map((q) =>
+                q.index === p.index ? { ...q, file, width: cut.width, height: cut.height, cut: CUT_VERSION } : q
+              ),
+            }))
+            await removeFile(id, p.file)
+          } catch (error) {
+            console.error(`Generation ${id}, cutting poster ${p.index + 1} out of its frame:`, error)
+          }
+        })
+    )
   }
 
   // A style's Autonomous scale set: its posters are the board's, described by the style's study.
@@ -1562,7 +1596,7 @@ const COLLECT_PARALLEL = 6
 async function bringIn(id: string, result: PaintResult, model?: string) {
   try {
     if (result.image) {
-      const stored = await store(id, `out-${result.key}`, await texturedOutput(id, result.key, result.image))
+      const stored = await store(id, `out-${result.key}`, result.image)
       const set = await updateOutput(id, result.key, {
         ...stored.asset,
         job: undefined,
@@ -2111,9 +2145,9 @@ const PLAIN: Record<OutputMode, Record<Creativity, string>> = {
     high: "Same style and palette; a bold, inventive composition and layout.",
   },
   idea: {
-    minimal: "Keep the style, hook and scene; change one small detail.",
-    subtle: "Keep the style and hook; change one thing about the scene slightly.",
-    low: "Keep the style and hook; change one thing about the scene (character, place or prop).",
+    minimal: "Keep the style, hook and composition; new wording or a new main subject.",
+    subtle: "Keep the style and hook; a new subject or object in the reference's kind of composition.",
+    low: "Keep the style and hook; a new context with all-new objects, composed the reference's way.",
     medium: "Keep the style and hook; a new character in a new place.",
     high: "Keep the style and hook; a bold new scenario.",
   },
@@ -2140,7 +2174,7 @@ async function request(id: string, outputId: string, style: Promise<StyleRef | n
   const current = set.outputs.find((o) => o.id === outputId)!
   if (current.auto) {
     const { prompt, images, aspect } = await autoRequest(set, current)
-    return { prompt, images, aspect }
+    return { prompt, images, aspect: aspect && printAspect(aspect, 1) }
   }
   const p = set.posters.find((q) => q.index === current.poster)
   if (!p?.file) throw new Error("Needs the extracted poster")
@@ -2161,8 +2195,9 @@ async function request(id: string, outputId: string, style: Promise<StyleRef | n
     feedback: current.feedback,
     previous: previous.length > 0,
     inspiration: inspiration.length,
+    ground: ref ? null : await groundOf(reference).catch(() => null),
   })
-  const aspect = p.width && p.height ? p.width / p.height : undefined
+  const aspect = p.width && p.height ? printAspect(p.width, p.height) : undefined
   return { prompt, images: [reference, ...moodboard, ...inspiration, ...previous], aspect }
 }
 
@@ -2171,7 +2206,7 @@ async function draw(id: string, output: Output, style: Promise<StyleRef | null>)
   try {
     const { prompt, images, aspect } = await request(id, output.id, style)
     const image = await paint(prompt, images, aspect)
-    const stored = await store(id, `out-${output.id}`, await texturedOutput(id, output.id, image))
+    const stored = await store(id, `out-${output.id}`, image)
     await updateOutput(id, output.id, { ...stored.asset })
   } catch (error) {
     if (error instanceof NotFoundError && error.message === "Unknown generation") throw error
@@ -2260,13 +2295,6 @@ function blankOutput(s: GenerationSet): Partial<GenerationSet> {
     createdAt: now,
   }
   return { batches: [{ ...batch, expanded: true }], outputs: [output] }
-}
-
-/** A painted poster with the texture of what it was painted after (generation/texture.ts); mockups as they are. */
-async function texturedOutput(id: string, outputId: string, image: Buffer) {
-  const set = await getSet(id).catch(() => null)
-  const output = set?.outputs.find((o) => o.id === outputId)
-  return set && output ? textured(set, output, image) : image
 }
 
 /** Saves an image (upright, at most 2400 px, JPEG) under a fresh name, so it can be cached for good. */
